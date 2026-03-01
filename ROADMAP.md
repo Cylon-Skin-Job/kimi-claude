@@ -34,18 +34,18 @@ A web-based IDE that uses Kimi CLI in wire mode (`--wire --yolo`) as the agent b
 ┌─────────────────────────────────────────────────────────────────┐
 │  [≡]  Project Name                           [icons]           │  ← 60px header, cyan border
 ├──────────┬─────────────────────────┬────────────────────────────┤
-│          │                         │                            │
-│  THREAD  │       CHAT AREA         │      CONTENT AREA          │
-│  LIST    │       (400px)           │      (flexible)            │
-│ (250px)  │                         │                            │
-│          │  ┌─────────────────┐    │  - File diffs              │
-│ [+ New   │  │ User message    │    │  - Tool outputs            │
-│  Chat]   │  │ (right bubble)  │    │  - Code previews           │
-│          │  └─────────────────┘    │  - 5-line scroll box       │
-│ ───────  │                         │                            │
-│ Thread 1 │  ┌─────────────────┐    │                            │
-│ Thread 2 │  │ Kimi response   │    │                            │
-│ Thread 3 │  │ (left bubble)   │    │                            │
+│          │                         │  [tab][tab][tab]          │
+│  THREAD  │       CHAT AREA         │────────────────────────────┤
+│  LIST    │       (400px)           │                            │
+│ (250px)  │                         │      CONTENT AREA          │
+│          │  ┌─────────────────┐    │      (flexible)            │
+│ [+ New   │  │ User message    │    │                            │
+│  Chat]   │  │ (right bubble)  │    │  - File diffs              │
+│          │  └─────────────────┘    │  - Pipeline visualization  │
+│ ───────  │                         │  - Code previews           │
+│ 🟢 Auth  │  ┌─────────────────┐    │  - 5-line scroll box       │
+│ ⚫ API   │  │ Kimi response   │    │                            │
+│ ⚫ CSS   │  │ (left bubble)   │    │                            │
 │ ...      │  └─────────────────┘    │                            │
 │          │                         │                            │
 │          │  [Message input...] [↑] │                            │
@@ -55,117 +55,171 @@ A web-based IDE that uses Kimi CLI in wire mode (`--wire --yolo`) as the agent b
 
 ---
 
+## User Modes
+
+Three interaction modes, one interface:
+
+### Riff Mode
+- Fast, loose, brainstorming
+- No tools, just chat
+- Take notes, iterate ideas
+- Like talking to yourself but Kimi captures it
+
+### Vibe Mode
+- Quick edits, experiments
+- File tools active
+- Try things, undo, try again
+- Disposable, no persistence pressure
+
+### Plan Mode
+- Structured, step-by-step
+- Kimi writes plan → you validate → executes
+- Spawns sub-wires for parallel work
+- Hands off to autonomous pipeline
+
+**Mode switching:** Badge in header shows current mode. Kimi can suggest mode shifts ("This feels like a plan").
+
+---
+
+## Autonomous Pipeline
+
+After Plan mode approval, runs hands-off but visible:
+
+```
+User approves plan
+       ↓
+┌──────┴──────┐
+│   BUILD     │ ← sub-wires execute plan steps
+└──────┬──────┘
+       ↓
+┌──────┴──────┐
+│   REVIEW    │ ← self-checks, tests, lint
+└──────┬──────┘
+       ↓
+┌──────┴──────┐
+│  VALIDATE   │ ← verifies against requirements
+└──────┬──────┘
+       ↓
+┌──────┴──────┐
+│    MERGE    │ ← commits to branch
+└──────┬──────┘
+       ↓
+┌──────┴──────┐
+│  DOCUMENT   │ ← updates wiki, DECISIONS.md
+└─────────────┘
+```
+
+**UI:** Pipeline visualized in content area. Each stage expandable. Abort button always available.
+
+---
+
 ## Session Management
 
 ### Thread = Wire Session
-- Each thread corresponds to one `kimi --wire --yolo` process
-- Multiple threads per project (different contexts/tasks)
-- Backend maintains pool of active wire sessions
-- Switching threads = switching which wire stream frontend listens to
+- Each thread = one `kimi --wire --yolo` process
+- Multiple threads can run simultaneously
+- Visual indicator: 🟢 alive / ⚫ dead
 
-### Session Lifecycle
-1. **New Chat**: Spawn new Kimi CLI process, fresh context
-2. **Resume**: Reconnect to existing wire session (if still alive)
-3. **Reset Session**: Kill current wire, spawn new one with selective context pull
-4. **Context Compression**: Triggered automatically or manually, creates new session with summary
+### Thread Lifecycle
+1. **New Chat**: Spawn new wire process, fresh context
+2. **Continue**: Reconnect to existing wire (if alive)
+3. **Background**: Start new thread, old keeps running
+4. **Kill**: Explicitly stop wire process (ellipsis menu)
 
-### Session Death Scenarios
-- Computer restart
-- Node server crash
-- Manual kill
-- Context compression (intentional transformation)
+### Ellipsis Menu per Thread
+- **Add to chat**: Prefills input with context reference request
+- **Kill session**: Stop the wire process
+- **Rename**: Change thread title
+- **Delete**: Remove from Firestore
+
+### Context Reference ("Add to chat")
+When clicked, input prefills:
+```
+Please reference this chat history for anything relevant to what we are discussing, use sub agents to avoid flooding your context
+```
+User adds their actual question and sends.
 
 ---
 
-## Fresh Session Bootstrap Protocol
+## Content Area Tabs
 
-When a new wire session starts, backend injects:
+**Per-thread tab system:**
+- Newest tab = leftmost
+- Tabs persist per thread (stored in Firestore)
+- Switch threads → restore that thread's tabs
 
-```
-You are Kimi, operating as part of the Kimi IDE - a coding assistant integrated 
-into a development environment.
+**Tab types:**
+- `file.tsx` - code editor
+- `diff` - file changes
+- `pipeline` - autonomous stage visualization
+- `preview` - rendered output
+- `logs` - raw wire events
 
-CONTEXT:
-- You are one of many threads in project: {project_name}
-- Previous threads: {N} conversations available in history
-- This session started: {timestamp}
-
-SUMMARY:
-{summary of previous session or "New project - no prior context"}
-
-TOOLS FOR HISTORY ACCESS:
-You do NOT read history directly. Instead, use these tools:
-- search_conversations(query, threads[]): Ask about past discussions
-- summarize_session(thread_id): Get overview of specific thread
-- extract_entities(thread_id): Pull key decisions, TODOs, files mentioned
-
-These tools spawn sub-agents to analyze history in parallel.
-```
-
----
-
-## Tool Architecture (Programmatic Tool Calling)
-
-Based on Anthropic's "Programmatic Tool Calling" pattern (late 2025):
-
-### Main Assistant
-- Writes code to orchestrate tool calls
-- Never reads raw history directly
-- Asks questions, code handles execution
-
-### Sub-Wire Pattern
+**Persistence:**
 ```javascript
-// Main assistant generates code like:
-const results = await Promise.all([
-  subWire.search("What did we decide about authentication?", [thread_5, thread_12]),
-  subWire.search("Database schema changes", [thread_8]),
-  subWire.summarize(thread_20)
-]);
-
-const synthesized = synthesizeResults(results);
-return synthesized;
+thread.metadata.open_tabs: [
+  { type: "file", path: "src/auth.ts", cursor_line: 45 },
+  { type: "pipeline", stage: "build" }
+]
 ```
-
-### Tool Implementation
-- Each "tool" spawns a temporary sub-wire session
-- Sub-wire gets specific task + context chunk
-- Sub-wire returns structured result
-- Main context only sees final synthesized answer
-
-### Benefits
-- 85% token reduction vs JSON tool calling
-- Parallel execution via Promise.all()
-- No context pollution from intermediate results
-- Loops/conditionals in code, not inference
 
 ---
 
 ## Firestore Schema
 
+**Aligned with Raven OS for cross-product compatibility**
+
+**Collection path:** `users/{userId}/threads/{threadId}/messages`
+
+**Document structure:**
+```javascript
+{
+  // Core fields (same as Raven OS)
+  user: "string",                    // User message content
+  assistant: "string",               // Assistant response content
+  created_at: Timestamp,             // Server timestamp
+  app_slug: "kimi-ide",              // App identifier
+  
+  // Metadata map (flexible storage for everything else)
+  metadata: {
+    // Wire protocol events
+    wire_events: [...],
+    
+    // Tool calls and results
+    tool_calls: [...],
+    
+    // File operations
+    file_edits: [...],
+    
+    // Session info
+    session_id: "string",
+    mode: "riff" | "vibe" | "plan",
+    
+    // Metrics
+    tokens_used: number,
+    duration_ms: number,
+  },
+  
+  // Optional top-level fields
+  display_ts: "string",
+  metrics: {...},
+}
 ```
-projects/{project_id}/
-  ├── threads/
-  │     ├── {thread_id}/
-  │     │     ├── metadata/
-  │     │     │     ├── created_at
-  │     │     │     ├── updated_at
-  │     │     │     ├── summary (post-compression)
-  │     │     │     └── session_active (bool)
-  │     │     └── messages/
-  │     │           ├── {message_id}/
-  │     │           │     ├── role: "user" | "assistant"
-  │     │           │     ├── content
-  │     │           │     ├── timestamp
-  │     │           │     ├── tool_calls (if any)
-  │     │           │     └── wire_events (raw wire protocol)
-  │     │           └── ...
-  │     └── ...
-  ├── entities/ (extracted by Launchpad)
-  │     ├── decisions/
-  │     ├── todos/
-  │     ├── files/
-  │     └── concepts/
-  └── extractions/ (raw extraction jobs)
+
+**Thread document:**
+```javascript
+{
+  title: "string",
+  created_at: Timestamp,
+  last_modified: Timestamp,
+  session_alive: boolean,
+  mode: "riff" | "vibe" | "plan",
+  metadata: {
+    open_tabs: [...],
+    active_tab_index: number,
+    pipeline_state: {...}  // If autonomous pipeline running
+  }
+}
 ```
 
 ---
@@ -178,14 +232,15 @@ projects/{project_id}/
 3. Parse wire events (TurnBegin, StepBegin, ContentPart, ToolCall, etc.)
 4. Forward relevant events to frontend via WebSocket
 5. Log ALL events to Firestore in real-time
-6. Handle tool calls (spawn sub-wires, execute, return results)
+6. Handle mode-specific behavior (Riff=no tools, Vibe=tools, Plan=structured)
 
 ### Frontend Responsibilities
 1. Receive wire events from backend WebSocket
 2. Render streaming tokens (character-by-character animation)
-3. Display tool calls in real-time (visual components)
-4. Show 5-line scrolling code edit box during file edits
-5. Send user inputs to backend
+3. Display tool calls in real-time
+4. Show pipeline visualization in content area
+5. Manage per-thread tabs
+6. Send user inputs to backend
 
 ---
 
@@ -198,17 +253,21 @@ projects/{project_id}/
 - Copy buttons on code blocks
 - Timestamps with "Today"/"Yesterday" logic
 
-### Tool Call Visualization
-- Distinct visual container for active tool calls
-- Shows tool name, parameters, execution status
-- Progress indicator for long-running tools
-- Collapsible result view
+### Mode Indicator
+- Badge in header: [RIFF] | [VIBE] | [PLAN]
+- Color-coded (Riff=blue, Vibe=green, Plan=purple)
+- Click to manually switch (with confirmation)
+
+### Pipeline Visualization
+- Progress bar per stage
+- Sub-wire cards showing parallel tasks
+- Expandable logs per stage
+- Abort button (prominent, red)
 
 ### 5-Line Scrolling Code Edit Box
 - Fixed height (5 lines)
 - Shows file edits in real-time as they stream
 - Scrolls automatically to show latest changes
-- Side-by-side diff view option in content area
 
 ---
 
@@ -222,40 +281,45 @@ projects/{project_id}/
 - [ ] Display raw wire events in chat
 
 ### Phase 2: Chat Experience
-- [ ] Implement Raven OS-style chat bubbles
-- [ ] Character-by-character streaming animation
-- [ ] Markdown rendering with code blocks
-- [ ] Thread list with new chat button
-- [ ] Basic session persistence
+- [ ] Raven OS-style chat bubbles
+- [ ] Character-by-character streaming
+- [ ] Thread list with alive/dead indicators
+- [ ] New chat button
+- [ ] "Add to chat" functionality
 
-### Phase 3: Tool Visualization
-- [ ] Tool call visual components
-- [ ] 5-line scrolling code edit box
-- [ ] Real-time file diff display in content area
-- [ ] Tool result rendering
+### Phase 3: Modes
+- [ ] Riff mode (chat only)
+- [ ] Vibe mode (tools enabled)
+- [ ] Plan mode (structured output)
+- [ ] Mode indicator in header
+- [ ] Mode switching
 
 ### Phase 4: Session Management
-- [ ] Multiple threads per project
-- [ ] Session bootstrap protocol
-- [ ] Context compression handling
-- [ ] Session reset with selective context pull
+- [ ] Multiple concurrent threads
+- [ ] Kill session (ellipsis menu)
+- [ ] Session alive/dead heartbeat
+- [ ] Context reference via "Add to chat"
 
-### Phase 5: Sub-Wire Architecture
-- [ ] Programmatic tool calling implementation
-- [ ] Sub-wire spawning for history search
-- [ ] Parallel query execution
-- [ ] Result synthesis
+### Phase 5: Content Area Tabs
+- [ ] Per-thread tab system
+- [ ] Tab persistence in Firestore
+- [ ] File editor tab
+- [ ] Diff view tab
 
-### Phase 6: Firestore Integration
-- [ ] Real-time logging to Firestore
-- [ ] Launchpad extraction pipeline trigger
-- [ ] Entity extraction and storage
-- [ ] Wiki update suggestions
+### Phase 6: Autonomous Pipeline
+- [ ] Build stage with sub-wires
+- [ ] Review stage
+- [ ] Pipeline visualization
+- [ ] Abort functionality
 
-### Phase 7: Deployment
-- [ ] Cloudflare Tunnel setup
-- [ ] Firebase Hosting for frontend
-- [ ] Environment configuration
+### Phase 7: Firestore Integration
+- [ ] Real-time logging
+- [ ] Thread persistence
+- [ ] Tab state persistence
+
+### Phase 8: Deployment
+- [ ] Cloudflare Tunnel
+- [ ] Firebase Hosting
 - [ ] Documentation
 
 ---
@@ -277,19 +341,20 @@ projects/{project_id}/
 
 ## Key Decisions
 
-1. **Local Backend**: MacBook in closet runs Node server (not Firebase Functions) for persistent processes
+1. **Local Backend**: MacBook in closet runs Node server for persistent processes
 2. **Thin Client**: Frontend is dumb, all intelligence on backend
-3. **Wire Protocol**: Use Kimi CLI's native `--wire` mode, not ACP
-4. **YOLO Mode**: Auto-approve all actions (`--yolo`), no approval UI needed
-5. **Programmatic Tools**: Code-based orchestration, not JSON tool calling
-6. **Sub-Wires**: Parallel history search via temporary wire sessions
+3. **Wire Protocol**: Use Kimi CLI's native `--wire` mode
+4. **YOLO Mode**: Auto-approve all actions (`--yolo`)
+5. **Concurrent Sessions**: Multiple threads can run simultaneously
+6. **Per-Thread Tabs**: Each thread has its own tab stack
+7. **Three Modes**: Riff (brainstorm), Vibe (edit), Plan (structured)
+8. **Autonomous Pipeline**: Build/Review/Validate/Merge/Document runs hands-off
 
 ---
 
 ## References
 
 - **Raven OS**: Chat UI inspiration (private repo)
-- **Anthropic Advanced Tool Use**: https://www.anthropic.com/engineering/advanced-tool-use
 - **Kimi CLI Wire Mode**: `kimi --wire --yolo`
 - **Launchpad**: Firestore project for extraction pipeline
 
@@ -302,10 +367,11 @@ projects/{project_id}/
 - ✅ Cyan Tron-style theming
 - ⏳ Wire protocol integration
 - ⏳ Chat bubble streaming
-- ⏳ Tool visualization
-- ⏳ Session management
-- ⏳ Firestore logging
-- ⏳ Sub-wire architecture
+- ⏳ Thread management
+- ⏳ Modes (Riff/Vibe/Plan)
+- ⏳ Per-thread tabs
+- ⏳ Autonomous pipeline
+- ⏳ Firestore integration
 
 ---
 
