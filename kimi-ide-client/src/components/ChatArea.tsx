@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { useWorkspaceStore } from '../state/workspaceStore';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useEngineBridge } from '../hooks/useEngineBridge';
@@ -14,6 +14,9 @@ export function ChatArea({ workspace }: ChatAreaProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledRef = useRef(false);
+  
+  // Local state for immediate orb display
+  const [isSending, setIsSending] = useState(false);
   
   // Store data
   const messages = useWorkspaceStore((state) => state.workspaces[workspace].messages);
@@ -52,6 +55,9 @@ export function ChatArea({ workspace }: ChatAreaProps) {
   }, [messages, segments]);
 
   const handleSend = (text: string) => {
+    // Show orb immediately
+    setIsSending(true);
+    
     // Reset engine for new turn
     engine.reset();
     engine.startTurn();
@@ -68,8 +74,15 @@ export function ChatArea({ workspace }: ChatAreaProps) {
     sendMessage(text, workspace);
   };
   
-  // Show orb if streaming and no segments yet (waiting for first token)
-  const showOrb = currentTurn?.status === 'streaming' && segments.length === 0;
+  // Hide orb when first segment arrives
+  useEffect(() => {
+    if (segments.length > 0) {
+      setIsSending(false);
+    }
+  }, [segments.length]);
+  
+  // Show orb if: local sending state OR streaming with no segments yet
+  const showOrb = (isSending || currentTurn?.status === 'streaming') && segments.length === 0;
   
   return (
     <section className="chat-area" style={{ position: 'relative' }}>
