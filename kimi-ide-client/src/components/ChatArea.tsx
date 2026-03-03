@@ -110,27 +110,6 @@ export function ChatArea({ workspace }: ChatAreaProps) {
         <span>{contextUsage.toFixed(2)}%</span>
       </div>
       
-      {/* Orb - shows immediately on send, disappears when first content arrives */}
-      {showOrb && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '12px 0',
-        }}>
-          <span 
-            className="material-symbols-outlined" 
-            style={{ 
-              fontSize: '20px', 
-              color: 'var(--theme-primary)',
-              animation: 'pulse 1500ms ease-in-out infinite',
-            }}
-          >
-            lens_blur
-          </span>
-        </div>
-      )}
-      
       {/* Messages */}
       <div className="chat-messages" ref={chatContainerRef}>
         {messages.length === 0 && !currentTurn ? (
@@ -145,6 +124,37 @@ export function ChatArea({ workspace }: ChatAreaProps) {
             segments={segments}
           />
         )}
+        
+        {/* Thinking Orb - shows immediately on send, disappears when first content arrives */}
+        {showOrb && (
+          <div className="message message-assistant" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '16px 0',
+            marginLeft: '8px',
+          }}>
+            <span 
+              className="material-symbols-outlined thinking-orb" 
+              style={{ 
+                fontSize: '24px', 
+                color: 'var(--theme-primary)',
+                animation: 'thinking-pulse 1200ms ease-in-out infinite',
+                display: 'inline-block',
+              }}
+            >
+              lens_blur
+            </span>
+            <span style={{
+              fontSize: '13px',
+              color: 'var(--text-dim)',
+              fontStyle: 'italic',
+            }}>
+              Thinking...
+            </span>
+          </div>
+        )}
+        
         <div ref={messagesEndRef} />
       </div>
       
