@@ -1,0 +1,40 @@
+:root {
+  /* Core Colors - Cyan Tron-inspired */
+  --bg-solid: #000000;
+  --color-primary: #00d4ff;
+  --color-secondary: #00a8cc;
+  --border-primary: rgba(0, 212, 255, 0.3);
+  --border-glow: rgba(0, 212, 255, 0.6);
+  --glass-bg: rgba(0, 212, 255, 0.05);
+  --text-white: #ffffff;
+  --text-dim: rgba(255, 255, 255, 0.6);
+  
+  /* Layout */
+  --header-height: 60px;
+  --tools-width: 60px;
+  --sidebar-width: 250px;
+  --chat-width: 400px;
+  
+  /* Theme Variables (Dynamic per workspace) */
+  --theme-primary: #00d4ff;
+  --theme-primary-rgb: 0, 212, 255;
+  --theme-border: rgba(0, 212, 255, 0.3);
+  --theme-border-glow: rgba(0, 212, 255, 0.6);
+}
+
+/* Workspace Color Themes */
+.workspace-code { --theme-primary: #00d4ff; --theme-primary-rgb: 0, 212, 255; }
+.workspace-rocket { --theme-primary: #f97316; --theme-primary-rgb: 249, 115, 22; }
+.workspace-issues { --theme-primary: #facc15; --theme-primary-rgb: 250, 204, 21; }
+.workspace-scheduler { --theme-primary: #22c55e; --theme-primary-rgb: 34, 197, 94; }
+.workspace-skills { --theme-primary: #a855f7; --theme-primary-rgb: 168, 85, 247; }
+.workspace-wiki { --theme-primary: #ec4899; --theme-primary-rgb: 236, 72, 153; }
+.workspace-claw { --theme-primary: #ef4444; --theme-primary-rgb: 239, 68, 68; }
+
+.workspace-code { --theme-border: rgba(0, 212, 255, 0.3); --theme-border-glow: rgba(0, 212, 255, 0.6); }
+.workspace-rocket { --theme-border: rgba(249, 115, 22, 0.3); --theme-border-glow: rgba(249, 115, 22, 0.6); }
+.workspace-issues { --theme-border: rgba(250, 204, 21, 0.3); --theme-border-glow: rgba(250, 204, 21, 0.6); }
+.workspace-scheduler { --theme-border: rgba(34, 197, 94, 0.3); --theme-border-glow: rgba(34, 197, 94, 0.6); }
+.workspace-skills { --theme-border: rgba(168, 85, 247, 0.3); --theme-border-glow: rgba(168, 85, 247, 0.6); }
+.workspace-wiki { --theme-border: rgba(236, 72, 153, 0.3); --theme-border-glow: rgba(236, 72, 153, 0.6); }
+.workspace-claw { --theme-border: rgba(239, 68, 68, 0.3); --theme-border-glow: rgba(239, 68, 68, 0.6); }

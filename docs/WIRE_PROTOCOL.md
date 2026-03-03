@@ -183,6 +183,9 @@ Sent during turn processing. No response needed.
 ```
 
 #### ContentPart (Streaming Text)
+
+**See [STREAMING_CONTENT.md](./STREAMING_CONTENT.md) for the canonical reference.** Do not guess—that doc has captured wire output and implementation rules.
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -198,11 +201,13 @@ Sent during turn processing. No response needed.
 ```
 
 Content types:
-- `text` - Regular text
-- `think` - Thinking/reasoning content
+- `text` - Regular response text. Field: `payload.text`
+- `think` - Chain-of-thought. Field: `payload.think` (not `text`)
 - `image_url` - Image reference
 - `audio_url` - Audio reference
 - `video_url` - Video reference
+
+**Important:** Both `text` and `think` stream token-level (small chunks). Thought block boundaries = type transitions (`think`→`text` ends block, `text`→`think` starts new block). No embedded `<thought>` tags.
 
 #### StatusUpdate
 ```json
@@ -589,6 +594,7 @@ if (request.type === 'ApprovalRequest') {
 
 ## Related Documentation
 
+- **[STREAMING_CONTENT.md](./STREAMING_CONTENT.md)** - ContentPart structure, think vs text, chunk granularity, thought block boundaries. **Read this before implementing streaming UI.**
 - [ACP Protocol](./ACP_PROTOCOL.md) - Alternative protocol (deprecated)
 - [Print Mode](./PRINT_MODE.md) - Non-interactive mode
 - [Sessions](./SESSIONS.md) - Session management

@@ -1,0 +1,43 @@
+/* Shimmer for thinking */
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Blur sphere: 2 seconds. 500ms hold, 500ms expand, 500ms shrink. Same pattern as shimmer. */
+@keyframes blur-sphere {
+  0%   { opacity: 0; transform: scale(0.1); }
+  25%  { opacity: 0; transform: scale(0.1); }
+  50%  { opacity: 1; transform: scale(1); }
+  75%  { opacity: 1; transform: scale(0.1); }
+  100% { opacity: 0; transform: scale(0.1); }
+}
+
+.blur-sphere {
+  display: inline-block;
+  margin: 12px 0;
+  animation: blur-sphere 2000ms ease-out forwards;
+}
+
+/* Cursor blink (legacy - can be removed per Phase 7) */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.shimmer-text {
+  background: linear-gradient(90deg, 
+    var(--text-dim) 0%, 
+    var(--theme-primary) 50%, 
+    var(--text-dim) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 1500ms linear infinite;
+}

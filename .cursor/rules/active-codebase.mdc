@@ -1,0 +1,71 @@
+---
+description: ACTIVE CODEBASE - React/TypeScript client is the only working code
+globs: 
+alwaysApply: true
+---
+
+# ACTIVE CODEBASE CONTEXT
+
+## This is the ONLY working codebase:
+
+**`kimi-ide-client/`** - React + TypeScript + Vite client (ACTIVE)
+
+The server (`kimi-ide-server/`) only exists to:
+1. Serve the built React client from `kimi-ide-client/dist/`
+2. Handle WebSocket connections to the Kimi wire process
+3. Route JSON-RPC messages
+
+## DO NOT EDIT:
+
+- `kimi-ide-server/archive/` - Dead code, preserved for reference only
+- `kimi-ide-server/public/` - REMOVED (was old vanilla JS client)
+
+## When working on UI components:
+
+- Location: `kimi-ide-client/src/components/`
+- Styles: `kimi-ide-client/src/styles/`
+- Types: `kimi-ide-client/src/types/`
+- State: `kimi-ide-client/src/state/`
+
+## When looking for "that pulsating thing":
+
+It's `PulseSymbol.tsx` in the React components folder.
+NOT the vanilla JS functions in archive/.
+
+## Architecture — CRITICAL
+
+**Read these before touching code:**
+- `docs/RENDER_ENGINE_ARCHITECTURE.md` — Pulse, queue, state machine, separation of concerns
+- `docs/TYPESCRIPT_REACT_SPEC.md` — Code spec, forbidden patterns, validation
+- `docs/STREAMING_CONTENT.md` — Wire streaming structure
+
+### Tokens are tokens. Think = Text = Tools = Inline.
+
+The wire sends events in order. All segment types (think, text, tool calls)
+go into ONE ordered queue. They MUST stay in order. No separate buffers.
+
+### Pulse-driven render engine (standalone module)
+
+- 500ms heartbeat drives all state transitions
+- Engine owns timing. Components do NOT use setTimeout/setInterval.
+- Engine -> Bridge -> Store -> Components. One path in. Never bypassed.
+- Components are pure renderers of store state. No orchestration.
+
+### Forbidden in components
+
+- `setTimeout` / `setInterval` (engine's job)
+- `useEffect` for orchestration (engine state machine)
+- Direct `store.setState()` outside the bridge
+- Any timing logic
+
+### Buffering buys time
+
+The ribbon, the shimmer holds, the typing effect, the orb transitions —
+these stall the UI so content is buffered ahead of display. NOT decorative.
+
+### Development Workflow
+
+1. **Client changes require rebuild**: `npm run build` in `kimi-ide-client/`
+2. **Server may need restart**: `node server.js` in `kimi-ide-server/`
+3. **Verify after every edit**: Read the file back to confirm changes applied
+4. **Server serves static files**: From `kimi-ide-client/dist/` — not auto-updating
