@@ -3,6 +3,7 @@ import { useWorkspaceStore } from '../state/workspaceStore';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { getQueue } from '../lib/simpleQueue';
 import { getAccumulator } from '../lib/contentAccumulator';
+import { SEGMENT_ICONS, getSegmentCategory } from '../lib/instructions';
 import type { WorkspaceId } from '../types';
 import { MessageList } from './MessageList';
 import { SimpleBlockRenderer } from './SimpleBlockRenderer';
@@ -53,6 +54,65 @@ export function ChatArea({ workspace }: ChatAreaProps) {
   }, [messages, segments]);
 
   const handleSend = (text: string) => {
+    // /demo command — fire off every block type for visual testing
+    if (text.trim() === '/demo') {
+      const queue = getQueue(workspace);
+      queue.startTurn();
+
+      // Orb
+      queue.addBlock({ type: 'orb', content: '' });
+
+      // Thinking (collapsible)
+      queue.addBlock({
+        type: 'think',
+        content: 'Analyzing the request and considering the best approach to solve this problem...',
+        complete: true,
+        header: { icon: 'lightbulb', label: 'Thinking' },
+      });
+
+      // Text
+      queue.addBlock({
+        type: 'text',
+        content: 'Here is a sample response with **markdown** support and `inline code`.',
+        complete: true,
+      });
+
+      // Code
+      queue.addBlock({
+        type: 'code',
+        content: 'function hello() {\n  console.log("Hello, world!");\n}',
+        complete: true,
+        meta: { language: 'javascript' },
+      });
+
+      // All inline tools
+      const inlineTypes = ['read', 'edit', 'glob', 'grep', 'web_search', 'fetch', 'subagent', 'todo'];
+      for (const segType of inlineTypes) {
+        const info = SEGMENT_ICONS[segType] || { icon: 'build', label: segType };
+        queue.addBlock({
+          type: 'tool',
+          content: '',
+          complete: true,
+          header: { icon: info.icon, label: info.label },
+          meta: { segmentType: segType, toolCallId: `demo-${segType}` },
+        });
+      }
+
+      // Collapsible tools (shell, write)
+      for (const segType of ['shell', 'write']) {
+        const info = SEGMENT_ICONS[segType] || { icon: 'build', label: segType };
+        queue.addBlock({
+          type: 'tool',
+          content: `Sample ${segType} output content here...`,
+          complete: true,
+          header: { icon: info.icon, label: info.label },
+          meta: { segmentType: segType, toolCallId: `demo-${segType}` },
+        });
+      }
+
+      return;
+    }
+
     // Add orb block immediately (before server responds)
     const queue = getQueue(workspace);
     const accumulator = getAccumulator(workspace);

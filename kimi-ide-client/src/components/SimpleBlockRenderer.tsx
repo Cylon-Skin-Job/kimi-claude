@@ -202,6 +202,8 @@ function OrbBlock({ block, queue }: BlockItemProps) {
       display: 'flex',
       alignItems: 'center',
       padding: '4px 0',
+      marginLeft: '5px',
+      marginTop: '20px',
       height: currentPhase === 'pause-before' || currentPhase === 'pause-after' ? '0px' : 'auto',
       overflow: 'hidden',
       transition: `height 200ms ease`,
@@ -338,6 +340,7 @@ function CollapsibleBlock({ block, queue }: BlockItemProps) {
 
   return (
     <div style={{
+      marginTop: '20px',
       marginBottom: '12px',
     }}>
       <div
@@ -497,7 +500,7 @@ function TextBlock({ block, queue }: BlockItemProps) {
       style={{
         fontSize: '14px',
         lineHeight: '1.6',
-        color: 'var(--text-white)',
+        color: 'var(--text-dim)',
         padding: '0 8px',
       }}
     >
@@ -633,25 +636,38 @@ function CodeBlock({ block, queue }: BlockItemProps) {
 // Fade in → shimmer → settle static → advanceBlock (stays)
 
 function InlineToolBlock({ block, queue }: BlockItemProps) {
-  const [isVisible, setIsVisible] = useState(false);
-  const [isShimmering, setIsShimmering] = useState(true);
+  const [iconVisible, setIconVisible] = useState(false);
+  const [labelVisible, setLabelVisible] = useState(false);
+  const [shimmerActive, setShimmerActive] = useState(false);
   const advancedRef = useRef(false);
 
   useEffect(() => {
-    const fadeInTimer = setTimeout(() => setIsVisible(true), 50);
+    // Icon fades in immediately (300ms ease-in)
+    requestAnimationFrame(() => setIconVisible(true));
 
-    // Stop shimmer, then advance to next block
+    // 800ms: label + shimmer appear
+    const labelTimer = setTimeout(() => {
+      setLabelVisible(true);
+      setShimmerActive(true);
+    }, 800);
+
+    // 2300ms: shimmer stops (800 + 1500ms shimmer)
     const shimmerTimer = setTimeout(() => {
-      setIsShimmering(false);
+      setShimmerActive(false);
+    }, 2300);
+
+    // 2800ms: advance to next block (500ms pause after shimmer)
+    const advanceTimer = setTimeout(() => {
       if (!advancedRef.current) {
         advancedRef.current = true;
         queue.advanceBlock();
       }
-    }, TIMING.INLINE_SHIMMER);
+    }, 2800);
 
     return () => {
-      clearTimeout(fadeInTimer);
+      clearTimeout(labelTimer);
       clearTimeout(shimmerTimer);
+      clearTimeout(advanceTimer);
     };
   }, [block.id, queue]);
 
@@ -660,25 +676,37 @@ function InlineToolBlock({ block, queue }: BlockItemProps) {
       display: 'flex',
       alignItems: 'center',
       gap: '8px',
-      padding: '6px 12px',
+      padding: '4px 0',
       marginTop: '20px',
-      marginLeft: '-5px',
       marginBottom: '2px',
-      borderRadius: '6px',
-      background: 'rgba(var(--theme-primary-rgb), 0.03)',
-      opacity: isVisible ? 1 : 0,
-      transition: `opacity ${TIMING.INLINE_FADE_IN}ms ease`,
     }}>
+      {/* 24px icon slot — matches CollapsibleBlock */}
       <span
         className="material-symbols-outlined"
-        style={{ fontSize: '14px', opacity: 0.7 }}
+        style={{
+          width: '24px',
+          textAlign: 'center',
+          fontSize: '16px',
+          color: 'var(--theme-primary)',
+          opacity: iconVisible ? (shimmerActive ? 0.6 : 1) : 0,
+          transition: 'opacity 300ms ease-in',
+          display: 'inline-flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
       >
         {block.header?.icon || 'build'}
       </span>
-      <span className={isShimmering ? 'shimmer-text' : ''} style={{
-        fontSize: '14px',
-        color: isShimmering ? undefined : 'var(--text-dim)',
-      }}>
+      <span
+        className={shimmerActive ? 'shimmer-text' : ''}
+        style={{
+          fontSize: '13px',
+          color: 'var(--text-dim)',
+          fontStyle: 'italic',
+          opacity: labelVisible ? 1 : 0,
+          transition: 'opacity 300ms ease-in',
+        }}
+      >
         {block.header?.label || 'Tool'}
       </span>
     </div>
