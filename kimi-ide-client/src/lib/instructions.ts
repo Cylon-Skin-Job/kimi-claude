@@ -2,7 +2,7 @@ import type { SegmentType } from '../types';
 
 const SEGMENT_ICONS: Record<string, { icon: string; label: string }> = {
   think:      { icon: 'lightbulb',      label: 'Thinking' },
-  shell:      { icon: 'terminal',       label: 'Running' },
+  shell:      { icon: 'terminal',       label: 'Shell' },
   read:       { icon: 'description',    label: 'Read' },
   write:      { icon: 'edit_note',      label: 'Write' },
   edit:       { icon: 'edit_note',      label: 'Edit' },
@@ -52,7 +52,7 @@ export function toolLabel(segType: SegmentType, args?: Record<string, unknown>):
 /** Categorize a segment type for block routing */
 export type SegmentCategory = 'collapsible' | 'inline';
 
-const COLLAPSIBLE_TYPES = new Set(['think', 'shell', 'write']);
+const COLLAPSIBLE_TYPES = new Set(['think', 'shell', 'write', 'edit']);
 
 export function getSegmentCategory(segType: string): SegmentCategory {
   return COLLAPSIBLE_TYPES.has(segType) ? 'collapsible' : 'inline';

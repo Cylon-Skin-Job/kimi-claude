@@ -500,7 +500,7 @@ function TextBlock({ block, queue }: BlockItemProps) {
       style={{
         fontSize: '14px',
         lineHeight: '1.6',
-        color: 'var(--text-dim)',
+        color: 'var(--text-white)',
         padding: '0 8px',
       }}
     >

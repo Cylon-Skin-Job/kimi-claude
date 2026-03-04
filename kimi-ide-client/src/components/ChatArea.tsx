@@ -85,8 +85,8 @@ export function ChatArea({ workspace }: ChatAreaProps) {
         meta: { language: 'javascript' },
       });
 
-      // All inline tools
-      const inlineTypes = ['read', 'edit', 'glob', 'grep', 'web_search', 'fetch', 'subagent', 'todo'];
+      // Inline tools
+      const inlineTypes = ['read', 'glob', 'grep', 'web_search', 'fetch', 'subagent', 'todo'];
       for (const segType of inlineTypes) {
         const info = SEGMENT_ICONS[segType] || { icon: 'build', label: segType };
         queue.addBlock({
@@ -98,17 +98,32 @@ export function ChatArea({ workspace }: ChatAreaProps) {
         });
       }
 
-      // Collapsible tools (shell, write)
-      for (const segType of ['shell', 'write']) {
-        const info = SEGMENT_ICONS[segType] || { icon: 'build', label: segType };
-        queue.addBlock({
-          type: 'tool',
-          content: `Sample ${segType} output content here...`,
-          complete: true,
-          header: { icon: info.icon, label: info.label },
-          meta: { segmentType: segType, toolCallId: `demo-${segType}` },
-        });
-      }
+      // Shell (collapsible)
+      queue.addBlock({
+        type: 'tool',
+        content: '$ npm run build\n\n> kimi-ide-client@0.1.0 build\n> vite build\n\n✓ 42 modules transformed.\ndist/index.html    0.45 kB │ gzip: 0.29 kB\ndist/assets/index-DiwrgTda.css  6.12 kB │ gzip: 1.87 kB\ndist/assets/index-BqeVJ9xN.js  142.35 kB │ gzip: 45.67 kB\n✓ built in 1.23s',
+        complete: true,
+        header: { icon: 'terminal', label: 'Shell' },
+        meta: { segmentType: 'shell', toolCallId: 'demo-shell' },
+      });
+
+      // Write (collapsible with code content)
+      queue.addBlock({
+        type: 'tool',
+        content: 'import { useEffect, useState } from \'react\';\nimport { getQueue } from \'../lib/simpleQueue\';\n\nexport function useBlockQueue(workspace: string) {\n  const queue = getQueue(workspace);\n  const [state, setState] = useState(() => queue.getState());\n\n  useEffect(() => {\n    return queue.subscribe((s) => setState({ ...s }));\n  }, [queue]);\n\n  return state;\n}',
+        complete: true,
+        header: { icon: 'edit_note', label: 'Write `src/hooks/useBlockQueue.ts`' },
+        meta: { segmentType: 'write', toolCallId: 'demo-write' },
+      });
+
+      // Edit (collapsible with diff content)
+      queue.addBlock({
+        type: 'tool',
+        content: '- const COLLAPSIBLE_TYPES = new Set([\'think\', \'shell\', \'write\']);\n+ const COLLAPSIBLE_TYPES = new Set([\'think\', \'shell\', \'write\', \'edit\']);',
+        complete: true,
+        header: { icon: 'edit_note', label: 'Edit `src/lib/instructions.ts`' },
+        meta: { segmentType: 'edit', toolCallId: 'demo-edit' },
+      });
 
       return;
     }
