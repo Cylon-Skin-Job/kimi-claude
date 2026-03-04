@@ -7,15 +7,16 @@
  *
  * Block types:
  *   - OrbBlock: pulsing animation → advanceBlock + removeBlock (disappears)
- *   - CollapsibleBlock: shimmer → type 5-2-1 → collapse → advanceBlock (stays as header)
- *   - TextBlock: chase-type → 500ms pause → advanceBlock (stays with content)
- *   - CodeBlock: chase-type → hljs → advanceBlock (stays with highlighted code)
+ *   - CollapsibleBlock: shimmer → chunk-type → collapse → advanceBlock (stays as header)
+ *   - TextBlock: chunk-type → 500ms pause → advanceBlock (stays with content)
+ *   - CodeBlock: chunk-type (line-by-line) → hljs → advanceBlock (stays with highlighted code)
  *   - InlineToolBlock: fade in → shimmer → advanceBlock (stays static)
  */
 
 import { useEffect, useState, useRef, useMemo, memo } from 'react';
 import { getQueue } from '../lib/simpleQueue';
 import { getSegmentCategory } from '../lib/instructions';
+import { getTextChunkBoundary, getCodeChunkBoundary } from '../lib/chunkParser';
 import { marked } from 'marked';
 import hljs from 'highlight.js/lib/core';
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -58,9 +59,7 @@ const TIMING = {
 
   FADE_IN: 300,
   SHIMMER_PAUSE: 500,
-  TYPING_SLOW: 5,    // chars 0-50
-  TYPING_MEDIUM: 2,  // chars 50-100
-  TYPING_FAST: 1,    // chars 100+
+  CHUNK_DELAY: 30,   // ms between chunk reveals
   POST_TYPE_PAUSE: 500,
   COLLAPSE: 500,
   POST_COLLAPSE_PAUSE: 500,
@@ -117,6 +116,8 @@ interface BlockItemProps {
 
 const BlockItem = memo(function BlockItem({ block, queue, isActive }: BlockItemProps) {
   switch (block.type) {
+    case 'user':
+      return <UserBlock block={block} queue={queue} isActive={isActive} />;
     case 'orb':
       return <OrbBlock block={block} queue={queue} isActive={isActive} />;
     case 'think':
@@ -137,9 +138,28 @@ const BlockItem = memo(function BlockItem({ block, queue, isActive }: BlockItemP
       return null;
   }
 }, (prev, next) => {
-  // Only re-render when isActive changes (block ref is mutable, always same object)
   return prev.isActive === next.isActive && prev.block.id === next.block.id;
 });
+
+// ─── USER BLOCK ─────────────────────────────────────────────
+// Renders immediately, advances immediately (no animation)
+
+function UserBlock({ block, queue }: BlockItemProps) {
+  const advancedRef = useRef(false);
+
+  useEffect(() => {
+    if (!advancedRef.current) {
+      advancedRef.current = true;
+      queue.advanceBlock();
+    }
+  }, [queue]);
+
+  return (
+    <div className="message message-user" style={{ marginTop: '20px' }}>
+      <div className="message-user-content">{block.content}</div>
+    </div>
+  );
+}
 
 // ─── ORB BLOCK ──────────────────────────────────────────────
 // Full lifecycle → advanceBlock() + removeBlock() (disappears)
@@ -278,27 +298,32 @@ function CollapsibleBlock({ block, queue }: BlockItemProps) {
     };
   }, []);
 
-  // Typing phase — 5-2-1 cadence
+  // Typing phase — chunk-based rendering
   useEffect(() => {
     if (phase !== 'typing') return;
     typingCancelRef.current = false;
 
     const typeContent = async () => {
-      const fullContent = liveBlock.current.content;
-      for (let i = 0; i < fullContent.length; i++) {
+      let revealedLength = 0;
+
+      while (true) {
         if (typingCancelRef.current) return;
 
-        let delay: number;
-        if (i < 50) delay = TIMING.TYPING_SLOW;
-        else if (i < 100) delay = TIMING.TYPING_MEDIUM;
-        else delay = TIMING.TYPING_FAST;
+        const content = liveBlock.current.content;
+        const isComplete = liveBlock.current.complete;
+        const boundary = getTextChunkBoundary(content, revealedLength);
 
-        await new Promise(resolve => setTimeout(resolve, delay));
-        if (typingCancelRef.current) return;
-        setDisplayedContent(fullContent.slice(0, i + 1));
+        if (boundary > revealedLength) {
+          revealedLength = boundary;
+          setDisplayedContent(content.slice(0, revealedLength));
+          await new Promise(resolve => setTimeout(resolve, TIMING.CHUNK_DELAY));
+        } else if (isComplete && revealedLength >= content.length) {
+          setPhase('post-type-pause');
+          return;
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 16));
+        }
       }
-
-      setPhase('post-type-pause');
     };
 
     typeContent();
@@ -405,11 +430,10 @@ function CollapsibleBlock({ block, queue }: BlockItemProps) {
         marginLeft: '11px',
         paddingLeft: '21px',
         borderLeft: `1px solid ${isTyping || phase === 'post-type-pause' || phase === 'collapsing' || phase === 'collapsed' ? 'var(--theme-primary)' : 'transparent'}`,
-        transition: 'border-color 300ms ease',
         maxHeight: isExpanded ? '2000px' : '0px',
         opacity: isExpanded ? 1 : 0,
         overflow: 'hidden',
-        transition: `max-height ${TIMING.COLLAPSE}ms ease, opacity ${TIMING.COLLAPSE}ms ease`,
+        transition: `border-color 300ms ease, max-height ${TIMING.COLLAPSE}ms ease, opacity ${TIMING.COLLAPSE}ms ease`,
       }}>
         <div style={{
           fontSize: '14px',
@@ -441,30 +465,26 @@ function TextBlock({ block, queue }: BlockItemProps) {
 
   useEffect(() => { liveBlock.current = block; }, [block]);
 
-  // Chase-typing effect
+  // Chunk-based text rendering
   useEffect(() => {
     if (isDone) return;
     typingCancelRef.current = false;
 
     const chase = async () => {
-      let idx = charIndex;
+      let revealedLength = charIndex;
 
       while (true) {
         if (typingCancelRef.current) return;
 
         const content = liveBlock.current.content;
+        const isComplete = liveBlock.current.complete;
+        const boundary = getTextChunkBoundary(content, revealedLength);
 
-        if (idx < content.length) {
-          let delay: number;
-          if (idx < 50) delay = TIMING.TYPING_SLOW;
-          else if (idx < 100) delay = TIMING.TYPING_MEDIUM;
-          else delay = TIMING.TYPING_FAST;
-
-          await new Promise(resolve => setTimeout(resolve, delay));
-          if (typingCancelRef.current) return;
-          idx++;
-          setCharIndex(idx);
-        } else if (liveBlock.current.complete) {
+        if (boundary > revealedLength) {
+          revealedLength = boundary;
+          setCharIndex(revealedLength);
+          await new Promise(resolve => setTimeout(resolve, TIMING.CHUNK_DELAY));
+        } else if (isComplete && revealedLength >= content.length) {
           setIsDone(true);
           return;
         } else {
@@ -523,30 +543,26 @@ function CodeBlock({ block, queue }: BlockItemProps) {
 
   useEffect(() => { liveBlock.current = block; }, [block]);
 
-  // Chase-typing for code
+  // Chunk-based code rendering (line by line)
   useEffect(() => {
     if (isDone) return;
     typingCancelRef.current = false;
 
     const chase = async () => {
-      let idx = charIndex;
+      let revealedLength = charIndex;
 
       while (true) {
         if (typingCancelRef.current) return;
 
         const content = liveBlock.current.content;
+        const isComplete = liveBlock.current.complete;
+        const boundary = getCodeChunkBoundary(content, revealedLength);
 
-        if (idx < content.length) {
-          let delay: number;
-          if (idx < 50) delay = TIMING.TYPING_SLOW;
-          else if (idx < 100) delay = TIMING.TYPING_MEDIUM;
-          else delay = TIMING.TYPING_FAST;
-
-          await new Promise(resolve => setTimeout(resolve, delay));
-          if (typingCancelRef.current) return;
-          idx++;
-          setCharIndex(idx);
-        } else if (liveBlock.current.complete) {
+        if (boundary > revealedLength) {
+          revealedLength = boundary;
+          setCharIndex(revealedLength);
+          await new Promise(resolve => setTimeout(resolve, TIMING.CHUNK_DELAY));
+        } else if (isComplete && revealedLength >= content.length) {
           setIsDone(true);
           return;
         } else {
@@ -589,45 +605,63 @@ function CodeBlock({ block, queue }: BlockItemProps) {
   }, [isDone, highlighted, queue]);
 
   const displayedCode = block.content.slice(0, charIndex);
-  const lang = block.meta?.language || '';
+
+  // Count visible lines for line numbers
+  const visibleText = isDone && highlighted ? block.content : displayedCode;
+  const lines = visibleText.split('\n');
+  // Don't count trailing empty line from final \n
+  const lineCount = visibleText.endsWith('\n') ? lines.length - 1 : lines.length;
 
   return (
     <div style={{
-      margin: '12px 8px',
-      borderRadius: '8px',
+      margin: '12px 0',
+      borderRadius: '6px',
       overflow: 'hidden',
-      background: 'var(--bg-code, #1e1e1e)',
-      border: '1px solid var(--theme-border, #333)',
+      background: 'transparent',
+      border: '1px solid var(--theme-border)',
     }}>
-      {lang && (
-        <div style={{
-          padding: '4px 12px',
-          fontSize: '11px',
-          color: 'var(--text-dim)',
-          borderBottom: '1px solid var(--theme-border, #333)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-        }}>
-          {lang}
+      <div style={{ display: 'flex', overflowX: 'auto' }}>
+        {/* Line number gutter */}
+        <div
+          aria-hidden="true"
+          style={{
+            padding: '12px 0',
+            minWidth: '40px',
+            textAlign: 'right',
+            userSelect: 'none',
+            flexShrink: 0,
+            fontFamily: 'var(--font-mono, "SF Mono", "Fira Code", monospace)',
+            fontSize: '13px',
+            lineHeight: '1.5',
+            color: 'var(--text-dim, #555)',
+            opacity: 0.5,
+          }}
+        >
+          {Array.from({ length: lineCount }, (_, i) => (
+            <div key={i} style={{ paddingRight: '12px' }}>{i + 1}</div>
+          ))}
         </div>
-      )}
-      <pre style={{
-        margin: 0,
-        padding: '12px',
-        fontSize: '13px',
-        lineHeight: '1.5',
-        overflowX: 'auto',
-        fontFamily: 'var(--font-mono, "SF Mono", "Fira Code", monospace)',
-      }}>
-        {isDone && highlighted ? (
-          <code dangerouslySetInnerHTML={{ __html: highlighted }} />
-        ) : (
-          <code>
-            {displayedCode}
-            {!isDone && <span className="typing-cursor">&#9611;</span>}
-          </code>
-        )}
-      </pre>
+
+        {/* Code content */}
+        <pre style={{
+          margin: 0,
+          padding: '12px 12px 12px 0',
+          fontSize: '13px',
+          lineHeight: '1.5',
+          overflow: 'visible',
+          flex: 1,
+          fontFamily: 'var(--font-mono, "SF Mono", "Fira Code", monospace)',
+        }}>
+          {isDone && highlighted ? (
+            <code dangerouslySetInnerHTML={{ __html: highlighted }} />
+          ) : (
+            <code>
+              {displayedCode}
+              {!isDone && <span className="typing-cursor">&#9611;</span>}
+            </code>
+          )}
+        </pre>
+      </div>
     </div>
   );
 }

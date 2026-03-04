@@ -37,21 +37,21 @@ All blocks are agnostic — no inter-block tracking. Each runs its own timeline.
 2. Icon fades in (300ms ease-in), then 500ms pause, then label fades in (300ms ease-in) with shimmer active
 3. Shimmer runs 1500ms (fixed), then stops
 4. 500ms pause (label settles to grey)
-5. Type content with 5-2-1 cadence (content accumulates behind the scenes during steps 2-4)
+5. Chunk-render content — paragraphs, headers, list items appear as whole units (30ms between chunks)
 6. 500ms pause → collapse (500ms) → 500ms pause → advanceBlock
 
 ### Text
 1. First token → create block, render container immediately
-2. Chase-type content with 5-2-1 as tokens arrive (cursor chases growing content)
-3. Markdown rendered via `marked.parse()` as typing progresses
-4. Boundary hit (backtick fence, type change, ## header) → mark complete
-5. Finish typing remaining content → remove
+2. Chunk-render content as tokens arrive — waits for semantic boundaries (paragraph, header, list item, line break) before revealing
+3. Markdown rendered via `marked.parse()` as chunks reveal — no partial `**bold**` flicker
+4. Boundary hit (backtick fence, type change, ## header) → mark complete → flush remaining content
+5. 500ms post-type pause → advanceBlock
 
 ### Code
 1. Opening ``` detected → create code block with language meta
-2. Chase-type raw code with 5-2-1 as tokens arrive
-3. Closing ``` detected → mark complete → apply `hljs` syntax highlighting
-4. Brief pause (300ms) → remove
+2. Chunk-render raw code line-by-line (waits for `\n` before revealing each line, 30ms between lines)
+3. Closing ``` detected → mark complete → flush remaining → apply `hljs` syntax highlighting
+4. 500ms post-type pause → advanceBlock
 
 ### Inline Tool (read, edit, glob, grep, web_search, fetch, subagent, todo)
 1. Fade in (250ms) → show icon + label → shimmer (500ms) → fade out → done
@@ -60,13 +60,29 @@ All blocks are agnostic — no inter-block tracking. Each runs its own timeline.
 
 ---
 
-## Typing Cadence (5-2-1)
+## Chunk Rendering
 
-| Characters | Delay per char |
-|------------|---------------|
-| 0-50       | 5ms           |
-| 50-100     | 2ms           |
-| 100+       | 1ms           |
+Content renders in semantic chunks rather than character-by-character.
+
+**Text chunks** (`chunkParser.ts: getTextChunkBoundary`):
+- Paragraph breaks (`\n\n`)
+- Headers (`# ` at line start)
+- List items (`- `, `* `, `1. ` at line start)
+- Single line breaks (if formatting is balanced)
+- Stall safety: forces render after 500+ chars with no boundary
+
+**Code chunks** (`chunkParser.ts: getCodeChunkBoundary`):
+- Each complete line (delimited by `\n`)
+
+**Formatting safety**: Before accepting any boundary, verifies `**` and `` ` `` markers are balanced. Prevents partial `**bold**` flicker.
+
+**Flush mode**: When `block.complete` is true, renders all remaining content immediately.
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `CHUNK_DELAY` | 30ms | Inter-chunk rhythm (replaces 5-2-1 cadence) |
+| Stall threshold | 500 chars | Force render if no boundary found |
+| Poll interval | 16ms | Check for new content (~1 frame) |
 
 ---
 
@@ -96,6 +112,7 @@ Transitions on: content msg, thinking msg, tool_call, tool_result, turn_end
 | File | Purpose |
 |------|---------|
 | `src/lib/simpleQueue.ts` | Block queue with mutable ops, rAF batching |
+| `src/lib/chunkParser.ts` | Semantic chunk boundary detection for rendering |
 | `src/lib/contentAccumulator.ts` | State machine: tokens → blocks |
 | `src/hooks/useWebSocket.ts` | Routes WS messages through accumulator |
 | `src/components/SimpleBlockRenderer.tsx` | All block components (Orb, Collapsible, Text, Code, InlineTool) |
