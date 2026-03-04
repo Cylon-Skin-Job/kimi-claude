@@ -55,3 +55,14 @@
   color: transparent;
   animation: shimmer 1500ms linear infinite;
 }
+
+/* Typing cursor */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.typing-cursor {
+  animation: blink 800ms infinite;
+  color: var(--theme-primary);
+}

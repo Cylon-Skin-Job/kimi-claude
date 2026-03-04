@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useWorkspaceStore } from '../state/workspaceStore';
-import { getEngine } from '../lib/engineRegistry';
+import { getQueue } from '../lib/blockQueue';
 import { toolNameToSegmentType, toolLabel } from '../lib/instructions';
 import type { WebSocketMessage, WorkspaceId } from '../types';
 
@@ -69,7 +69,7 @@ export function useWebSocket() {
 
   const handleMessage = useCallback((msg: WebSocketMessage) => {
     const workspace: WorkspaceId = currentWorkspace;
-    const eng = getEngine(workspace);
+    const queue = getQueue(workspace);
     
     switch (msg.type) {
       case 'connected':
@@ -102,11 +102,8 @@ export function useWebSocket() {
           thinkingContent: ''
         });
 
-        // Start engine for this turn
-        if (eng) {
-          eng.startTurn();
-          eng.start(); // Start the beat
-        }
+        // Start block queue for this turn
+        queue.startTurn();
         break;
       }
         
@@ -120,11 +117,12 @@ export function useWebSocket() {
             updateTurnContent(workspace, turn.content + msg.text);
           }
 
-          // Update engine segment count
-          if (eng) {
-            const segments = useWorkspaceStore.getState().workspaces[workspace].segments;
-            eng.setTotalSegments(segments.length);
-          }
+          // Add to block queue
+          queue.addBlock({
+            type: 'text',
+            content: msg.text,
+            isComplete: false,
+          });
         }
         break;
         
@@ -133,10 +131,16 @@ export function useWebSocket() {
         if (msg.text) {
           appendSegment(workspace, 'think', msg.text);
           
-          if (eng) {
-            const segments = useWorkspaceStore.getState().workspaces[workspace].segments;
-            eng.setTotalSegments(segments.length);
-          }
+          // Add think block to queue
+          queue.addBlock({
+            type: 'think',
+            content: msg.text,
+            header: {
+              icon: 'lightbulb',
+              label: 'Thinking',
+            },
+            isComplete: false,
+          });
         }
         break;
 
@@ -149,10 +153,16 @@ export function useWebSocket() {
           toolCallId: msg.toolCallId,
         });
 
-        if (eng) {
-          const segments = useWorkspaceStore.getState().workspaces[workspace].segments;
-          eng.setTotalSegments(segments.length);
-        }
+        // Add tool block to queue
+        queue.addBlock({
+          type: 'tool',
+          content: msg.toolName || '',
+          header: {
+            icon: segType === 'read' ? 'search' : 'build',
+            label: msg.toolName || 'Tool',
+          },
+          isComplete: false,
+        });
         break;
       }
 
@@ -182,9 +192,8 @@ export function useWebSocket() {
           setPendingTurnEnd(workspace, true);
         }
         
-        if (eng) {
-          eng.endTurn();
-        }
+        // End block queue
+        queue.endTurn();
         break;
       }
         
