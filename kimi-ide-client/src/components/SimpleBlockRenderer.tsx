@@ -58,9 +58,9 @@ const TIMING = {
 
   FADE_IN: 300,
   SHIMMER_PAUSE: 500,
-  TYPING_SLOW: 5,
-  TYPING_MEDIUM: 2,
-  TYPING_FAST: 1,
+  TYPING_SLOW: 5,    // chars 0-50
+  TYPING_MEDIUM: 2,  // chars 50-100
+  TYPING_FAST: 1,    // chars 100+
   POST_TYPE_PAUSE: 500,
   COLLAPSE: 500,
   POST_COLLAPSE_PAUSE: 500,
@@ -238,33 +238,43 @@ function CollapsibleBlock({ block, queue }: BlockItemProps) {
   >('shimmer');
   const [displayedContent, setDisplayedContent] = useState('');
   const [isExpanded, setIsExpanded] = useState(true);
-  const [opacity, setOpacity] = useState(0);
+  const [iconVisible, setIconVisible] = useState(false);
+  const [labelVisible, setLabelVisible] = useState(false);
+  const [shimmerActive, setShimmerActive] = useState(false);
   const typingCancelRef = useRef(false);
   const advancedRef = useRef(false);
 
   const liveBlock = useRef(block);
   useEffect(() => { liveBlock.current = block; }, [block]);
 
-  // Fade in on mount
+  // Staggered reveal: icon (300ms fade) → 500ms wait → label+shimmer appear
+  // Shimmer runs 1000ms, then 500ms pause, then typing begins
   useEffect(() => {
-    requestAnimationFrame(() => setOpacity(1));
+    requestAnimationFrame(() => setIconVisible(true));
+
+    // 800ms: label + shimmer appear
+    const labelTimer = setTimeout(() => {
+      setLabelVisible(true);
+      setShimmerActive(true);
+    }, 800);
+
+    // 2300ms: shimmer stops (800 + 1500ms shimmer), enter pause before typing
+    const shimmerTimer = setTimeout(() => {
+      setShimmerActive(false);
+      setPhase('pre-type-pause');
+    }, 2300);
+
+    // 2800ms: start typing
+    const typeTimer = setTimeout(() => {
+      setPhase('typing');
+    }, 2800);
+
+    return () => {
+      clearTimeout(labelTimer);
+      clearTimeout(shimmerTimer);
+      clearTimeout(typeTimer);
+    };
   }, []);
-
-  // Shimmer → pre-type-pause when complete
-  useEffect(() => {
-    if (phase === 'shimmer' && block.complete) {
-      const timer = setTimeout(() => setPhase('pre-type-pause'), TIMING.SHIMMER_PAUSE);
-      return () => clearTimeout(timer);
-    }
-  }, [phase, block.complete]);
-
-  // Pre-type pause → typing
-  useEffect(() => {
-    if (phase === 'pre-type-pause') {
-      const timer = setTimeout(() => setPhase('typing'), TIMING.SHIMMER_PAUSE);
-      return () => clearTimeout(timer);
-    }
-  }, [phase]);
 
   // Typing phase — 5-2-1 cadence
   useEffect(() => {
@@ -277,8 +287,8 @@ function CollapsibleBlock({ block, queue }: BlockItemProps) {
         if (typingCancelRef.current) return;
 
         let delay: number;
-        if (i < 100) delay = TIMING.TYPING_SLOW;
-        else if (i < 200) delay = TIMING.TYPING_MEDIUM;
+        if (i < 50) delay = TIMING.TYPING_SLOW;
+        else if (i < 100) delay = TIMING.TYPING_MEDIUM;
         else delay = TIMING.TYPING_FAST;
 
         await new Promise(resolve => setTimeout(resolve, delay));
@@ -318,22 +328,29 @@ function CollapsibleBlock({ block, queue }: BlockItemProps) {
     }
   }, [phase, queue]);
 
-  const isShimmer = phase === 'shimmer';
   const isTyping = phase === 'typing';
+  const isCollapsed = phase === 'collapsed';
+
+  const toggleExpand = () => {
+    if (!isCollapsed) return;
+    setIsExpanded(prev => !prev);
+  };
 
   return (
     <div style={{
       marginBottom: '12px',
-      opacity,
-      transition: `opacity ${TIMING.FADE_IN}ms ease`,
     }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '4px 0',
-        marginBottom: isExpanded ? '8px' : '0',
-      }}>
+      <div
+        onClick={toggleExpand}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '4px 0',
+          marginBottom: isExpanded ? '8px' : '0',
+          cursor: isCollapsed ? 'pointer' : 'default',
+        }}
+      >
         {/* 24px icon slot — matches OrbBlock icon slot */}
         <span
           className="material-symbols-outlined"
@@ -342,8 +359,8 @@ function CollapsibleBlock({ block, queue }: BlockItemProps) {
             textAlign: 'center',
             fontSize: '16px',
             color: 'var(--theme-primary)',
-            opacity: isShimmer ? 0.6 : 1,
-            transition: `opacity ${TIMING.FADE_IN}ms ease`,
+            opacity: iconVisible ? (shimmerActive ? 0.6 : 1) : 0,
+            transition: 'opacity 300ms ease-in',
             display: 'inline-flex',
             justifyContent: 'center',
             alignItems: 'center',
@@ -352,21 +369,40 @@ function CollapsibleBlock({ block, queue }: BlockItemProps) {
           {block.header?.icon || 'lightbulb'}
         </span>
         <span
-          className={isShimmer ? 'shimmer-text' : ''}
+          className={shimmerActive ? 'shimmer-text' : ''}
           style={{
             fontSize: '13px',
             color: 'var(--text-dim)',
             fontStyle: 'italic',
+            opacity: labelVisible ? 1 : 0,
+            transition: 'opacity 300ms ease-in',
           }}
         >
           {block.header?.label || 'Thinking'}
         </span>
+        {/* Toggle arrow — appears after collapse, right next to label */}
+        <span
+          className="material-symbols-outlined"
+          style={{
+            fontSize: '14px',
+            color: 'var(--text-dim)',
+            opacity: isCollapsed ? 1 : 0,
+            transition: 'opacity 300ms ease, transform 200ms ease',
+            transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+            marginLeft: '-4px',
+            position: 'relative',
+            top: '2px',
+          }}
+        >
+          arrow_right
+        </span>
       </div>
 
       <div style={{
-        marginLeft: '24px',
-        paddingLeft: '12px',
-        borderLeft: '2px solid var(--theme-primary)',
+        marginLeft: '11px',
+        paddingLeft: '21px',
+        borderLeft: `1px solid ${isTyping || phase === 'post-type-pause' || phase === 'collapsing' || phase === 'collapsed' ? 'var(--theme-primary)' : 'transparent'}`,
+        transition: 'border-color 300ms ease',
         maxHeight: isExpanded ? '2000px' : '0px',
         opacity: isExpanded ? 1 : 0,
         overflow: 'hidden',
@@ -375,7 +411,7 @@ function CollapsibleBlock({ block, queue }: BlockItemProps) {
         <div style={{
           fontSize: '14px',
           lineHeight: '1.6',
-          color: 'var(--text-white)',
+          color: 'var(--text-dim)',
           fontStyle: block.type === 'think' ? 'italic' : 'normal',
           whiteSpace: 'pre-wrap',
           padding: '8px 0',
@@ -417,8 +453,8 @@ function TextBlock({ block, queue }: BlockItemProps) {
 
         if (idx < content.length) {
           let delay: number;
-          if (idx < 100) delay = TIMING.TYPING_SLOW;
-          else if (idx < 200) delay = TIMING.TYPING_MEDIUM;
+          if (idx < 50) delay = TIMING.TYPING_SLOW;
+          else if (idx < 100) delay = TIMING.TYPING_MEDIUM;
           else delay = TIMING.TYPING_FAST;
 
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -499,8 +535,8 @@ function CodeBlock({ block, queue }: BlockItemProps) {
 
         if (idx < content.length) {
           let delay: number;
-          if (idx < 100) delay = TIMING.TYPING_SLOW;
-          else if (idx < 200) delay = TIMING.TYPING_MEDIUM;
+          if (idx < 50) delay = TIMING.TYPING_SLOW;
+          else if (idx < 100) delay = TIMING.TYPING_MEDIUM;
           else delay = TIMING.TYPING_FAST;
 
           await new Promise(resolve => setTimeout(resolve, delay));

@@ -34,11 +34,11 @@ All blocks are agnostic — no inter-block tracking. Each runs its own timeline.
 
 ### Collapsible (think, shell, write) — IDENTICAL paradigm
 1. First token arrives → create block (empty content, `complete: false`)
-2. Fade in (300ms): icon + label + content container ALL AT ONCE
-3. Shimmer loop while `complete === false` (content accumulates behind shimmer)
-4. Content complete (`complete = true`) → stop shimmer → 500ms pause
-5. Type content with 5-2-1 cadence
-6. 500ms pause → collapse (500ms) → 500ms pause → remove
+2. Icon fades in (300ms ease-in), then 500ms pause, then label fades in (300ms ease-in) with shimmer active
+3. Shimmer runs 1500ms (fixed), then stops
+4. 500ms pause (label settles to grey)
+5. Type content with 5-2-1 cadence (content accumulates behind the scenes during steps 2-4)
+6. 500ms pause → collapse (500ms) → 500ms pause → advanceBlock
 
 ### Text
 1. First token → create block, render container immediately
@@ -64,9 +64,9 @@ All blocks are agnostic — no inter-block tracking. Each runs its own timeline.
 
 | Characters | Delay per char |
 |------------|---------------|
-| 0-100      | 5ms           |
-| 100-200    | 2ms           |
-| 200+       | 1ms           |
+| 0-50       | 5ms           |
+| 50-100     | 2ms           |
+| 100+       | 1ms           |
 
 ---
 
