@@ -1,187 +1,139 @@
 # Chat Render Specification
 
 ## Overview
-Real-time streaming chat with choreographed animations. The orb acts as an immediate loading indicator, then each chunk follows a strict timing sequence.
+Real-time streaming chat with choreographed animations. Token-level WebSocket messages flow through a **content accumulator** that buffers them into logical blocks, then each block self-manages its animation lifecycle.
 
 ## Architecture
-- **Backend**: Sends content as soon as it exists (WebSocket)
-- **Frontend Store**: Buffers all segments immediately  
-- **Orb**: Pure UI state - appears on send, disappears on first content
-- **Chunks**: Each renders independently with self-managed timing
-
----
-
-## Phase 1: Orb (Immediate)
-
-**Trigger:** User sends message
-
-**Behavior:**
-- Icon: `lens_blur` (Material Symbols)
-- Animation: Pulse 1500ms ease-in-out infinite
-- Color: `--theme-primary`
-- **No waiting** - appears instantly
-
-**Exit:** First content arrives (thinking or text)
-- Orb fades out
-- First chunk begins shimmer immediately
-
----
-
-## Phase 2: Shimmer (Every Chunk)
-
-**Timing:**
-
-| Elapsed | Opacity | State |
-|-----------|---------|-------|
-| 0-250ms | 0% | Invisible hold |
-| 250-500ms | 0→100% | Fade in |
-| 500-1000ms | 100% | Full shimmer |
-| 1000ms+ | 100% | Extend if content not ready |
-
-**Minimum shimmer: 1000ms**
-
-If content arrives after 1000ms, shimmer continues until content is ready.
-
----
-
-## Phase 3: Content Reveal
-
-**Typing effect:**
-- 0-100 chars: 5ms per char
-- 100-200 chars: 2ms per char
-- 200+ chars: 1ms per char
-
-**Non-typed content:**
-- Inline tool calls: Show immediately (no typing)
-
----
-
-## Phase 4: End Chunk & Handoff
-
-| Phase | Duration | Notes |
-|-------|----------|-------|
-| Post-typing pause | 500ms | Content fully visible |
-| Collapse | 300ms | max-height + opacity transition |
-| Inter-chunk pause | 250ms | Before next chunk starts |
-| **Next chunk start** | 250ms | Its own initial pause |
-
-**Collapse details:**
-- max-height: 2000px → 0px
-- opacity: 1 → 0 (fade starts at 150ms)
-
----
-
-## Chunk Types
-
-### Collapsible (think, shell, write)
-- Expandable drawer with header
-- Icon + label + chevron
-- Content indented with left border (think only)
-- Font: monospace for shell, italic for think
-
-### Inline (read, write, edit, glob, grep, web_search, fetch, subagent, todo)
-- Single line, no expansion
-- Icon + label on subtle background
-- No typing effect
-
-### Text (markdown)
-- Full width
-- Markdown rendered via `marked`
-- Typing effect
-
----
-
-## Chunking Rules
-
-1. **Thinking blocks** - Each `<think>...</think>` = 1 chunk
-2. **Tool calls** - Each tool invocation = 1 chunk
-3. **Text headers** - Split on `## ` (h2 headers)
-4. **Sequential** - Text between headers = 1 chunk
-
----
-
-## Complete Flow
 
 ```
-[USER SENDS MESSAGE]
-        │
-        ▼
-   [ORB APPEARS] ← Immediate, pulses
-        │
-        │ (first token arrives)
-        ▼
-   [ORB FADES OUT]
-        │
-        ▼
-[CHUNK 1: SHIMMER]
-        │
-   ┌────┴────┐
-   │ 250ms   │ Invisible
-   │ 250ms   │ Fade in
-   │ 500ms   │ Full shimmer
-   └────┬────┘
-        │ (content ready)
-        ▼
-[CHUNK 1: TYPING]
-        │
-        ▼
-[CHUNK 1: POST-TYPING]
-        │
-   ┌────┴────┐
-   │ 500ms   │ Pause
-   │ 300ms   │ Collapse
-   │ 250ms   │ Pause
-   └────┬────┘
-        │
-        ▼
-[CHUNK 2: START PAUSE]
-        │
-        │ 250ms
-        ▼
-[CHUNK 2: SHIMMER]
-        │
-        ... (repeat)
+WebSocket tokens → ContentAccumulator (state machine) → SimpleQueue (blocks) → SimpleBlockRenderer (React)
 ```
+
+- **Backend**: Sends token-level content via WebSocket (1-5 chars each)
+- **ContentAccumulator**: Buffers tokens into logical blocks, detects boundaries (fences, headers, type changes)
+- **SimpleQueue**: Holds blocks with mutable content, batches notifications via rAF
+- **SimpleBlockRenderer**: Each block component self-manages timing, removes itself when done
+- **Segment Store**: Parallel path for MessageList (past messages) — unchanged
 
 ---
 
-## Key Principles
+## Block Types & Lifecycles
 
-1. **Orb = immediate feedback** - No waiting for backend
-2. **Chunks self-manage timing** - No central queue controlling animations
-3. **Never restart animation** - Once started, runs to completion
-4. **250ms everywhere** - Start fade, end pause, all chunks
-5. **1000ms minimum shimmer** - Even for one-line tool calls
+All blocks are agnostic — no inter-block tracking. Each runs its own timeline.
+
+### Orb
+**Trigger:** User sends message (immediate, before server responds)
+
+1. 500ms pause (invisible)
+2. Fade in (200ms)
+3. Expand to 1.2x + blur (500ms)
+4. Pause open at 1x (500ms)
+5. Contract to 0.8x (500ms)
+6. Fade out (200ms)
+7. 500ms pause → remove
+
+### Collapsible (think, shell, write) — IDENTICAL paradigm
+1. First token arrives → create block (empty content, `complete: false`)
+2. Fade in (300ms): icon + label + content container ALL AT ONCE
+3. Shimmer loop while `complete === false` (content accumulates behind shimmer)
+4. Content complete (`complete = true`) → stop shimmer → 500ms pause
+5. Type content with 5-2-1 cadence
+6. 500ms pause → collapse (500ms) → 500ms pause → remove
+
+### Text
+1. First token → create block, render container immediately
+2. Chase-type content with 5-2-1 as tokens arrive (cursor chases growing content)
+3. Markdown rendered via `marked.parse()` as typing progresses
+4. Boundary hit (backtick fence, type change, ## header) → mark complete
+5. Finish typing remaining content → remove
+
+### Code
+1. Opening ``` detected → create code block with language meta
+2. Chase-type raw code with 5-2-1 as tokens arrive
+3. Closing ``` detected → mark complete → apply `hljs` syntax highlighting
+4. Brief pause (300ms) → remove
+
+### Inline Tool (read, edit, glob, grep, web_search, fetch, subagent, todo)
+1. Fade in (250ms) → show icon + label → shimmer (500ms) → fade out → done
+2. No 500ms gap between consecutive inline tools
+3. Created with `complete: true` immediately
 
 ---
 
-## State Machine (Per Chunk)
+## Typing Cadence (5-2-1)
+
+| Characters | Delay per char |
+|------------|---------------|
+| 0-100      | 5ms           |
+| 100-200    | 2ms           |
+| 200+       | 1ms           |
+
+---
+
+## Content Accumulator State Machine
 
 ```
-idle ──(released & isLive)──► shimmer ──(1000ms min)──► revealing ──(typed)──► complete
+States: idle | text | thinking | code | tool
+Transitions on: content msg, thinking msg, tool_call, tool_result, turn_end
 ```
+
+**Boundary detection:**
+- **Type change** (think↔text): complete current block, start new one
+- **Code fence** (triple backtick): complete text block, start code block (and vice versa)
+- **Header** (`## ` at line start): complete current text block, start new one
+- **Tool call**: complete any active block, create tool block
+- **Turn end**: complete all active blocks
+
+**Token buffering:**
+- Backtick counter tracks partial fence detection across token boundaries
+- Line buffer tracks partial header detection
+- Content accumulates character by character for precise boundary detection
+
+---
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/lib/simpleQueue.ts` | Block queue with mutable ops, rAF batching |
+| `src/lib/contentAccumulator.ts` | State machine: tokens → blocks |
+| `src/hooks/useWebSocket.ts` | Routes WS messages through accumulator |
+| `src/components/SimpleBlockRenderer.tsx` | All block components (Orb, Collapsible, Text, Code, InlineTool) |
+| `src/components/ChatArea.tsx` | Mounts SimpleBlockRenderer (always, not gated) |
+| `src/lib/instructions.ts` | Tool categorization, icons, labels |
 
 ---
 
 ## CSS Variables
 
-- `--theme-primary` - Icons, shimmer gradient
-- `--theme-primary-rgb` - Subtle backgrounds (0.03 opacity)  
-- `--text-dim` - Content text color
-- `--error` - Error states (#ef4444)
+- `--theme-primary` — Icons, shimmer gradient
+- `--theme-primary-rgb` — Subtle backgrounds (0.03 opacity)
+- `--text-dim` — Dim text color
+- `--text-white` — Content text color
+- `--bg-code` — Code block background
+- `--theme-border` — Border color
+- `--font-mono` — Monospace font family
 
 ## Icons
 
-- `lens_blur` - Orb
-- `lightbulb` - Thinking
-- `terminal` - Shell
-- `description` - Read
-- `edit_note` - Write
-- `find_replace` - Edit
-- `folder_search` - Glob
-- `search` - Grep
-- `travel_explore` - Web search
-- `link` - Fetch
-- `smart_toy` - Subagent
-- `checklist` - Todo
-- `arrow_drop_down` - Collapse chevron
+- `lens_blur` — Orb
+- `lightbulb` — Thinking
+- `terminal` — Shell
+- `description` — Read
+- `edit_note` — Write
+- `find_replace` — Edit
+- `folder_search` — Glob
+- `search` — Grep
+- `travel_explore` — Web search
+- `link` — Fetch
+- `smart_toy` — Subagent
+- `checklist` — Todo
+
+## Key Principles
+
+1. **Orb = immediate feedback** — No waiting for backend
+2. **Blocks self-manage timing** — No central queue controlling animations
+3. **Content accumulator buffers tokens** — Prevents hundreds of micro-blocks
+4. **Mutable blocks** — Content grows in-place, components chase it
+5. **rAF batching** — Coalesces rapid token updates into single re-renders
+6. **Boundary detection** — Code fences, headers, type changes split blocks correctly

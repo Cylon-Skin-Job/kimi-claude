@@ -49,4 +49,13 @@ export function toolLabel(segType: SegmentType, args?: Record<string, unknown>):
   }
 }
 
+/** Categorize a segment type for block routing */
+export type SegmentCategory = 'collapsible' | 'inline';
+
+const COLLAPSIBLE_TYPES = new Set(['think', 'shell', 'write']);
+
+export function getSegmentCategory(segType: string): SegmentCategory {
+  return COLLAPSIBLE_TYPES.has(segType) ? 'collapsible' : 'inline';
+}
+
 export { SEGMENT_ICONS };

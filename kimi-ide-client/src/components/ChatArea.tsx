@@ -1,10 +1,11 @@
 import { useRef, useEffect } from 'react';
 import { useWorkspaceStore } from '../state/workspaceStore';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { useEngineBridge } from '../hooks/useEngineBridge';
+import { getQueue } from '../lib/simpleQueue';
+import { getAccumulator } from '../lib/contentAccumulator';
 import type { WorkspaceId } from '../types';
 import { MessageList } from './MessageList';
-import { BlockRenderer } from './BlockRenderer';
+import { SimpleBlockRenderer } from './SimpleBlockRenderer';
 import { ChatInput } from './ChatInput';
 
 interface ChatAreaProps {
@@ -15,17 +16,16 @@ export function ChatArea({ workspace }: ChatAreaProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledRef = useRef(false);
-  
+
   // Store data
   const messages = useWorkspaceStore((state) => state.workspaces[workspace].messages);
   const currentTurn = useWorkspaceStore((state) => state.workspaces[workspace].currentTurn);
   const segments = useWorkspaceStore((state) => state.workspaces[workspace].segments);
   const contextUsage = useWorkspaceStore((state) => state.contextUsage);
-  
+
   const addMessage = useWorkspaceStore((state) => state.addMessage);
   const { sendMessage } = useWebSocket();
-  const engine = useEngineBridge(workspace);
-  
+
   // Kill auto-scroll when user scrolls up
   useEffect(() => {
     const container = chatContainerRef.current;
@@ -53,10 +53,16 @@ export function ChatArea({ workspace }: ChatAreaProps) {
   }, [messages, segments]);
 
   const handleSend = (text: string) => {
-    // Reset engine for new turn
-    engine.reset();
-    engine.startTurn();
-    
+    // Add orb block immediately (before server responds)
+    const queue = getQueue(workspace);
+    const accumulator = getAccumulator(workspace);
+    accumulator.reset();
+    queue.startTurn();
+    queue.addBlock({
+      type: 'orb',
+      content: '',
+    });
+
     // Add user message
     addMessage(workspace, {
       id: Date.now().toString(),
@@ -64,13 +70,11 @@ export function ChatArea({ workspace }: ChatAreaProps) {
       content: text,
       timestamp: Date.now()
     });
-    
-    // Send via WebSocket - turn_begin will start engine
+
+    // Send via WebSocket
     sendMessage(text, workspace);
   };
-  
 
-  
   return (
     <section className="chat-area" style={{ position: 'relative' }}>
       {/* Context Usage - Lower Right of Chat */}
@@ -89,14 +93,14 @@ export function ChatArea({ workspace }: ChatAreaProps) {
       >
         <span className="context-usage-label">Context</span>
         <div className="context-usage-bar">
-          <div 
-            className="context-usage-fill" 
+          <div
+            className="context-usage-fill"
             style={{ width: `${Math.min(contextUsage, 100)}%` }}
           />
         </div>
         <span>{contextUsage.toFixed(2)}%</span>
       </div>
-      
+
       {/* Messages */}
       <div className="chat-messages" ref={chatContainerRef}>
         {messages.length === 0 && !currentTurn ? (
@@ -104,22 +108,20 @@ export function ChatArea({ workspace }: ChatAreaProps) {
             {workspace} workspace active - Start a conversation
           </div>
         ) : (
-          <MessageList 
+          <MessageList
             workspace={workspace}
             messages={messages}
             currentTurn={currentTurn}
             segments={segments}
           />
         )}
-        
-        {/* Block Renderer for streaming content */}
-        {currentTurn?.status === 'streaming' && (
-          <BlockRenderer workspace={workspace} />
-        )}
-        
+
+        {/* Block Renderer — always mounted, shows nothing when empty */}
+        <SimpleBlockRenderer workspace={workspace} />
+
         <div ref={messagesEndRef} />
       </div>
-      
+
       <ChatInput onSend={handleSend} disabled={false} workspace={workspace} />
     </section>
   );
