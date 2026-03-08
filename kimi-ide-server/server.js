@@ -5,6 +5,7 @@ const http = require('http');
 const { spawn } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 
 // Wire log for debugging
 const WIRE_LOG_FILE = path.join(__dirname, 'wire-debug.log');
@@ -76,6 +77,215 @@ function sendToWire(wire, method, params, id = null) {
   const json = JSON.stringify(message);
   console.log('[→ Wire]:', json.slice(0, 200));
   wire.stdin.write(json + '\n');
+}
+
+// --- File Explorer Handlers ---
+
+// Only 'code' workspace is filesystem-backed
+const WORKSPACE_PATHS = {
+  code: '.',
+  wiki: null,
+  rocket: null,
+  issues: null,
+  scheduler: null,
+  skills: null,
+  claw: null,
+};
+
+// Map Node.js error codes to protocol error codes
+function mapFileErrorCode(err) {
+  if (err.code === 'ENOENT') return 'ENOENT';
+  if (err.code === 'EACCES' || err.code === 'EPERM') return 'EACCES';
+  if (err.code === 'ENOTDIR') return 'ENOTDIR';
+  if (err.code === 'EISDIR') return 'EISDIR';
+  return 'UNKNOWN';
+}
+
+// Parse file extension: lowercase, no extension for dotfiles like .gitignore
+function parseExtension(filename) {
+  const lastDot = filename.lastIndexOf('.');
+  if (lastDot <= 0) return undefined; // no extension or dotfile
+  return filename.slice(lastDot + 1).toLowerCase();
+}
+
+async function handleFileTreeRequest(ws, msg) {
+  const workspace = msg.workspace || 'code';
+  const requestPath = msg.path || '';
+
+  // Validate workspace is filesystem-backed
+  if (WORKSPACE_PATHS[workspace] === null || WORKSPACE_PATHS[workspace] === undefined) {
+    ws.send(JSON.stringify({
+      type: 'file_tree_response',
+      workspace,
+      path: requestPath,
+      success: false,
+      error: `Workspace "${workspace}" is not filesystem-backed`,
+      code: 'ENOTWORKSPACE',
+    }));
+    return;
+  }
+
+  const basePath = path.resolve(WORKSPACE_PATHS[workspace]);
+  const targetPath = requestPath ? path.join(basePath, requestPath) : basePath;
+
+  // Path traversal guard
+  if (!path.resolve(targetPath).startsWith(basePath)) {
+    ws.send(JSON.stringify({
+      type: 'file_tree_response',
+      workspace,
+      path: requestPath,
+      success: false,
+      error: 'Invalid path',
+      code: 'ENOENT',
+    }));
+    return;
+  }
+
+  try {
+    const entries = await fsPromises.readdir(targetPath, { withFileTypes: true });
+
+    // Large folder guard
+    if (entries.length > 1000) {
+      ws.send(JSON.stringify({
+        type: 'file_tree_response',
+        workspace,
+        path: requestPath,
+        success: false,
+        error: `Folder has ${entries.length} items (max 1000). Use terminal to explore.`,
+        code: 'ETOOLARGE',
+      }));
+      return;
+    }
+
+    // Build nodes: folders first, then files, both alphabetical
+    const folders = [];
+    const files = [];
+
+    for (const entry of entries) {
+      // Skip hidden files/folders starting with .
+      if (entry.name.startsWith('.')) continue;
+      // Skip node_modules
+      if (entry.name === 'node_modules') continue;
+
+      const entryPath = requestPath ? `${requestPath}/${entry.name}` : entry.name;
+
+      if (entry.isDirectory()) {
+        // Check if folder has children
+        let hasChildren = false;
+        try {
+          const children = await fsPromises.readdir(path.join(targetPath, entry.name));
+          hasChildren = children.length > 0;
+        } catch (_) {
+          // Permission denied or other error - show as empty
+        }
+        folders.push({
+          name: entry.name,
+          path: entryPath,
+          type: 'folder',
+          hasChildren,
+        });
+      } else if (entry.isFile()) {
+        files.push({
+          name: entry.name,
+          path: entryPath,
+          type: 'file',
+          extension: parseExtension(entry.name),
+        });
+      }
+    }
+
+    // Sort: folders first (alphabetical), then files (alphabetical)
+    folders.sort((a, b) => a.name.localeCompare(b.name));
+    files.sort((a, b) => a.name.localeCompare(b.name));
+
+    ws.send(JSON.stringify({
+      type: 'file_tree_response',
+      workspace,
+      path: requestPath,
+      success: true,
+      nodes: [...folders, ...files],
+    }));
+  } catch (err) {
+    ws.send(JSON.stringify({
+      type: 'file_tree_response',
+      workspace,
+      path: requestPath,
+      success: false,
+      error: err.message,
+      code: mapFileErrorCode(err),
+    }));
+  }
+}
+
+async function handleFileContentRequest(ws, msg) {
+  const workspace = msg.workspace || 'code';
+  const requestPath = msg.path || '';
+
+  // Validate workspace
+  if (WORKSPACE_PATHS[workspace] === null || WORKSPACE_PATHS[workspace] === undefined) {
+    ws.send(JSON.stringify({
+      type: 'file_content_response',
+      workspace,
+      path: requestPath,
+      success: false,
+      error: `Workspace "${workspace}" is not filesystem-backed`,
+      code: 'ENOTWORKSPACE',
+    }));
+    return;
+  }
+
+  const basePath = path.resolve(WORKSPACE_PATHS[workspace]);
+  const targetPath = path.join(basePath, requestPath);
+
+  // Path traversal guard
+  if (!path.resolve(targetPath).startsWith(basePath)) {
+    ws.send(JSON.stringify({
+      type: 'file_content_response',
+      workspace,
+      path: requestPath,
+      success: false,
+      error: 'Invalid path',
+      code: 'ENOENT',
+    }));
+    return;
+  }
+
+  try {
+    const stat = await fsPromises.stat(targetPath);
+
+    if (stat.isDirectory()) {
+      ws.send(JSON.stringify({
+        type: 'file_content_response',
+        workspace,
+        path: requestPath,
+        success: false,
+        error: 'Expected file, got directory',
+        code: 'EISDIR',
+      }));
+      return;
+    }
+
+    const content = await fsPromises.readFile(targetPath, 'utf-8');
+
+    ws.send(JSON.stringify({
+      type: 'file_content_response',
+      workspace,
+      path: requestPath,
+      success: true,
+      content,
+      size: stat.size,
+      lastModified: stat.mtimeMs,
+    }));
+  } catch (err) {
+    ws.send(JSON.stringify({
+      type: 'file_content_response',
+      workspace,
+      path: requestPath,
+      success: false,
+      error: err.message,
+      code: mapFileErrorCode(err),
+    }));
+  }
 }
 
 // WebSocket connection handling
@@ -287,6 +497,12 @@ wss.on('connection', (ws) => {
       else if (clientMsg.type === 'response') {
         // Client responding to agent request
         sendToWire(wire, 'response', clientMsg.payload, clientMsg.requestId);
+      }
+      else if (clientMsg.type === 'file_tree_request') {
+        handleFileTreeRequest(ws, clientMsg);
+      }
+      else if (clientMsg.type === 'file_content_request') {
+        handleFileContentRequest(ws, clientMsg);
       }
       else if (clientMsg.type === 'initialize') {
         // Initialize handshake

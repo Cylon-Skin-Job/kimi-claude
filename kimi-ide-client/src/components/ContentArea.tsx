@@ -1,5 +1,6 @@
 import type { WorkspaceId } from '../types';
 import { WORKSPACE_CONFIGS } from '../types';
+import { FileExplorer } from './file-explorer/FileExplorer';
 
 interface ContentAreaProps {
   workspace: WorkspaceId;
@@ -7,7 +8,16 @@ interface ContentAreaProps {
 
 export function ContentArea({ workspace }: ContentAreaProps) {
   const config = WORKSPACE_CONFIGS[workspace];
-  
+
+  // Code workspace shows the file explorer
+  if (workspace === 'code') {
+    return (
+      <main className="content-area">
+        <FileExplorer />
+      </main>
+    );
+  }
+
   return (
     <main className="content-area">
       <div className="workspace-placeholder">
@@ -15,15 +25,8 @@ export function ContentArea({ workspace }: ContentAreaProps) {
           {config.name}
         </h3>
         <p style={{ color: 'var(--text-dim)' }}>
-          Content area for {config.name.toLowerCase()} workspace.<br /><br />
-          This area will display:
+          Content area for {config.name.toLowerCase()} workspace.
         </p>
-        <ul style={{ color: 'var(--text-dim)', marginTop: '12px', paddingLeft: '20px' }}>
-          <li>File diffs</li>
-          <li>Code previews</li>
-          <li>Pipeline visualizations</li>
-          <li>Documentation</li>
-        </ul>
       </div>
     </main>
   );
