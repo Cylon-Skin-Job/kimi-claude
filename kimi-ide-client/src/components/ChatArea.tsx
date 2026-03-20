@@ -1,12 +1,8 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { useWorkspaceStore } from '../state/workspaceStore';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { getQueue } from '../lib/simpleQueue';
-import { getAccumulator } from '../lib/contentAccumulator';
-import { SEGMENT_ICONS, getSegmentCategory } from '../lib/instructions';
 import type { WorkspaceId } from '../types';
 import { MessageList } from './MessageList';
-import { SimpleBlockRenderer } from './SimpleBlockRenderer';
 import { ChatInput } from './ChatInput';
 
 interface ChatAreaProps {
@@ -14,26 +10,30 @@ interface ChatAreaProps {
 }
 
 export function ChatArea({ workspace }: ChatAreaProps) {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
+  const lastUserMsgRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledRef = useRef(false);
+  const justSentRef = useRef(false);
+  const [spacerHeight, setSpacerHeight] = useState('4rem');
 
   // Store data
   const messages = useWorkspaceStore((state) => state.workspaces[workspace].messages);
   const currentTurn = useWorkspaceStore((state) => state.workspaces[workspace].currentTurn);
   const segments = useWorkspaceStore((state) => state.workspaces[workspace].segments);
   const contextUsage = useWorkspaceStore((state) => state.contextUsage);
+  const pendingTurnEnd = useWorkspaceStore((state) => state.workspaces[workspace].pendingTurnEnd);
 
   const addMessage = useWorkspaceStore((state) => state.addMessage);
   const { sendMessage } = useWebSocket();
 
-  // Kill auto-scroll when user scrolls up
+  // Detect manual scroll — if user scrolls up, disable auto-scroll
   useEffect(() => {
     const container = chatContainerRef.current;
     if (!container) return;
 
     const onScroll = () => {
-      const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 40;
+      const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
       userScrolledRef.current = !atBottom;
     };
 
@@ -41,104 +41,35 @@ export function ChatArea({ workspace }: ChatAreaProps) {
     return () => container.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Re-enable auto-scroll on new user message
+  // On send: scroll user bubble to top of viewport
   useEffect(() => {
-    userScrolledRef.current = false;
+    if (justSentRef.current && lastUserMsgRef.current) {
+      justSentRef.current = false;
+      lastUserMsgRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }, [messages.length]);
 
-  // Auto-scroll to bottom (unless user scrolled up)
+  // On turn end: scroll to bottom of response (unless user scrolled up)
   useEffect(() => {
-    if (!userScrolledRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (pendingTurnEnd && !userScrolledRef.current && chatBottomRef.current) {
+      // Shrink spacer back to default
+      setSpacerHeight('4rem');
+      // Small delay to let the DOM settle after blocks finalize
+      setTimeout(() => {
+        chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     }
-  }, [messages, segments]);
+  }, [pendingTurnEnd]);
 
   const handleSend = (text: string) => {
-    // /demo command — fire off every block type for visual testing
-    if (text.trim() === '/demo') {
-      const queue = getQueue(workspace);
-      queue.startTurn();
+    // Expand spacer so there's room to scroll user bubble to top
+    setSpacerHeight('80vh');
 
-      // Orb
-      queue.addBlock({ type: 'orb', content: '' });
-
-      // Thinking (collapsible)
-      queue.addBlock({
-        type: 'think',
-        content: 'Analyzing the request and considering the best approach to solve this problem...',
-        complete: true,
-        header: { icon: 'lightbulb', label: 'Thinking' },
-      });
-
-      // Text
-      queue.addBlock({
-        type: 'text',
-        content: 'Here is a sample response with **markdown** support and `inline code`.',
-        complete: true,
-      });
-
-      // Code
-      queue.addBlock({
-        type: 'code',
-        content: 'function hello() {\n  console.log("Hello, world!");\n}',
-        complete: true,
-        meta: { language: 'javascript' },
-      });
-
-      // Inline tools
-      const inlineTypes = ['read', 'glob', 'grep', 'web_search', 'fetch', 'subagent', 'todo'];
-      for (const segType of inlineTypes) {
-        const info = SEGMENT_ICONS[segType] || { icon: 'build', label: segType };
-        queue.addBlock({
-          type: 'tool',
-          content: '',
-          complete: true,
-          header: { icon: info.icon, label: info.label },
-          meta: { segmentType: segType, toolCallId: `demo-${segType}` },
-        });
-      }
-
-      // Shell (collapsible)
-      queue.addBlock({
-        type: 'tool',
-        content: '$ npm run build\n\n> kimi-ide-client@0.1.0 build\n> vite build\n\n✓ 42 modules transformed.\ndist/index.html    0.45 kB │ gzip: 0.29 kB\ndist/assets/index-DiwrgTda.css  6.12 kB │ gzip: 1.87 kB\ndist/assets/index-BqeVJ9xN.js  142.35 kB │ gzip: 45.67 kB\n✓ built in 1.23s',
-        complete: true,
-        header: { icon: 'terminal', label: 'Shell' },
-        meta: { segmentType: 'shell', toolCallId: 'demo-shell' },
-      });
-
-      // Write (collapsible with code content)
-      queue.addBlock({
-        type: 'tool',
-        content: 'import { useEffect, useState } from \'react\';\nimport { getQueue } from \'../lib/simpleQueue\';\n\nexport function useBlockQueue(workspace: string) {\n  const queue = getQueue(workspace);\n  const [state, setState] = useState(() => queue.getState());\n\n  useEffect(() => {\n    return queue.subscribe((s) => setState({ ...s }));\n  }, [queue]);\n\n  return state;\n}',
-        complete: true,
-        header: { icon: 'edit_note', label: 'Write `src/hooks/useBlockQueue.ts`' },
-        meta: { segmentType: 'write', toolCallId: 'demo-write' },
-      });
-
-      // Edit (collapsible with diff content)
-      queue.addBlock({
-        type: 'tool',
-        content: '- const COLLAPSIBLE_TYPES = new Set([\'think\', \'shell\', \'write\']);\n+ const COLLAPSIBLE_TYPES = new Set([\'think\', \'shell\', \'write\', \'edit\']);',
-        complete: true,
-        header: { icon: 'edit_note', label: 'Edit `src/lib/instructions.ts`' },
-        meta: { segmentType: 'edit', toolCallId: 'demo-edit' },
-      });
-
-      return;
-    }
-
-    // Add orb block immediately (before server responds)
-    const queue = getQueue(workspace);
-    const accumulator = getAccumulator(workspace);
-    accumulator.reset();
-    queue.startTurn();
-    queue.addBlock({
-      type: 'orb',
-      content: '',
-    });
+    // Disable auto-scroll-to-bottom during streaming — user is watching live
+    userScrolledRef.current = true;
 
     // Add user message
+    justSentRef.current = true;
     addMessage(workspace, {
       id: Date.now().toString(),
       type: 'user',
@@ -188,13 +119,15 @@ export function ChatArea({ workspace }: ChatAreaProps) {
             messages={messages}
             currentTurn={currentTurn}
             segments={segments}
+            lastUserMsgRef={lastUserMsgRef}
           />
         )}
 
-        {/* Block Renderer — always mounted, shows nothing when empty */}
-        <SimpleBlockRenderer workspace={workspace} />
+        {/* Scroll target for turn-end auto-scroll */}
+        <div ref={chatBottomRef} />
 
-        <div ref={messagesEndRef} />
+        {/* Bottom spacer — expands on send for scroll room, shrinks on turn end */}
+        <div style={{ minHeight: spacerHeight }} />
       </div>
 
       <ChatInput onSend={handleSend} disabled={false} workspace={workspace} />

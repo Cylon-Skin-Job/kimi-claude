@@ -31,31 +31,4 @@ export function toolNameToSegmentType(toolName: string): SegmentType {
   return map[toolName] || 'read';
 }
 
-/** Build a label for a tool call from its type and args */
-export function toolLabel(segType: SegmentType, args?: Record<string, unknown>): string {
-  const base = SEGMENT_ICONS[segType]?.label || segType;
-  if (!args) return base;
-
-  switch (segType) {
-    case 'read':  return `Read \`${args.path || ''}\``;
-    case 'write': return `Write \`${args.path || ''}\``;
-    case 'edit':  return `Edit \`${args.path || ''}\``;
-    case 'glob':  return `Find \`${args.pattern || ''}\``;
-    case 'grep':  return `Search \`${args.pattern || ''}\``;
-    case 'web_search': return `Search \`${args.query || ''}\``;
-    case 'fetch': return `Fetch \`${args.url || ''}\``;
-    case 'shell': return `Running \`${(args.command as string || '').slice(0, 40)}\``;
-    default: return base;
-  }
-}
-
-/** Categorize a segment type for block routing */
-export type SegmentCategory = 'collapsible' | 'inline';
-
-const COLLAPSIBLE_TYPES = new Set(['think', 'shell', 'write', 'edit']);
-
-export function getSegmentCategory(segType: string): SegmentCategory {
-  return COLLAPSIBLE_TYPES.has(segType) ? 'collapsible' : 'inline';
-}
-
 export { SEGMENT_ICONS };

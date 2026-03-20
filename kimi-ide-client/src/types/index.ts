@@ -1,5 +1,5 @@
 // Workspace Types
-export type WorkspaceId = 'code' | 'rocket' | 'issues' | 'scheduler' | 'skills' | 'wiki' | 'claw';
+export type WorkspaceId = 'coding-agent' | 'rocket' | 'issues' | 'scheduler' | 'skills' | 'wiki' | 'claw';
 
 export interface WorkspaceConfig {
   name: string;
@@ -7,15 +7,6 @@ export interface WorkspaceConfig {
   icon: string;
   hasChat: boolean;
 }
-
-// Render State Machine Types
-export type RenderPhase = 
-  | 'idle'
-  | 'ribbon_entering'    // 150ms minimum
-  | 'ribbon_caught'       // Waiting for turn_begin
-  | 'ribbon_completing'   // 200ms exit
-  | 'pre_thinking_pause'  // 200ms delay
-  | 'streaming';          // Active content rendering
 
 // All segment types that can appear in the ordered stream
 export type SegmentType =
@@ -69,14 +60,11 @@ export interface WorkspaceState {
   // Messages
   messages: Message[];
   currentTurn: AssistantTurn | null;
-  
-  // Render State Machine
-  renderPhase: RenderPhase;
-  messageQueue: WebSocketMessage[];
+
   pendingTurnEnd: boolean;
   /** Message to add when typing completes; set at turn_end, cleared by finalizeTurn */
   pendingMessage: Message | null;
-  
+
   // Ordered stream of segments (think and text inline, in arrival order)
   segments: StreamSegment[];
 
@@ -88,7 +76,7 @@ export interface WorkspaceState {
 }
 
 // WebSocket Message Types
-export type WebSocketMessageType = 
+export type WebSocketMessageType =
   | 'connected'
   | 'turn_begin'
   | 'content'
@@ -100,7 +88,15 @@ export type WebSocketMessageType =
   | 'response'
   | 'error'
   | 'tool_call'
-  | 'tool_result';
+  | 'tool_result'
+  // Thread messages
+  | 'thread:list'
+  | 'thread:created'
+  | 'thread:opened'
+  | 'thread:renamed'
+  | 'thread:deleted'
+  | 'message:sent'
+  | 'auth_error';
 
 export interface WebSocketMessage {
   type: WebSocketMessageType;
@@ -124,6 +120,66 @@ export interface WebSocketMessage {
   toolOutput?: string;
   toolDisplay?: unknown[];
   isError?: boolean;
+  // Thread fields
+  threadId?: string;
+  thread?: ThreadEntry;
+  threads?: Thread[];
+  history?: { role: 'user' | 'assistant'; content: string; hasToolCalls?: boolean }[];
+  exchanges?: ExchangeData[];  // Rich format with tool calls
+  name?: string;
+  content?: string;
+  message?: string;
+}
+
+// Thread Types
+export interface ThreadEntry {
+  name: string;
+  createdAt: string;
+  resumedAt?: string;
+  messageCount: number;
+  status: 'active' | 'suspended';
+}
+
+export interface Thread {
+  threadId: string;
+  entry: ThreadEntry;
+}
+
+// Rich History Format (from history.json)
+export interface ToolCallPart {
+  type: 'tool_call';
+  toolCallId: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  result: {
+    output?: string;
+    display?: unknown[];
+    error?: string;
+    files?: string[];
+  };
+  duration_ms?: number;
+}
+
+export interface TextPart {
+  type: 'text';
+  content: string;
+}
+
+export interface ThinkPart {
+  type: 'think';
+  content: string;
+}
+
+export type AssistantPart = TextPart | ThinkPart | ToolCallPart;
+
+export interface ExchangeData {
+  seq: number;
+  ts: number;
+  user: string;
+  assistant: {
+    parts: AssistantPart[];
+  };
+  metadata?: unknown[];
 }
 
 // Timing Constants
@@ -141,11 +197,11 @@ export const TIMING = {
 
 // Workspace Configurations
 export const WORKSPACE_CONFIGS: Record<WorkspaceId, WorkspaceConfig> = {
-  code: { name: 'Code Workspace', color: '#00d4ff', icon: 'code_blocks', hasChat: true },
+  'coding-agent': { name: 'Code Workspace', color: '#00d4ff', icon: 'code_blocks', hasChat: true },
   rocket: { name: 'Launchpad', color: '#f97316', icon: 'rocket', hasChat: true },
   issues: { name: 'Issues', color: '#facc15', icon: 'business_messages', hasChat: true },
   scheduler: { name: 'Scheduler', color: '#22c55e', icon: 'calendar_clock', hasChat: true },
   skills: { name: 'Skills', color: '#a855f7', icon: 'dynamic_form', hasChat: true },
-  wiki: { name: 'Wiki', color: '#ec4899', icon: 'dataset_linked', hasChat: true },
+  wiki: { name: 'Wiki', color: '#ec4899', icon: 'full_coverage', hasChat: true },
   claw: { name: 'OpenClaw', color: '#ef4444', icon: 'smart_toy', hasChat: true }
 };
