@@ -5,7 +5,6 @@ import type {
   Message,
   AssistantTurn,
   StreamSegment,
-  EngineState,
   Thread
 } from '../types';
 
@@ -17,8 +16,7 @@ function createInitialWorkspaceState(): WorkspaceState {
     pendingTurnEnd: false,
     pendingMessage: null,
     segments: [],
-    lastReleasedSegmentCount: 0,
-    engineState: null
+    lastReleasedSegmentCount: 0
   };
 }
 
@@ -44,9 +42,6 @@ interface AppState {
   finalizeTurn: (workspace: WorkspaceId) => void;
   clearWorkspace: (workspace: WorkspaceId) => void;
 
-  // Engine state (written by engine, read by components)
-  setEngineState: (workspace: WorkspaceId, engineState: EngineState) => void;
-
   // WebSocket
   ws: WebSocket | null;
   setWs: (ws: WebSocket | null) => void;
@@ -69,10 +64,10 @@ export const useWorkspaceStore = create<AppState>((set, get) => ({
   // Initial state
   currentWorkspace: 'coding-agent',
   workspaces: {
+    capture: createInitialWorkspaceState(),
     'coding-agent': createInitialWorkspaceState(),
     rocket: createInitialWorkspaceState(),
     issues: createInitialWorkspaceState(),
-    scheduler: createInitialWorkspaceState(),
     skills: createInitialWorkspaceState(),
     wiki: createInitialWorkspaceState(),
     claw: createInitialWorkspaceState()
@@ -198,7 +193,6 @@ export const useWorkspaceStore = create<AppState>((set, get) => ({
     const state = get();
     const ws = state.workspaces[workspace];
     const turn = ws.currentTurn;
-    const eng = ws.engineState;
     if (turn) {
       set((s) => ({
         workspaces: {
@@ -208,7 +202,7 @@ export const useWorkspaceStore = create<AppState>((set, get) => ({
             currentTurn: { ...turn, status: 'complete' },
             pendingTurnEnd: false,
             pendingMessage: null,
-            lastReleasedSegmentCount: eng?.releasedSegmentCount ?? ws.segments.length
+            lastReleasedSegmentCount: ws.segments.length
           }
         }
       }));
@@ -241,14 +235,4 @@ export const useWorkspaceStore = create<AppState>((set, get) => ({
     currentThreadId: state.currentThreadId === threadId ? null : state.currentThreadId
   })),
 
-  // Engine state (written by engine)
-  setEngineState: (workspace, engineState) => set((state) => ({
-    workspaces: {
-      ...state.workspaces,
-      [workspace]: {
-        ...state.workspaces[workspace],
-        engineState
-      }
-    }
-  }))
 }));

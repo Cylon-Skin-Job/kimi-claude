@@ -1,5 +1,5 @@
 // Workspace Types
-export type WorkspaceId = 'coding-agent' | 'rocket' | 'issues' | 'scheduler' | 'skills' | 'wiki' | 'claw';
+export type WorkspaceId = 'capture' | 'coding-agent' | 'rocket' | 'issues' | 'skills' | 'wiki' | 'claw';
 
 export interface WorkspaceConfig {
   name: string;
@@ -47,14 +47,6 @@ export interface AssistantTurn {
   thinkingContent: string;
 }
 
-// Pulse Engine State — read-only snapshot from RenderEngine
-export interface EngineState {
-  phase: 'idle' | 'streaming' | 'complete';
-  releasedSegmentCount: number;
-  totalSegments: number;
-  streaming: boolean;
-}
-
 // Workspace State
 export interface WorkspaceState {
   // Messages
@@ -71,8 +63,6 @@ export interface WorkspaceState {
   /** Captured at finalize; used when adding to messages at turn_begin */
   lastReleasedSegmentCount: number;
 
-  // Pulse engine state (populated by engine, read by components)
-  engineState: EngineState | null;
 }
 
 // WebSocket Message Types
@@ -197,11 +187,11 @@ export const TIMING = {
 
 // Workspace Configurations
 export const WORKSPACE_CONFIGS: Record<WorkspaceId, WorkspaceConfig> = {
+  capture: { name: 'Capture', color: '#a78bfa', icon: 'open_run', hasChat: false },
   'coding-agent': { name: 'Code Workspace', color: '#00d4ff', icon: 'code_blocks', hasChat: true },
   rocket: { name: 'Launchpad', color: '#f97316', icon: 'rocket', hasChat: true },
   issues: { name: 'Issues', color: '#facc15', icon: 'business_messages', hasChat: true },
-  scheduler: { name: 'Scheduler', color: '#22c55e', icon: 'calendar_clock', hasChat: true },
   skills: { name: 'Skills', color: '#a855f7', icon: 'dynamic_form', hasChat: true },
   wiki: { name: 'Wiki', color: '#ec4899', icon: 'full_coverage', hasChat: true },
-  claw: { name: 'OpenClaw', color: '#ef4444', icon: 'smart_toy', hasChat: true }
+  claw: { name: 'Agents', color: '#ef4444', icon: 'smart_toy', hasChat: false }
 };
