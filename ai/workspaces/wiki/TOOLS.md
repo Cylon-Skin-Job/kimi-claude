@@ -14,17 +14,17 @@
 
 ## Restricted
 
-- `write_file` — only within `ai/project-wiki/` and `ai/workspaces/wiki/runs/`
-- `edit_file` — only within `ai/project-wiki/` and `ai/workspaces/wiki/runs/`
+- `write_file` — only within `ai/wiki/project/` and `ai/workspaces/wiki/runs/`
+- `edit_file` — only within `ai/wiki/project/` and `ai/workspaces/wiki/runs/`
 - `write_file` — `ai/STATE.md` (project state updates)
-- `read_file` — `ai/system-wiki/` (read-only access to system wiki)
+- `read_file` — `ai/wiki/system/` (read-only access to system wiki)
 
 ## Denied
 
 - `shell_exec` — no arbitrary shell commands
 - `git_commit` — wiki agent does not commit
 - `git_push` — wiki agent does not push
-- `write_file` — any path outside `ai/project-wiki/`, `ai/workspaces/wiki/runs/`, and `ai/STATE.md`
-- `edit_file` — any path outside `ai/project-wiki/` and `ai/workspaces/wiki/runs/`
-- `write_file` — `ai/system-wiki/` (system wiki is read-only)
-- `edit_file` — `ai/system-wiki/` (system wiki is read-only)
+- `write_file` — any path outside `ai/wiki/project/`, `ai/workspaces/wiki/runs/`, and `ai/STATE.md`
+- `edit_file` — any path outside `ai/wiki/project/` and `ai/workspaces/wiki/runs/`
+- `write_file` — `ai/wiki/system/` (system wiki is read-only)
+- `edit_file` — `ai/wiki/system/` (system wiki is read-only)

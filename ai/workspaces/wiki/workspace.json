@@ -19,7 +19,7 @@
     "gitlabProjectId": 80453361,
     "gitlabNamespace": "Cylon-Skin-Job/kimi-claude",
     "repoDir": ".wiki-repo",
-    "contentDir": "ai/project-wiki",
-    "systemWikiDir": "ai/system-wiki"
+    "contentDir": "ai/wiki/project",
+    "systemWikiDir": "ai/wiki/system"
   }
 }

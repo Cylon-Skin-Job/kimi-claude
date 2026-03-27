@@ -13,7 +13,7 @@ limits:
   confidence_threshold: 70
 scope:
   read: ["*"]
-  write: ["ai/project-wiki/*/PAGE.md", "ai/project-wiki/*/LOG.md", "ai/project-wiki/index.json"]
+  write: ["ai/wiki/project/*/PAGE.md", "ai/wiki/project/*/LOG.md", "ai/wiki/project/*/index.json", "ai/wiki/project/index.json"]
 ---
 
 # Edge Checker
