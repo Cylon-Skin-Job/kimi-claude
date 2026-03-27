@@ -16,12 +16,22 @@ TICKET → CREATE RUN → GATHER → PROPOSE → CHECK EDGES → EXECUTE → FOL
 
 ---
 
+## Path Layout
+
+Topic content lives in `ai/project-wiki/`. Run folders live in `ai/workspaces/wiki/runs/`.
+
+- Topic pages: `ai/project-wiki/{topic}/PAGE.md`
+- Topic logs: `ai/project-wiki/{topic}/LOG.md`
+- Topic index: `ai/project-wiki/index.json`
+- Run folders: `ai/workspaces/wiki/runs/{run-id}/`
+- System wiki (read-only): `ai/system-wiki/`
+
 ## Run Folder Structure
 
 Every ticket tagged `@wiki` gets a run folder. The ticketing system creates the folder and drops `ticket.md` inside. The agent populates the rest.
 
 ```
-runs/{run-id}/
+ai/workspaces/wiki/runs/{run-id}/
 ├── ticket.md              ← living document: summary, TODO, step links
 ├── PROMPT.md              ← frozen copy of agent identity at run time
 ├── WORKFLOW.md            ← frozen copy of process rules at run time
@@ -46,11 +56,11 @@ runs/{run-id}/
 When a ticket arrives tagged `@wiki @wiki-{slug}`:
 
 1. Generate run ID from timestamp: `YYYY-MM-DDTHH-MM`
-2. Create folder: `runs/{run-id}/`
+2. Create folder: `ai/workspaces/wiki/runs/{run-id}/`
 3. Create `steps/` and `snapshots/` subdirectories
-4. Copy current `PROMPT.md` → `runs/{run-id}/PROMPT.md`
-5. Copy current `WORKFLOW.md` → `runs/{run-id}/WORKFLOW.md`
-6. Copy current `index.json` → `runs/{run-id}/index-before.json`
+4. Copy current `ai/workspaces/wiki/PROMPT.md` → `runs/{run-id}/PROMPT.md`
+5. Copy current `ai/workspaces/wiki/WORKFLOW.md` → `runs/{run-id}/WORKFLOW.md`
+6. Copy current `ai/project-wiki/index.json` → `runs/{run-id}/index-before.json`
 7. The ticketing system has already placed `ticket.md` in the folder
 8. Initialize `ticket.md` with TODO checklist:
 
@@ -284,8 +294,8 @@ All affected pages updated. No remaining stale edges.
 
 **Final steps:**
 
-1. Rebuild `index.json`:
-   - Scan every `{topic}/PAGE.md` for markdown links
+1. Rebuild `ai/project-wiki/index.json`:
+   - Scan every `ai/project-wiki/{topic}/PAGE.md` for markdown links
    - Build `edges_out` and `edges_in` for each topic
    - Write updated index
 

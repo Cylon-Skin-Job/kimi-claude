@@ -13,7 +13,7 @@ limits:
   confidence_threshold: 60
 scope:
   read: ["*"]
-  write: ["ai/workspaces/wiki/*/PAGE.md", "ai/workspaces/wiki/*/LOG.md", "ai/workspaces/wiki/index.json"]
+  write: ["ai/project-wiki/*/PAGE.md", "ai/project-wiki/*/LOG.md", "ai/project-wiki/index.json"]
 schedule:
   cron: "0 2 * * *"
   ticket_title: "Nightly wiki audit"
@@ -32,7 +32,7 @@ You run after the daily updater has finished. Your job is to find what it missed
 Spawn a sub-agent to build a complete picture of the wiki's current state.
 
 Instruct it to:
-- Read ai/workspaces/wiki/index.json for the full topic list
+- Read ai/project-wiki/index.json for the full topic list
 - For each topic, read PAGE.md and note: title, last updated date, sources referenced, key claims made
 - List any topic folders that exist on disk but are missing from index.json
 - List any index.json entries whose folders are missing
