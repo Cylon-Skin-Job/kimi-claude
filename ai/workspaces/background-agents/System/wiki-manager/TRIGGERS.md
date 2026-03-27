@@ -16,7 +16,7 @@ message: |
 name: wiki-page-changed
 type: file-change
 events: [modify]
-match: "ai/workspaces/wiki/**/PAGE.md"
+match: "ai/wiki/project/**/PAGE.md"
 prompt: PROMPT_03.md
 message: |
   Wiki page changed: {{filePath}}

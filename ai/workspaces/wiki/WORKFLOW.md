@@ -16,12 +16,23 @@ TICKET → CREATE RUN → GATHER → PROPOSE → CHECK EDGES → EXECUTE → FOL
 
 ---
 
+## Path Layout
+
+Topic content lives in `ai/wiki/project/`. Run folders live in `ai/workspaces/wiki/runs/`.
+
+- Topic pages: `ai/wiki/project/{topic}/PAGE.md`
+- Topic logs: `ai/wiki/project/{topic}/LOG.md`
+- Topic indexes: `ai/wiki/project/{topic}/index.json`
+- Collection index: `ai/wiki/project/index.json`
+- Run folders: `ai/workspaces/wiki/runs/{run-id}/`
+- System wiki (read-only): `ai/wiki/system/`
+
 ## Run Folder Structure
 
 Every ticket tagged `@wiki` gets a run folder. The ticketing system creates the folder and drops `ticket.md` inside. The agent populates the rest.
 
 ```
-runs/{run-id}/
+ai/workspaces/wiki/runs/{run-id}/
 ├── ticket.md              ← living document: summary, TODO, step links
 ├── PROMPT.md              ← frozen copy of agent identity at run time
 ├── WORKFLOW.md            ← frozen copy of process rules at run time
