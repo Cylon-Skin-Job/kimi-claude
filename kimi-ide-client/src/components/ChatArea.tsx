@@ -1,45 +1,26 @@
 import { useRef, useEffect, useState } from 'react';
 import { useWorkspaceStore } from '../state/workspaceStore';
-import { useWebSocket } from '../hooks/useWebSocket';
-import type { WorkspaceId } from '../types';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 
 interface ChatAreaProps {
-  workspace: WorkspaceId;
+  workspace: string;
 }
 
 export function ChatArea({ workspace }: ChatAreaProps) {
-  const chatBottomRef = useRef<HTMLDivElement>(null);
   const lastUserMsgRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  const userScrolledRef = useRef(false);
   const justSentRef = useRef(false);
-  const [spacerHeight, setSpacerHeight] = useState('4rem');
+  const [isSending, setIsSending] = useState(false);
 
   // Store data
-  const messages = useWorkspaceStore((state) => state.workspaces[workspace].messages);
-  const currentTurn = useWorkspaceStore((state) => state.workspaces[workspace].currentTurn);
-  const segments = useWorkspaceStore((state) => state.workspaces[workspace].segments);
+  const messages = useWorkspaceStore((state) => state.workspaces[workspace]?.messages || []);
+  const currentTurn = useWorkspaceStore((state) => state.workspaces[workspace]?.currentTurn || null);
+  const segments = useWorkspaceStore((state) => state.workspaces[workspace]?.segments || []);
   const contextUsage = useWorkspaceStore((state) => state.contextUsage);
-  const pendingTurnEnd = useWorkspaceStore((state) => state.workspaces[workspace].pendingTurnEnd);
 
   const addMessage = useWorkspaceStore((state) => state.addMessage);
-  const { sendMessage } = useWebSocket();
-
-  // Detect manual scroll — if user scrolls up, disable auto-scroll
-  useEffect(() => {
-    const container = chatContainerRef.current;
-    if (!container) return;
-
-    const onScroll = () => {
-      const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
-      userScrolledRef.current = !atBottom;
-    };
-
-    container.addEventListener('scroll', onScroll);
-    return () => container.removeEventListener('scroll', onScroll);
-  }, []);
+  const sendMessage = useWorkspaceStore((state) => state.sendMessage);
 
   // On send: scroll user bubble to top of viewport
   useEffect(() => {
@@ -49,26 +30,19 @@ export function ChatArea({ workspace }: ChatAreaProps) {
     }
   }, [messages.length]);
 
-  // On turn end: scroll to bottom of response (unless user scrolled up)
+  // Hide orb state when first segment arrives
   useEffect(() => {
-    if (pendingTurnEnd && !userScrolledRef.current && chatBottomRef.current) {
-      // Shrink spacer back to default
-      setSpacerHeight('4rem');
-      // Small delay to let the DOM settle after blocks finalize
-      setTimeout(() => {
-        chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+    if (segments.length > 0) {
+      setIsSending(false);
     }
-  }, [pendingTurnEnd]);
+  }, [segments.length]);
+
+  // Show orb if: local sending state OR streaming with no segments yet
+  const showOrb = (isSending || currentTurn?.status === 'streaming') && segments.length === 0;
 
   const handleSend = (text: string) => {
-    // Expand spacer so there's room to scroll user bubble to top
-    setSpacerHeight('80vh');
+    setIsSending(true);
 
-    // Disable auto-scroll-to-bottom during streaming — user is watching live
-    userScrolledRef.current = true;
-
-    // Add user message
     justSentRef.current = true;
     addMessage(workspace, {
       id: Date.now().toString(),
@@ -77,7 +51,6 @@ export function ChatArea({ workspace }: ChatAreaProps) {
       timestamp: Date.now()
     });
 
-    // Send via WebSocket
     sendMessage(text, workspace);
   };
 
@@ -109,7 +82,7 @@ export function ChatArea({ workspace }: ChatAreaProps) {
 
       {/* Messages */}
       <div className="chat-messages" ref={chatContainerRef}>
-        {messages.length === 0 && !currentTurn ? (
+        {messages.length === 0 && !currentTurn && !showOrb ? (
           <div className="message message-system">
             {workspace} workspace active - Start a conversation
           </div>
@@ -120,14 +93,13 @@ export function ChatArea({ workspace }: ChatAreaProps) {
             currentTurn={currentTurn}
             segments={segments}
             lastUserMsgRef={lastUserMsgRef}
+            showOrb={showOrb}
           />
         )}
 
-        {/* Scroll target for turn-end auto-scroll */}
-        <div ref={chatBottomRef} />
-
-        {/* Bottom spacer — expands on send for scroll room, shrinks on turn end */}
-        <div style={{ minHeight: spacerHeight }} />
+        {/* Fixed spacer — always present, never changes size.
+            Provides scroll room so user bubble can scroll to top of viewport. */}
+        <div style={{ minHeight: '80vh' }} />
       </div>
 
       <ChatInput onSend={handleSend} disabled={false} workspace={workspace} />

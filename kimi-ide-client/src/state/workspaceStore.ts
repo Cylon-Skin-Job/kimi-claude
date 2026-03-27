@@ -1,12 +1,12 @@
 import { create } from 'zustand';
 import type {
-  WorkspaceId,
   WorkspaceState,
   Message,
   AssistantTurn,
   StreamSegment,
   Thread
 } from '../types';
+import type { WorkspaceConfig } from '../lib/workspaces';
 
 // Initial workspace state factory
 function createInitialWorkspaceState(): WorkspaceState {
@@ -21,30 +21,37 @@ function createInitialWorkspaceState(): WorkspaceState {
 }
 
 interface AppState {
-  // Current workspace
-  currentWorkspace: WorkspaceId;
-  setCurrentWorkspace: (id: WorkspaceId) => void;
+  // Workspace configs (dynamically discovered)
+  workspaceConfigs: WorkspaceConfig[];
+  setWorkspaceConfigs: (configs: WorkspaceConfig[]) => void;
+  getWorkspaceConfig: (id: string) => WorkspaceConfig | undefined;
 
-  // Per-workspace states
-  workspaces: Record<WorkspaceId, WorkspaceState>;
+  // Current workspace
+  currentWorkspace: string;
+  setCurrentWorkspace: (id: string) => void;
+
+  // Per-workspace states (dynamically initialized)
+  workspaces: Record<string, WorkspaceState>;
 
   // Workspace actions
-  addMessage: (workspace: WorkspaceId, message: Message) => void;
-  setCurrentTurn: (workspace: WorkspaceId, turn: AssistantTurn | null) => void;
-  updateTurnContent: (workspace: WorkspaceId, content: string) => void;
-  appendSegment: (workspace: WorkspaceId, segType: StreamSegment['type'], text: string) => void;
-  pushSegment: (workspace: WorkspaceId, segment: StreamSegment) => void;
-  updateLastSegment: (workspace: WorkspaceId, updates: Partial<StreamSegment>) => void;
-  updateSegmentByToolCallId: (workspace: WorkspaceId, toolCallId: string, updates: Partial<StreamSegment>) => void;
-  resetSegments: (workspace: WorkspaceId) => void;
-  setPendingTurnEnd: (workspace: WorkspaceId, pending: boolean) => void;
-  setPendingMessage: (workspace: WorkspaceId, message: Message | null) => void;
-  finalizeTurn: (workspace: WorkspaceId) => void;
-  clearWorkspace: (workspace: WorkspaceId) => void;
+  addMessage: (workspace: string, message: Message) => void;
+  setCurrentTurn: (workspace: string, turn: AssistantTurn | null) => void;
+  updateTurnContent: (workspace: string, content: string) => void;
+  appendSegment: (workspace: string, segType: StreamSegment['type'], text: string) => void;
+  pushSegment: (workspace: string, segment: StreamSegment) => void;
+  updateLastSegment: (workspace: string, updates: Partial<StreamSegment>) => void;
+  updateSegmentByToolCallId: (workspace: string, toolCallId: string, updates: Partial<StreamSegment>) => void;
+  appendSegmentContentByIndex: (workspace: string, index: number, text: string) => void;
+  resetSegments: (workspace: string) => void;
+  setPendingTurnEnd: (workspace: string, pending: boolean) => void;
+  setPendingMessage: (workspace: string, message: Message | null) => void;
+  finalizeTurn: (workspace: string) => void;
+  clearWorkspace: (workspace: string) => void;
 
   // WebSocket
   ws: WebSocket | null;
   setWs: (ws: WebSocket | null) => void;
+  sendMessage: (text: string, workspace?: string) => void;
 
   // Context usage
   contextUsage: number;
@@ -60,68 +67,91 @@ interface AppState {
   removeThread: (threadId: string) => void;
 }
 
+/**
+ * Helper: get workspace state, auto-initializing if needed.
+ * This ensures workspace actions work even before discovery completes.
+ */
+function getWs(state: AppState, workspace: string): WorkspaceState {
+  return state.workspaces[workspace] || createInitialWorkspaceState();
+}
+
 export const useWorkspaceStore = create<AppState>((set, get) => ({
-  // Initial state
-  currentWorkspace: 'coding-agent',
-  workspaces: {
-    capture: createInitialWorkspaceState(),
-    'coding-agent': createInitialWorkspaceState(),
-    rocket: createInitialWorkspaceState(),
-    issues: createInitialWorkspaceState(),
-    skills: createInitialWorkspaceState(),
-    wiki: createInitialWorkspaceState(),
-    claw: createInitialWorkspaceState()
+  // Workspace configs — empty until discovery populates them
+  workspaceConfigs: [],
+  setWorkspaceConfigs: (configs) => {
+    const existing = get().workspaces;
+    const workspaces: Record<string, WorkspaceState> = { ...existing };
+    for (const config of configs) {
+      if (!workspaces[config.id]) {
+        workspaces[config.id] = createInitialWorkspaceState();
+      }
+    }
+    set({ workspaceConfigs: configs, workspaces });
   },
+  getWorkspaceConfig: (id) => get().workspaceConfigs.find((c) => c.id === id),
+
+  // Initial state — empty until discovery populates
+  currentWorkspace: 'coding-agent',
+  workspaces: {},
   ws: null,
   contextUsage: 0,
   threads: [],
   currentThreadId: null,
 
   // Actions
-  setCurrentWorkspace: (id) => set({ currentWorkspace: id }),
-
-  addMessage: (workspace, message) => set((state) => ({
-    workspaces: {
-      ...state.workspaces,
-      [workspace]: {
-        ...state.workspaces[workspace],
-        messages: [...state.workspaces[workspace].messages, message]
-      }
+  setCurrentWorkspace: (id) => {
+    // Auto-initialize workspace state if not yet created
+    const state = get();
+    if (!state.workspaces[id]) {
+      set({
+        currentWorkspace: id,
+        workspaces: { ...state.workspaces, [id]: createInitialWorkspaceState() }
+      });
+    } else {
+      set({ currentWorkspace: id });
     }
-  })),
+  },
+
+  addMessage: (workspace, message) => set((state) => {
+    const ws = getWs(state, workspace);
+    return {
+      workspaces: {
+        ...state.workspaces,
+        [workspace]: { ...ws, messages: [...ws.messages, message] }
+      }
+    };
+  }),
 
   setCurrentTurn: (workspace, turn) => set((state) => ({
     workspaces: {
       ...state.workspaces,
-      [workspace]: {
-        ...state.workspaces[workspace],
-        currentTurn: turn
-      }
+      [workspace]: { ...getWs(state, workspace), currentTurn: turn }
     }
   })),
 
   updateTurnContent: (workspace, content) => set((state) => {
-    const turn = state.workspaces[workspace].currentTurn;
-    if (!turn) return state;
-
+    const ws = getWs(state, workspace);
+    if (!ws.currentTurn) return state;
     return {
       workspaces: {
         ...state.workspaces,
-        [workspace]: {
-          ...state.workspaces[workspace],
-          currentTurn: { ...turn, content }
-        }
+        [workspace]: { ...ws, currentTurn: { ...ws.currentTurn, content } }
       }
     };
   }),
 
   appendSegment: (workspace, segType, text) => set((state) => {
-    const ws = state.workspaces[workspace];
+    const ws = getWs(state, workspace);
     const segments = [...ws.segments];
     const last = segments[segments.length - 1];
     if (last && last.type === segType) {
+      // Same type — append content
       segments[segments.length - 1] = { ...last, content: last.content + text };
     } else {
+      // New type — mark prior segment complete (closing tag), push new one
+      if (last && !last.complete) {
+        segments[segments.length - 1] = { ...last, complete: true };
+      }
       segments.push({ type: segType, content: text });
     }
     return {
@@ -130,14 +160,21 @@ export const useWorkspaceStore = create<AppState>((set, get) => ({
   }),
 
   pushSegment: (workspace, segment) => set((state) => {
-    const ws = state.workspaces[workspace];
+    const ws = getWs(state, workspace);
+    const segments = [...ws.segments];
+    // Mark prior segment complete before pushing new one
+    const last = segments[segments.length - 1];
+    if (last && !last.complete) {
+      segments[segments.length - 1] = { ...last, complete: true };
+    }
+    segments.push(segment);
     return {
-      workspaces: { ...state.workspaces, [workspace]: { ...ws, segments: [...ws.segments, segment] } }
+      workspaces: { ...state.workspaces, [workspace]: { ...ws, segments } }
     };
   }),
 
   updateLastSegment: (workspace, updates) => set((state) => {
-    const ws = state.workspaces[workspace];
+    const ws = getWs(state, workspace);
     const segments = [...ws.segments];
     const last = segments[segments.length - 1];
     if (last) {
@@ -149,7 +186,7 @@ export const useWorkspaceStore = create<AppState>((set, get) => ({
   }),
 
   updateSegmentByToolCallId: (workspace, toolCallId, updates) => set((state) => {
-    const ws = state.workspaces[workspace];
+    const ws = getWs(state, workspace);
     const idx = ws.segments.findIndex((s) => s.toolCallId === toolCallId);
     if (idx < 0) return state;
     const segments = [...ws.segments];
@@ -159,46 +196,47 @@ export const useWorkspaceStore = create<AppState>((set, get) => ({
     };
   }),
 
+  appendSegmentContentByIndex: (workspace, index, text) => set((state) => {
+    const ws = getWs(state, workspace);
+    if (index < 0 || index >= ws.segments.length) return state;
+    const segments = [...ws.segments];
+    segments[index] = { ...segments[index], content: segments[index].content + text };
+    return {
+      workspaces: { ...state.workspaces, [workspace]: { ...ws, segments } }
+    };
+  }),
+
   resetSegments: (workspace) => set((state) => ({
     workspaces: {
       ...state.workspaces,
-      [workspace]: {
-        ...state.workspaces[workspace],
-        segments: []
-      }
+      [workspace]: { ...getWs(state, workspace), segments: [] }
     }
   })),
 
   setPendingTurnEnd: (workspace, pending) => set((state) => ({
     workspaces: {
       ...state.workspaces,
-      [workspace]: {
-        ...state.workspaces[workspace],
-        pendingTurnEnd: pending
-      }
+      [workspace]: { ...getWs(state, workspace), pendingTurnEnd: pending }
     }
   })),
 
   setPendingMessage: (workspace, message) => set((state) => ({
     workspaces: {
       ...state.workspaces,
-      [workspace]: {
-        ...state.workspaces[workspace],
-        pendingMessage: message
-      }
+      [workspace]: { ...getWs(state, workspace), pendingMessage: message }
     }
   })),
 
   finalizeTurn: (workspace) => {
     const state = get();
-    const ws = state.workspaces[workspace];
+    const ws = getWs(state, workspace);
     const turn = ws.currentTurn;
     if (turn) {
       set((s) => ({
         workspaces: {
           ...s.workspaces,
           [workspace]: {
-            ...s.workspaces[workspace],
+            ...getWs(s, workspace),
             currentTurn: { ...turn, status: 'complete' },
             pendingTurnEnd: false,
             pendingMessage: null,
@@ -217,6 +255,21 @@ export const useWorkspaceStore = create<AppState>((set, get) => ({
   })),
 
   setWs: (ws) => set({ ws }),
+  sendMessage: (text, workspace) => {
+    const state = get();
+    const socket = state.ws;
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const now = performance.now();
+      (window as any).__TIMING = { sendAt: now, firstTokenAt: 0, firstTokenType: '' };
+      console.log(`[TIMING] SEND at ${now.toFixed(1)}ms`);
+      socket.send(JSON.stringify({
+        type: 'prompt',
+        user_input: text,
+        workspace: workspace || state.currentWorkspace,
+        threadId: state.currentThreadId,
+      }));
+    }
+  },
   setContextUsage: (usage) => set({ contextUsage: usage }),
 
   // Thread actions

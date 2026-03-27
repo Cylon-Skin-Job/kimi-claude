@@ -1,5 +1,6 @@
+import { useEffect } from 'react';
 import { useFileStore } from '../../state/fileStore';
-import { useFileTreeListener } from '../../hooks/useFileTree';
+import { useFileTreeListener, loadExpandedFolders } from '../../hooks/useFileTree';
 import { FileTree } from './FileTree';
 import { FileViewer } from './FileViewer';
 
@@ -11,6 +12,13 @@ export function FileExplorer() {
 
   // Single WebSocket listener for file operations
   useFileTreeListener();
+
+  // When returning to tree view, load children for all expanded folders
+  useEffect(() => {
+    if (viewMode === 'tree') {
+      loadExpandedFolders();
+    }
+  }, [viewMode]);
 
   if (viewMode === 'viewer') {
     return <FileViewer />;

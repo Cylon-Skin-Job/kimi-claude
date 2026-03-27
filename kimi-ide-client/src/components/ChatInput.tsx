@@ -1,17 +1,16 @@
 import { useState, useRef } from 'react';
-import type { WorkspaceId } from '../types';
-import { WORKSPACE_CONFIGS } from '../types';
+import { useWorkspaceStore } from '../state/workspaceStore';
 
 interface ChatInputProps {
   onSend: (text: string) => void;
   disabled: boolean;
-  workspace: WorkspaceId;
+  workspace: string;
 }
 
 export function ChatInput({ onSend, disabled, workspace }: ChatInputProps) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const config = WORKSPACE_CONFIGS[workspace];
+  const config = useWorkspaceStore((s) => s.getWorkspaceConfig(workspace));
   
   const handleSend = () => {
     if (!text.trim() || disabled) return;
@@ -43,7 +42,7 @@ export function ChatInput({ onSend, disabled, workspace }: ChatInputProps) {
         <textarea
           ref={textareaRef}
           className="chat-input"
-          placeholder={`Ask about ${config.name.toLowerCase()}...`}
+          placeholder={`Ask about ${(config?.name || workspace).toLowerCase()}...`}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}

@@ -1,16 +1,19 @@
 import { useEffect, useRef } from 'react';
 import { useWorkspaceStore } from '../state/workspaceStore';
 import { useFileStore } from '../state/fileStore';
-import type { FileInfo } from '../types/file-explorer';
+
+// Re-export standalone functions so existing imports don't break
+import { loadRootTree as _loadRootTree } from '../lib/file-tree';
+export { loadRootTree, loadFolderChildren, loadExpandedFolders, loadFileContent } from '../lib/file-tree';
 
 /**
  * Hook: call once in FileExplorer to set up WebSocket listener
- * and trigger initial root tree load.
+ * for root tree and file content responses.
  */
 export function useFileTreeListener() {
   const ws = useWorkspaceStore((state) => state.ws);
   const currentWorkspace = useWorkspaceStore((state) => state.currentWorkspace);
-  const initializedRef = useRef(false);
+  const lastWsRef = useRef<WebSocket | null>(null);
 
   // Listen for file-related WebSocket responses
   useEffect(() => {
@@ -20,14 +23,17 @@ export function useFileTreeListener() {
       try {
         const msg = JSON.parse(event.data);
 
+        // Handle file tree response (root or subfolder)
         if (msg.type === 'file_tree_response') {
           useFileStore.getState().setLoading(false);
           if (msg.success) {
-            if (!msg.path || msg.path === '') {
+            const path = msg.path || '';
+            if (path === '') {
+              // Root response
               useFileStore.getState().setRootNodes(msg.nodes);
             } else {
-              useFileStore.getState().setFolderChildren(msg.path, msg.nodes);
-              useFileStore.getState().expandFolder(msg.path);
+              // Subfolder response - store in folderChildren
+              useFileStore.getState().setFolderChildren(path, msg.nodes);
             }
           } else {
             useFileStore.getState().setError(msg.error || 'Failed to load file tree');
@@ -39,7 +45,7 @@ export function useFileTreeListener() {
           if (msg.success) {
             const pending = useFileStore.getState().pendingFile;
             if (pending) {
-              useFileStore.getState().openFile(pending, msg.content);
+              useFileStore.getState().openFile(pending, msg.content, msg.size);
               useFileStore.getState().setPendingFile(null);
             }
           } else {
@@ -55,49 +61,13 @@ export function useFileTreeListener() {
     return () => ws.removeEventListener('message', handleMessage);
   }, [ws]);
 
-  // Load root tree on first mount when workspace is 'code'
+  // Load root tree when first connecting or reconnecting
   useEffect(() => {
-    if (ws && currentWorkspace === 'code' && !initializedRef.current) {
-      initializedRef.current = true;
-      loadRootTree();
-    }
+    if (!ws || currentWorkspace !== 'coding-agent') return;
+    if (ws === lastWsRef.current) return;
+    if (ws.readyState !== WebSocket.OPEN) return;
+
+    lastWsRef.current = ws;
+    _loadRootTree();
   }, [ws, currentWorkspace]);
-}
-
-// --- Standalone send functions (no hooks, safe to call anywhere) ---
-
-export function loadRootTree() {
-  const ws = useWorkspaceStore.getState().ws;
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  useFileStore.getState().setLoading(true);
-  useFileStore.getState().setError(null);
-  ws.send(JSON.stringify({
-    type: 'file_tree_request',
-    workspace: 'code',
-  }));
-}
-
-export function loadFolder(path: string) {
-  const ws = useWorkspaceStore.getState().ws;
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  useFileStore.getState().setLoading(true);
-  useFileStore.getState().setError(null);
-  ws.send(JSON.stringify({
-    type: 'file_tree_request',
-    workspace: 'code',
-    path,
-  }));
-}
-
-export function loadFileContent(file: FileInfo) {
-  const ws = useWorkspaceStore.getState().ws;
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  useFileStore.getState().setLoading(true);
-  useFileStore.getState().setError(null);
-  useFileStore.getState().setPendingFile(file);
-  ws.send(JSON.stringify({
-    type: 'file_content_request',
-    workspace: 'code',
-    path: file.path,
-  }));
 }

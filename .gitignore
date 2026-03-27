@@ -7,3 +7,4 @@ build/
 test-results/
 .gitlab_wikis.json
 kimi_wikis.json
+ai/workspaces/wiki/.wiki-repo/

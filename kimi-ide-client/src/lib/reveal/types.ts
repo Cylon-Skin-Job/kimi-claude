@@ -1,0 +1,40 @@
+/**
+ * Reveal types — interfaces for chunk parsing and reveal orchestration.
+ */
+
+/** A chunk that has been parsed, transformed, and is ready to render */
+export interface ParsedChunk {
+  /** Ready-to-render content (already transformed) */
+  text: string;
+}
+
+/**
+ * Chunk Parser — content-type-specific boundary detection + transformation.
+ *
+ * Called repeatedly as tokens stream in. Returns an array of NEW complete
+ * chunks since the last call. Each chunk is already transformed and ready
+ * to render on the page.
+ */
+export interface ChunkParser {
+  /**
+   * Feed the full content so far. Returns any NEW complete chunks.
+   * @param content - Full content string (grows as tokens arrive)
+   * @param prevLength - Length of content on the previous call (0 on first call)
+   */
+  feed(content: string, prevLength: number): ParsedChunk[];
+}
+
+/**
+ * Reveal Controller — drives the animation for one segment.
+ *
+ * Gets content/complete refs that update as streaming progresses.
+ * Runs until the closing tag arrives and all content is rendered.
+ */
+export interface RevealController {
+  run(
+    contentRef: { current: string },
+    setDisplayed: (content: string) => void,
+    cancelRef: { current: boolean },
+    completeRef: { current: boolean },
+  ): Promise<void>;
+}

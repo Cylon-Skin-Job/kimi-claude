@@ -45,10 +45,15 @@ export interface SegmentVisualStyle {
   contentColor: string;
 }
 
+/** Render mode — determines which content renderer submodule handles this segment */
+export type RenderMode = 'markdown' | 'line-stream' | 'diff' | 'code' | 'grouped-summary';
+
 /** Behavior — affects how it's rendered (but not timing) */
 export interface SegmentBehavior {
   /** What kind of content format */
   contentFormat: 'plain' | 'markdown' | 'code' | 'diff';
+  /** How content is displayed (which renderer submodule) */
+  renderMode: RenderMode;
   /** Whether to apply syntax highlighting */
   syntaxHighlight?: boolean;
   /** How to detect language for highlighting */
@@ -56,6 +61,8 @@ export interface SegmentBehavior {
 
   /** Whether this segment type can be grouped with adjacent same-type segments */
   groupable: boolean;
+  /** Which tool arg to show in grouped-summary mode (e.g., 'file_path', 'pattern', 'url') */
+  summaryField?: string;
 }
 
 /** Error state — visual overrides when isError=true */
@@ -98,6 +105,7 @@ const DEFAULT_VISUAL_STYLE: SegmentVisualStyle = {
 /** Default behavior applied to all segments */
 const DEFAULT_BEHAVIOR: SegmentBehavior = {
   contentFormat: 'plain',
+  renderMode: 'line-stream',
   syntaxHighlight: false,
   languageDetection: 'auto',
   groupable: false,
@@ -183,61 +191,78 @@ const VISUAL_OVERRIDES: Record<SegmentType, Partial<SegmentVisualStyle>> = {
 const BEHAVIOR_OVERRIDES: Record<SegmentType, Partial<SegmentBehavior>> = {
   text: {
     contentFormat: 'markdown',
+    renderMode: 'markdown',
   },
 
   think: {
     contentFormat: 'plain',
+    renderMode: 'line-stream',
   },
 
   shell: {
     contentFormat: 'plain',
+    renderMode: 'line-stream',
   },
 
   read: {
     contentFormat: 'code',
+    renderMode: 'grouped-summary',
     groupable: true,
+    summaryField: 'file_path',
     syntaxHighlight: true,
     languageDetection: 'from-path',
   },
 
   write: {
     contentFormat: 'code',
+    renderMode: 'code',
     syntaxHighlight: true,
     languageDetection: 'from-path',
   },
 
   edit: {
     contentFormat: 'diff',
+    renderMode: 'diff',
     syntaxHighlight: true,
     languageDetection: 'from-path',
   },
 
   glob: {
     contentFormat: 'plain',
+    renderMode: 'grouped-summary',
     groupable: true,
+    summaryField: 'pattern',
   },
 
   grep: {
     contentFormat: 'plain',
+    renderMode: 'grouped-summary',
     groupable: true,
+    summaryField: 'pattern',
   },
 
   web_search: {
     contentFormat: 'plain',
+    renderMode: 'grouped-summary',
     groupable: true,
+    summaryField: 'query',
   },
 
   fetch: {
     contentFormat: 'plain',
+    renderMode: 'grouped-summary',
     groupable: true,
+    summaryField: 'url',
   },
 
   subagent: {
     contentFormat: 'plain',
+    renderMode: 'line-stream',
   },
 
   todo: {
     contentFormat: 'plain',
+    renderMode: 'line-stream',
   },
 };
 
@@ -483,6 +508,20 @@ export function getSegmentLabelColor(type: SegmentType, isError?: boolean): stri
   }
 
   return visual.labelColor;
+}
+
+/**
+ * Get the render mode for a segment type
+ */
+export function getRenderMode(type: SegmentType): RenderMode {
+  return SEGMENT_CATALOG[type].behavior.renderMode;
+}
+
+/**
+ * Get the summary field for a segment type (used in grouped-summary mode)
+ */
+export function getSummaryField(type: SegmentType): string | undefined {
+  return SEGMENT_CATALOG[type].behavior.summaryField;
 }
 
 /** All segment types that have icons */

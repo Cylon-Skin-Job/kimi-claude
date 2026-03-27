@@ -1,6 +1,7 @@
 interface FileContentRendererProps {
   content: string;
   extension?: string;
+  fileName?: string;
 }
 
 // Simple code-like extensions that get monospace treatment

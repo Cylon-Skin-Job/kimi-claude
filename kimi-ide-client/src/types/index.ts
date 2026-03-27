@@ -1,12 +1,5 @@
-// Workspace Types
-export type WorkspaceId = 'capture' | 'coding-agent' | 'rocket' | 'issues' | 'skills' | 'wiki' | 'claw';
-
-export interface WorkspaceConfig {
-  name: string;
-  color: string;
-  icon: string;
-  hasChat: boolean;
-}
+// Workspace Types — WorkspaceId is now a string alias (workspaces are discovered dynamically)
+export type WorkspaceId = string;
 
 // All segment types that can appear in the ordered stream
 export type SegmentType =
@@ -25,6 +18,8 @@ export interface StreamSegment {
   toolArgs?: Record<string, unknown>;
   toolDisplay?: unknown[];
   isError?: boolean;
+  /** True when the closing tag has arrived — content is final */
+  complete?: boolean;
 }
 
 // Message Types
@@ -185,13 +180,6 @@ export const TIMING = {
   CODE_RESUME_DELAY: 300,
 } as const;
 
-// Workspace Configurations
-export const WORKSPACE_CONFIGS: Record<WorkspaceId, WorkspaceConfig> = {
-  capture: { name: 'Capture', color: '#a78bfa', icon: 'open_run', hasChat: false },
-  'coding-agent': { name: 'Code Workspace', color: '#00d4ff', icon: 'code_blocks', hasChat: true },
-  rocket: { name: 'Launchpad', color: '#f97316', icon: 'rocket', hasChat: true },
-  issues: { name: 'Issues', color: '#facc15', icon: 'business_messages', hasChat: true },
-  skills: { name: 'Skills', color: '#a855f7', icon: 'dynamic_form', hasChat: true },
-  wiki: { name: 'Wiki', color: '#ec4899', icon: 'full_coverage', hasChat: true },
-  claw: { name: 'Agents', color: '#ef4444', icon: 'smart_toy', hasChat: false }
-};
+// WORKSPACE_CONFIGS removed — workspaces are now discovered dynamically.
+// Use useWorkspaceStore().workspaceConfigs instead.
+// See lib/workspaces.ts for WorkspaceConfig type.

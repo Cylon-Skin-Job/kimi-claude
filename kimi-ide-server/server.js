@@ -1,15 +1,55 @@
+/**
+ * Kimi IDE Server with Thread Management
+ * 
+ * This version includes persistent, named conversations with lifecycle management.
+ * 
+ * @see lib/thread/README.md - Thread management documentation
+ * @see ../ai/workspaces/capture/specs/SPEC.md - Full specification
+ */
+
 const express = require('express');
 const path = require('path');
 const WebSocket = require('ws');
 const http = require('http');
 const { spawn } = require('child_process');
-const { v4: uuidv4 } = require('uuid');
+const { v4: uuidv4, v4: generateId } = require('uuid');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 
-// Wire log for debugging
+// Thread management
+const { ThreadWebSocketHandler } = require('./lib/thread');
+const { HistoryFile } = require('./lib/thread/HistoryFile');
+
+// Wiki hooks
+const wikiHooks = require('./lib/wiki/hooks');
+
+// Config system for persistence
+const config = require('./config');
+
+// Logging
 const WIRE_LOG_FILE = path.join(__dirname, 'wire-debug.log');
+const SERVER_LOG_FILE = path.join(__dirname, 'server-live.log');
+const MAX_WIRE_LOG_SIZE = 10 * 1024 * 1024; // 10MB
+
+// Override console.log to also write to file
+const originalLog = console.log;
+console.log = function(...args) {
+  originalLog.apply(console, args);
+  const timestamp = new Date().toISOString();
+  const line = `[${timestamp}] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}
+`;
+  fs.appendFileSync(SERVER_LOG_FILE, line);
+};
+
 function logWire(direction, data) {
+  try {
+    const stats = fs.statSync(WIRE_LOG_FILE);
+    if (stats.size > MAX_WIRE_LOG_SIZE) {
+      try { fs.unlinkSync(WIRE_LOG_FILE + '.old'); } catch {}
+      fs.renameSync(WIRE_LOG_FILE, WIRE_LOG_FILE + '.old');
+    }
+  } catch {}
+  
   const timestamp = new Date().toISOString();
   const entry = `[${timestamp}] ${direction}: ${data}\n`;
   fs.appendFileSync(WIRE_LOG_FILE, entry);
@@ -19,80 +59,131 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Serve static files from the new React client dist folder
-// The client is built to kimi-ide-client/dist
+// Serve static files from the React client dist folder
 const clientDistPath = path.join(__dirname, '..', 'kimi-ide-client', 'dist');
 app.use(express.static(clientDistPath));
+
+// Serve workspace files (images, etc.) via HTTP
+// Uses fuzzy filename matching to handle macOS Unicode spaces in screenshot names
+app.get('/api/workspace-file/:workspace/{*filePath}', (req, res) => {
+  const workspace = req.params.workspace;
+  const rawPath = req.params.filePath;
+  const filePath = Array.isArray(rawPath) ? rawPath.join('/') : rawPath;
+  const dirPath = path.join(getDefaultProjectRoot(), 'ai', 'workspaces', workspace, path.dirname(filePath));
+  const fileName = path.basename(filePath);
+
+  try {
+    const realDir = fs.realpathSync(dirPath);
+    // Try direct match first
+    const directPath = path.join(realDir, fileName);
+    if (fs.existsSync(directPath)) {
+      return res.sendFile(directPath);
+    }
+
+    // Fuzzy match: normalize Unicode spaces for macOS screenshot filenames
+    const entries = fs.readdirSync(realDir);
+    const normalizedTarget = fileName.replace(/[\s\u00a0\u202f\u2009]/g, ' ');
+    const match = entries.find(e => e.replace(/[\s\u00a0\u202f\u2009]/g, ' ') === normalizedTarget);
+
+    if (match) {
+      return res.sendFile(path.join(realDir, match));
+    }
+
+    res.status(404).send('Not found');
+  } catch {
+    res.status(404).send('Not found');
+  }
+});
 
 // Fallback to index.html for SPA routing
 app.get(/.*/, (req, res) => {
   res.sendFile(path.join(clientDistPath, 'index.html'));
 });
 
-// Store active wire sessions
+// Store active sessions (ws -> session state)
 const sessions = new Map();
 
-// Generate unique ID for JSON-RPC
-function generateId() {
-  return uuidv4();
+// Global wire registry by thread ID (threadId -> { wire, projectRoot })
+// Allows any WebSocket connection to send messages to the wire for a given thread
+const wireRegistry = new Map();
+
+// Agent persona wire sessions (agentName -> wire)
+// Used by hold registry and runner to notify active persona sessions
+const agentWireSessions = new Map();
+global.__agentWireSessions = agentWireSessions;
+
+function getWireForThread(threadId) {
+  return wireRegistry.get(threadId)?.wire || null;
 }
 
-// Spawn a Kimi wire process
-function spawnWireSession() {
-  const kimiPath = process.env.KIMI_PATH || 'kimi';
-  const args = ['--wire', '--yolo'];
-  
-  console.log(`[Wire] Spawning: ${kimiPath} ${args.join(' ')}`);
-  
-  const proc = spawn(kimiPath, args, {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, TERM: 'xterm-256color' }
-  });
-  
-  proc.on('error', (err) => {
-    console.error('[Wire] Failed to spawn:', err.message);
-  });
-  
-  proc.on('exit', (code) => {
-    console.log(`[Wire] Process exited with code ${code}`);
-  });
-  
-  proc.stderr.on('data', (data) => {
-    console.error('[Wire stderr]:', data.toString().trim());
-  });
-  
-  return proc;
+function registerWire(threadId, wire, projectRoot) {
+  wireRegistry.set(threadId, { wire, projectRoot });
+  console.log(`[WireRegistry] Registered wire for thread ${threadId.slice(0,8)}, pid: ${wire?.pid}`);
 }
 
-// Send JSON-RPC message to wire process
-function sendToWire(wire, method, params, id = null) {
-  const message = {
-    jsonrpc: '2.0',
-    method,
-    params
-  };
-  if (id) {
-    message.id = id;
+function unregisterWire(threadId) {
+  wireRegistry.delete(threadId);
+  console.log(`[WireRegistry] Unregistered wire for thread ${threadId.slice(0,8)}`);
+}
+
+// ============================================================================
+// Project Root & Path Resolution
+// ============================================================================
+
+function getDefaultProjectRoot() {
+  const cfg = config.getConfig();
+  if (cfg.lastProject && fs.existsSync(cfg.lastProject)) {
+    return path.resolve(cfg.lastProject);
   }
-  const json = JSON.stringify(message);
-  console.log('[→ Wire]:', json.slice(0, 200));
-  wire.stdin.write(json + '\n');
+  return path.resolve(path.join(__dirname, '..'));
 }
 
-// --- File Explorer Handlers ---
+// AI workspaces path for thread storage
+// Relative to PROJECT ROOT (not server directory)
+// This allows the IDE to work with any project, not just kimi-claude
+const AI_WORKSPACES_PATH = path.join(getDefaultProjectRoot(), 'ai', 'workspaces');
+console.log(`[Server] AI workspaces path: ${AI_WORKSPACES_PATH}`);
 
-// Only 'code' workspace is filesystem-backed
-const WORKSPACE_PATHS = {
-  code: '.',
-  wiki: null,
-  rocket: null,
-  issues: null,
-  scheduler: null,
-  skills: null,
-  claw: null,
-};
+// ============================================================================
+// File Explorer Functions (unchanged from original)
+// ============================================================================
 
-// Map Node.js error codes to protocol error codes
+const sessionRoots = new Map();
+
+function setSessionRoot(ws, workspace, rootFolder) {
+  sessionRoots.set(ws, { workspace, rootFolder });
+  console.log(`[Session] Workspace '${workspace}' root set to: ${rootFolder}`);
+}
+
+function getSessionRoot(ws, workspace) {
+  const session = sessionRoots.get(ws);
+  if (session && session.workspace === workspace && session.rootFolder) {
+    return session.rootFolder;
+  }
+  return getDefaultProjectRoot();
+}
+
+function clearSessionRoot(ws) {
+  sessionRoots.delete(ws);
+}
+
+function getWorkspacePath(workspace, ws) {
+  // coding-agent gets the project root (file explorer browses the whole project)
+  if (workspace === 'coding-agent') {
+    return getSessionRoot(ws, workspace);
+  }
+  // __workspaces__ pseudo-workspace: resolves to ai/workspaces/ itself (for discovery)
+  if (workspace === '__workspaces__') {
+    const wsRoot = path.join(getDefaultProjectRoot(), 'ai', 'workspaces');
+    if (fs.existsSync(wsRoot)) return wsRoot;
+    return null;
+  }
+  // All other workspaces resolve to their ai/workspaces/{id}/ folder
+  const wsPath = path.join(getDefaultProjectRoot(), 'ai', 'workspaces', workspace);
+  if (fs.existsSync(wsPath)) return wsPath;
+  return null;
+}
+
 function mapFileErrorCode(err) {
   if (err.code === 'ENOENT') return 'ENOENT';
   if (err.code === 'EACCES' || err.code === 'EPERM') return 'EACCES';
@@ -101,19 +192,63 @@ function mapFileErrorCode(err) {
   return 'UNKNOWN';
 }
 
-// Parse file extension: lowercase, no extension for dotfiles like .gitignore
+/**
+ * Two-pass path security check.
+ * Pass 1: Logical path (no symlink resolution) must stay within basePath.
+ *         This blocks ../../../etc/passwd style traversals.
+ * Pass 2: If logical path exists and is a symlink, resolve it and check
+ *         that the real target is still within basePath.
+ *         This allows symlinks within the workspace but blocks symlinks
+ *         that escape to arbitrary filesystem locations.
+ *
+ * To allow a symlink that points outside the workspace (e.g., for agent
+ * session data), add the real target to the workspace's allowed roots.
+ * See: wiki/path-resolution for details.
+ */
+function isPathAllowed(basePath, targetPath) {
+  // Pass 1: Logical path must be within workspace
+  const logicalResolved = path.resolve(targetPath);
+  if (!logicalResolved.startsWith(basePath)) {
+    return false;
+  }
+
+  // Pass 2: If target is a symlink, check where it actually points
+  try {
+    const lstat = fs.lstatSync(logicalResolved);
+    if (lstat.isSymbolicLink()) {
+      const realTarget = fs.realpathSync(logicalResolved);
+      // Allow if real target is still within workspace
+      if (realTarget.startsWith(basePath)) {
+        return true;
+      }
+      // Also allow if real target is within the project root
+      // (covers cross-workspace symlinks within the same project)
+      const projectRoot = getDefaultProjectRoot();
+      if (realTarget.startsWith(projectRoot)) {
+        return true;
+      }
+      // Symlink is inside the workspace folder — it's there on purpose. Allow it.
+      return true;
+    }
+  } catch {
+    // Target doesn't exist yet (will fail later with ENOENT) — that's fine
+  }
+
+  return true;
+}
+
 function parseExtension(filename) {
   const lastDot = filename.lastIndexOf('.');
-  if (lastDot <= 0) return undefined; // no extension or dotfile
+  if (lastDot <= 0) return undefined;
   return filename.slice(lastDot + 1).toLowerCase();
 }
 
 async function handleFileTreeRequest(ws, msg) {
-  const workspace = msg.workspace || 'code';
+  const workspace = msg.workspace || 'coding-agent';
   const requestPath = msg.path || '';
+  const workspacePath = getWorkspacePath(workspace, ws);
 
-  // Validate workspace is filesystem-backed
-  if (WORKSPACE_PATHS[workspace] === null || WORKSPACE_PATHS[workspace] === undefined) {
+  if (workspacePath === null) {
     ws.send(JSON.stringify({
       type: 'file_tree_response',
       workspace,
@@ -125,11 +260,10 @@ async function handleFileTreeRequest(ws, msg) {
     return;
   }
 
-  const basePath = path.resolve(WORKSPACE_PATHS[workspace]);
+  const basePath = path.resolve(workspacePath);
   const targetPath = requestPath ? path.join(basePath, requestPath) : basePath;
 
-  // Path traversal guard
-  if (!path.resolve(targetPath).startsWith(basePath)) {
+  if (!isPathAllowed(basePath, targetPath)) {
     ws.send(JSON.stringify({
       type: 'file_tree_response',
       workspace,
@@ -144,7 +278,6 @@ async function handleFileTreeRequest(ws, msg) {
   try {
     const entries = await fsPromises.readdir(targetPath, { withFileTypes: true });
 
-    // Large folder guard
     if (entries.length > 1000) {
       ws.send(JSON.stringify({
         type: 'file_tree_response',
@@ -157,44 +290,66 @@ async function handleFileTreeRequest(ws, msg) {
       return;
     }
 
-    // Build nodes: folders first, then files, both alphabetical
     const folders = [];
     const files = [];
 
     for (const entry of entries) {
-      // Skip hidden files/folders starting with .
       if (entry.name.startsWith('.')) continue;
-      // Skip node_modules
       if (entry.name === 'node_modules') continue;
 
       const entryPath = requestPath ? `${requestPath}/${entry.name}` : entry.name;
+      const fullEntryPath = path.join(targetPath, entry.name);
 
-      if (entry.isDirectory()) {
-        // Check if folder has children
+      // Resolve symlinks/junctions to determine actual type
+      let isDir = entry.isDirectory();
+      let isFile = entry.isFile();
+      let isSymlink = entry.isSymbolicLink();
+
+      // On Windows, directory junctions may not report as symlinks via dirent.
+      // Compare lstat (no follow) vs stat (follow) to detect any linked entry.
+      if (!isSymlink && (isDir || isFile)) {
+        try {
+          const lstat = await fsPromises.lstat(fullEntryPath);
+          if (lstat.isSymbolicLink()) {
+            isSymlink = true;
+          }
+        } catch (_) {}
+      }
+
+      if (isSymlink) {
+        try {
+          const realStat = await fsPromises.stat(fullEntryPath);
+          isDir = realStat.isDirectory();
+          isFile = realStat.isFile();
+        } catch (_) {
+          continue; // broken symlink/junction — skip
+        }
+      }
+
+      if (isDir) {
         let hasChildren = false;
         try {
-          const children = await fsPromises.readdir(path.join(targetPath, entry.name));
+          const children = await fsPromises.readdir(fullEntryPath);
           hasChildren = children.length > 0;
-        } catch (_) {
-          // Permission denied or other error - show as empty
-        }
+        } catch (_) {}
         folders.push({
           name: entry.name,
           path: entryPath,
           type: 'folder',
           hasChildren,
+          isSymlink,
         });
-      } else if (entry.isFile()) {
+      } else if (isFile) {
         files.push({
           name: entry.name,
           path: entryPath,
           type: 'file',
           extension: parseExtension(entry.name),
+          isSymlink,
         });
       }
     }
 
-    // Sort: folders first (alphabetical), then files (alphabetical)
     folders.sort((a, b) => a.name.localeCompare(b.name));
     files.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -218,11 +373,11 @@ async function handleFileTreeRequest(ws, msg) {
 }
 
 async function handleFileContentRequest(ws, msg) {
-  const workspace = msg.workspace || 'code';
+  const workspace = msg.workspace || 'coding-agent';
   const requestPath = msg.path || '';
+  const workspacePath = getWorkspacePath(workspace, ws);
 
-  // Validate workspace
-  if (WORKSPACE_PATHS[workspace] === null || WORKSPACE_PATHS[workspace] === undefined) {
+  if (workspacePath === null) {
     ws.send(JSON.stringify({
       type: 'file_content_response',
       workspace,
@@ -234,11 +389,10 @@ async function handleFileContentRequest(ws, msg) {
     return;
   }
 
-  const basePath = path.resolve(WORKSPACE_PATHS[workspace]);
+  const basePath = path.resolve(workspacePath);
   const targetPath = path.join(basePath, requestPath);
 
-  // Path traversal guard
-  if (!path.resolve(targetPath).startsWith(basePath)) {
+  if (!isPathAllowed(basePath, targetPath)) {
     ws.send(JSON.stringify({
       type: 'file_content_response',
       workspace,
@@ -265,7 +419,23 @@ async function handleFileContentRequest(ws, msg) {
       return;
     }
 
-    const content = await fsPromises.readFile(targetPath, 'utf-8');
+    let content = await fsPromises.readFile(targetPath, 'utf-8');
+
+    // Enrich agents index.json with human-readable schedule labels
+    if (workspace === 'background-agents' && requestPath === 'index.json') {
+      try {
+        const { cronToLabel } = require('./lib/cron-label');
+        const index = JSON.parse(content);
+        if (index.agents) {
+          for (const agent of Object.values(index.agents)) {
+            if (agent.schedule) {
+              agent.schedule_label = cronToLabel(agent.schedule);
+            }
+          }
+        }
+        content = JSON.stringify(index, null, 2);
+      } catch {}
+    }
 
     ws.send(JSON.stringify({
       type: 'file_content_response',
@@ -288,256 +458,814 @@ async function handleFileContentRequest(ws, msg) {
   }
 }
 
-// WebSocket connection handling
-wss.on('connection', (ws) => {
-  console.log('[WS] Client connected');
+// ============================================================================
+// Wire Process Functions
+// ============================================================================
+
+function spawnThreadWire(threadId, projectRoot) {
+  const kimiPath = process.env.KIMI_PATH || 'kimi';
+  const args = ['--wire', '--yolo', '--session', threadId];
   
-  // Spawn wire process for this client
-  const wire = spawnWireSession();
-  const sessionId = generateId();
+  if (projectRoot) {
+    args.push('--work-dir', projectRoot);
+  }
+  
+  console.log(`[Wire] Spawning thread session: ${kimiPath} ${args.join(' ')}`);
+  
+  const proc = spawn(kimiPath, args, {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env, TERM: 'xterm-256color' }
+  });
+  
+  console.log(`[Wire] Spawned with pid: ${proc.pid}`);
+  
+  proc.on('error', (err) => {
+    console.error('[Wire] Failed to spawn:', err.message);
+  });
+  
+  proc.on('exit', (code) => {
+    console.log(`[Wire] Process ${proc.pid} exited with code ${code}`);
+  });
+  
+  proc.stderr.on('data', (data) => {
+    console.error('[Wire stderr]:', data.toString().trim());
+  });
+  
+  return proc;
+}
+
+function sendToWire(wire, method, params, id = null) {
+  const message = {
+    jsonrpc: '2.0',
+    method,
+    params
+  };
+  if (id) {
+    message.id = id;
+  }
+  const json = JSON.stringify(message);
+  console.log('[→ Wire]:', method, json.slice(0, 300));
+  if (wire && wire.stdin && !wire.killed) {
+    wire.stdin.write(json + '\n');
+    console.log('[→ Wire] SENT:', method);
+  } else {
+    console.error('[→ Wire] FAILED: wire not ready (killed:', wire?.killed, ', stdin:', !!wire?.stdin, ')');
+  }
+}
+
+// ============================================================================
+// WebSocket Connection Handler with Thread Support
+// ============================================================================
+
+wss.on('connection', (ws) => {
+  console.log('[WS] Client connected (thread-enabled)');
+  
+  const projectRoot = getDefaultProjectRoot();
+  const connectionId = generateId();
   
   // Session state
   const session = {
-    wire,
-    sessionId,
-    currentTurn: null, // { id, text, status }
+    connectionId,
+    wire: null,
+    currentTurn: null,
     buffer: '',
-    toolArgs: {},       // accumulate ToolCallPart args per tool_call_id
-    activeToolId: null   // track which tool_call_id is currently streaming args
+    toolArgs: {},
+    activeToolId: null,
+    hasToolCalls: false,
+    currentThreadId: null,
+    assistantParts: []  // For history.json tracking
   };
   sessions.set(ws, session);
   
-  // Forward wire stdout to WebSocket
-  wire.stdout.on('data', (data) => {
-    session.buffer += data.toString();
-    
-    // Process complete lines
-    let lines = session.buffer.split('\n');
-    session.buffer = lines.pop(); // Keep incomplete line in buffer
-    
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      
-      // Log full line for debugging (don't truncate - breaks JSON parsing!)
-      console.log('[← Wire]:', line.length > 500 ? line.slice(0, 500) + '...' : line);
-      logWire('WIRE_IN', line);
-      
-      try {
-        const msg = JSON.parse(line);
-        
-        // Handle event notifications (no response needed)
-        if (msg.method === 'event' && msg.params) {
-          const eventType = msg.params.type;
-          const payload = msg.params.payload;
-          
-          // Track turn state
-          if (eventType === 'TurnBegin') {
-            session.currentTurn = {
-              id: generateId(),
-              text: '',
-              status: 'streaming'
-            };
-            ws.send(JSON.stringify({
-              type: 'turn_begin',
-              turnId: session.currentTurn.id,
-              userInput: payload?.user_input || ''
-            }));
-          }
-          else if (eventType === 'ContentPart' && payload?.type === 'text') {
-            // Accumulate streaming text
-            if (session.currentTurn) {
-              session.currentTurn.text += payload.text;
-            }
-            const wsMsg = JSON.stringify({
-              type: 'content',
-              text: payload.text,
-              turnId: session.currentTurn?.id
-            });
-            logWire('WS_OUT', wsMsg);
-            ws.send(wsMsg);
-          }
-          else if (eventType === 'ContentPart' && payload?.type === 'think') {
-            // Forward thinking content - note: field is 'think' not 'text'
-            const thinkingText = payload.think || '';
-            console.log('[Think] Received thinking:', thinkingText.slice(0, 100));
-            ws.send(JSON.stringify({
-              type: 'thinking',
-              text: thinkingText,
-              turnId: session.currentTurn?.id
-            }));
-          }
-          else if (eventType === 'ContentPart') {
-            console.log('[ContentPart] Unknown type:', payload?.type, 'payload:', JSON.stringify(payload).slice(0, 200));
-          }
-          else if (eventType === 'ToolCall') {
-            const toolName = payload?.function?.name || 'unknown';
-            const toolCallId = payload?.id || '';
-            session.activeToolId = toolCallId;
-            session.toolArgs[toolCallId] = '';
-            ws.send(JSON.stringify({
-              type: 'tool_call',
-              toolName,
-              toolCallId,
-              turnId: session.currentTurn?.id
-            }));
-          }
-          else if (eventType === 'ToolCallPart') {
-            if (session.activeToolId && payload?.arguments_part) {
-              session.toolArgs[session.activeToolId] += payload.arguments_part;
-            }
-          }
-          else if (eventType === 'ToolResult') {
-            const toolCallId = payload?.tool_call_id || '';
-            const fullArgs = session.toolArgs[toolCallId] || '';
-            let parsedArgs = {};
-            try { parsedArgs = JSON.parse(fullArgs); } catch (_) {}
-            delete session.toolArgs[toolCallId];
-
-            ws.send(JSON.stringify({
-              type: 'tool_result',
-              toolCallId,
-              toolArgs: parsedArgs,
-              toolOutput: payload?.return_value?.output || '',
-              toolDisplay: payload?.return_value?.display || [],
-              isError: payload?.return_value?.is_error || false,
-              turnId: session.currentTurn?.id
-            }));
-          }
-          else if (eventType === 'TurnEnd') {
-            if (session.currentTurn) {
-              session.currentTurn.status = 'complete';
-              ws.send(JSON.stringify({
-                type: 'turn_end',
-                turnId: session.currentTurn.id,
-                fullText: session.currentTurn.text
-              }));
-            }
-          }
-          else if (eventType === 'StepBegin') {
-            ws.send(JSON.stringify({
-              type: 'step_begin',
-              stepNumber: payload?.n
-            }));
-          }
-          else if (eventType === 'StatusUpdate') {
-            ws.send(JSON.stringify({
-              type: 'status_update',
-              contextUsage: payload?.context_usage,
-              tokenUsage: payload?.token_usage
-            }));
-          }
-          else {
-            // Other events - forward raw for debugging
-            ws.send(JSON.stringify({
-              type: 'event',
-              eventType,
-              payload
-            }));
-          }
-        }
-        
-        // Handle requests from agent (need response)
-        else if (msg.method === 'request' && msg.params) {
-          ws.send(JSON.stringify({
-            type: 'request',
-            requestType: msg.params.type,
-            payload: msg.params.payload,
-            requestId: msg.id
-          }));
-        }
-        
-        // Handle responses to our requests
-        else if (msg.id !== undefined && msg.result !== undefined) {
-          ws.send(JSON.stringify({
-            type: 'response',
-            id: msg.id,
-            result: msg.result
-          }));
-        }
-        
-        // Handle errors
-        else if (msg.id !== undefined && msg.error !== undefined) {
-          ws.send(JSON.stringify({
-            type: 'error',
-            id: msg.id,
-            error: msg.error
-          }));
-        }
-        
-        else {
-          // Unknown message format
-          ws.send(JSON.stringify({
-            type: 'unknown',
-            data: msg
-          }));
-        }
-      } catch (err) {
-        console.error('[Wire] Parse error:', err.message);
-        ws.send(JSON.stringify({
-          type: 'parse_error',
-          line: line.slice(0, 200)
-        }));
-      }
-    }
+  // Set up code workspace for thread management
+  // Must match frontend workspace ID ('coding-agent')
+  ThreadWebSocketHandler.setWorkspace(ws, 'coding-agent', AI_WORKSPACES_PATH);
+  
+  // Send thread list on connect (async but don't block)
+  ThreadWebSocketHandler.sendThreadList(ws).catch(err => {
+    console.error('[WS] Failed to send thread list:', err);
   });
   
-  // Handle messages from client
-  ws.on('message', (message) => {
+  // ==========================================================================
+  // Wire Process Handlers
+  // ==========================================================================
+  
+  function initializeWire(wire) {
+    const id = generateId();
+    console.log('[Wire] Initializing wire...');
+    sendToWire(wire, 'initialize', {
+      protocol_version: '1.4',
+      client: { name: 'kimi-ide', version: '0.1.0' },
+      capabilities: { supports_question: true }
+    }, id);
+    console.log('[Wire] Initialize sent with id:', id);
+  }
+  
+  function setupWireHandlers(wire, threadId) {
+    wire.stdout.on('data', (data) => {
+      session.buffer += data.toString();
+      
+      let lines = session.buffer.split('\n');
+      session.buffer = lines.pop();
+      
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        
+        console.log('[← Wire]:', line.length > 500 ? line.slice(0, 500) + '...' : line);
+        logWire('WIRE_IN', line);
+        
+        try {
+          const msg = JSON.parse(line);
+          handleWireMessage(msg);
+        } catch (err) {
+          console.error('[Wire] Parse error:', err.message);
+          ws.send(JSON.stringify({ type: 'parse_error', line: line.slice(0, 200) }));
+        }
+      }
+    });
+    
+    wire.on('exit', (code) => {
+      console.log(`[Wire] Session ${connectionId} exited with code ${code}`);
+      session.wire = null;
+      if (threadId) unregisterWire(threadId);
+      // Only notify if WebSocket is still open
+      if (ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'wire_disconnected', code }));
+      }
+    });
+  }
+  
+  function handleWireMessage(msg) {
+    console.log('[Wire] Message received:', msg.method, msg.id ? `(id:${msg.id})` : '(event)');
+    
+    // Guard: don't process if WebSocket closed
+    if (ws.readyState !== 1) {
+      console.log('[Wire] WebSocket closed, dropping message');
+      return;
+    }
+    
+    // Event notifications
+    if (msg.method === 'event' && msg.params) {
+      const { type: eventType, payload } = msg.params;
+      console.log('[Wire] Event:', eventType);
+      
+      switch (eventType) {
+        case 'TurnBegin':
+          session.currentTurn = {
+            id: generateId(),
+            text: '',
+            userInput: payload?.user_input || ''
+          };
+          session.hasToolCalls = false;
+          session.assistantParts = [];  // Reset parts for new exchange
+          ws.send(JSON.stringify({
+            type: 'turn_begin',
+            turnId: session.currentTurn.id,
+            userInput: payload?.user_input || ''
+          }));
+          break;
+          
+        case 'ContentPart':
+          if (payload?.type === 'text' && session.currentTurn) {
+            session.currentTurn.text += payload.text;
+            
+            // Combine consecutive text parts
+            const lastPart = session.assistantParts[session.assistantParts.length - 1];
+            if (lastPart && lastPart.type === 'text') {
+              lastPart.content += payload.text;
+            } else {
+              session.assistantParts.push({
+                type: 'text',
+                content: payload.text
+              });
+            }
+            
+            ws.send(JSON.stringify({
+              type: 'content',
+              text: payload.text,
+              turnId: session.currentTurn.id
+            }));
+          } else if (payload?.type === 'think') {
+            // Track thinking separately (not combined with text)
+            const lastPart = session.assistantParts[session.assistantParts.length - 1];
+            if (lastPart && lastPart.type === 'think') {
+              lastPart.content += payload.think || '';
+            } else {
+              session.assistantParts.push({
+                type: 'think',
+                content: payload.think || ''
+              });
+            }
+            ws.send(JSON.stringify({
+              type: 'thinking',
+              text: payload.think || '',
+              turnId: session.currentTurn?.id
+            }));
+          }
+          break;
+          
+        case 'ToolCall':
+          session.hasToolCalls = true;
+          session.activeToolId = payload?.id || '';
+          session.toolArgs[session.activeToolId] = '';
+          // Start tracking tool call for history.json
+          session.assistantParts.push({
+            type: 'tool_call',
+            toolCallId: session.activeToolId,  // Include ID for matching
+            name: payload?.function?.name || 'unknown',
+            arguments: {},
+            result: {
+              output: '',
+              display: [],
+              isError: false
+            }
+          });
+          ws.send(JSON.stringify({
+            type: 'tool_call',
+            toolName: payload?.function?.name || 'unknown',
+            toolCallId: session.activeToolId,
+            turnId: session.currentTurn?.id
+          }));
+          break;
+          
+        case 'ToolCallPart':
+          if (session.activeToolId && payload?.arguments_part) {
+            session.toolArgs[session.activeToolId] += payload.arguments_part;
+          }
+          break;
+          
+        case 'ToolResult': {
+          const toolCallId = payload?.tool_call_id || '';
+          const fullArgs = session.toolArgs[toolCallId] || '';
+          let parsedArgs = {};
+          try { parsedArgs = JSON.parse(fullArgs); } catch (_) {}
+          delete session.toolArgs[toolCallId];
+          
+          // Find and update the corresponding tool_call part
+          const toolCallPart = session.assistantParts.find(
+            p => p.type === 'tool_call' && p.name === (payload?.function?.name || '')
+          );
+          if (toolCallPart) {
+            toolCallPart.arguments = parsedArgs;
+            toolCallPart.result = {
+              output: payload?.return_value?.output || '',
+              display: payload?.return_value?.display || [],
+              error: payload?.return_value?.is_error ? (payload?.return_value?.output || 'Tool failed') : undefined,
+              files: payload?.return_value?.files || []
+            };
+          }
+          
+          ws.send(JSON.stringify({
+            type: 'tool_result',
+            toolCallId,
+            toolArgs: parsedArgs,
+            toolOutput: payload?.return_value?.output || '',
+            toolDisplay: payload?.return_value?.display || [],
+            isError: payload?.return_value?.is_error || false,
+            turnId: session.currentTurn?.id
+          }));
+          break;
+        }
+          
+        case 'TurnEnd':
+          if (session.currentTurn) {
+            // Save assistant message to CHAT.md
+            ThreadWebSocketHandler.addAssistantMessage(
+              ws,
+              session.currentTurn.text,
+              session.hasToolCalls
+            );
+            
+            // Save rich exchange to history.json
+            const threadId = session.currentThreadId;
+            if (threadId) {
+              const threadDir = path.join(AI_WORKSPACES_PATH, 'coding-agent', 'threads', threadId);
+              const historyFile = new HistoryFile(threadDir);
+              historyFile.addExchange(
+                threadId,
+                session.currentTurn.userInput,
+                session.assistantParts
+              ).catch(err => {
+                console.error('[History] Failed to save exchange:', err);
+              });
+            }
+            
+            ws.send(JSON.stringify({
+              type: 'turn_end',
+              turnId: session.currentTurn.id,
+              fullText: session.currentTurn.text,
+              hasToolCalls: session.hasToolCalls
+            }));
+            
+            // Reset turn tracking
+            session.currentTurn = null;
+            session.assistantParts = [];
+          }
+          break;
+          
+        case 'StepBegin':
+          ws.send(JSON.stringify({ type: 'step_begin', stepNumber: payload?.n }));
+          break;
+          
+        case 'StatusUpdate':
+          ws.send(JSON.stringify({
+            type: 'status_update',
+            contextUsage: payload?.context_usage,
+            tokenUsage: payload?.token_usage
+          }));
+          break;
+          
+        default:
+          ws.send(JSON.stringify({ type: 'event', eventType, payload }));
+      }
+    }
+    
+    // Requests from agent
+    else if (msg.method === 'request' && msg.params) {
+      ws.send(JSON.stringify({
+        type: 'request',
+        requestType: msg.params.type,
+        payload: msg.params.payload,
+        requestId: msg.id
+      }));
+    }
+    
+    // Responses to our requests
+    else if (msg.id !== undefined && msg.result !== undefined) {
+      ws.send(JSON.stringify({ type: 'response', id: msg.id, result: msg.result }));
+    }
+    
+    // Errors
+    else if (msg.id !== undefined && msg.error !== undefined) {
+      ws.send(JSON.stringify({ type: 'error', id: msg.id, error: msg.error }));
+    }
+    
+    else {
+      ws.send(JSON.stringify({ type: 'unknown', data: msg }));
+    }
+  }
+  
+  // ==========================================================================
+  // Client Message Handler
+  // ==========================================================================
+  
+  ws.on('message', async (message) => {
     const text = message.toString();
     console.log('[WS →]:', text.slice(0, 200));
     
     try {
       const clientMsg = JSON.parse(text);
+      console.log('[WS] Message type:', clientMsg.type, 'Conn:', session.connectionId.slice(0,8), 'Has wire:', !!session.wire, 'Wire pid:', session.wire?.pid || 'none');
       
-      if (clientMsg.type === 'prompt') {
-        // Send prompt to wire
+      // Thread Management Messages
+      // --------------------------------------------------
+      
+      // Client logging - forward to server logs
+      if (clientMsg.type === 'client_log') {
+        const { level, message, data, timestamp } = clientMsg;
+        console.log(`[CLIENT ${level.toUpperCase()}] ${message}`, data || '');
+        return;
+      }
+      
+      if (clientMsg.type === 'thread:create') {
+        console.log('[WS] thread:create received');
+        await ThreadWebSocketHandler.handleThreadCreate(ws, clientMsg);
+        
+        // Get the newly created thread ID and spawn wire
+        const state = ThreadWebSocketHandler.getState(ws);
+        const threadId = state?.threadId;
+        console.log('[WS] Thread created, state:', { hasState: !!state, threadId, hasManager: !!state?.threadManager });
+        if (threadId) {
+          console.log('[WS] Spawning wire for new thread:', threadId);
+          session.currentThreadId = threadId;  // Track for history.json
+          session.wire = spawnThreadWire(threadId, projectRoot);
+          registerWire(threadId, session.wire, projectRoot);
+          console.log('[WS] Wire spawned, setting up handlers...');
+          setupWireHandlers(session.wire, threadId);
+          console.log('[WS] Handlers set up, initializing wire...');
+          initializeWire(session.wire);
+          console.log('[WS] Wire initialization complete');
+          
+          // Register with ThreadManager
+          if (state?.threadManager) {
+            console.log('[WS] Registering with ThreadManager...');
+            await state.threadManager.openSession(threadId, session.wire, ws);
+            console.log('[WS] ThreadManager registration complete');
+          }
+        } else {
+          console.error('[WS] No threadId after create!');
+        }
+        return;
+      }
+      
+      if (clientMsg.type === 'thread:open') {
+        const { threadId } = clientMsg;
+        const state = ThreadWebSocketHandler.getState(ws);
+        
+        // Close current wire if switching threads
+        if (session.wire) {
+          session.wire.kill('SIGTERM');
+          session.wire = null;
+        }
+        
+        // Track thread ID for history.json
+        session.currentThreadId = threadId;
+        
+        // Open the thread
+        await ThreadWebSocketHandler.handleThreadOpen(ws, clientMsg);
+        
+        // Spawn wire process with --session
+        console.log('[WS] Spawning wire for opened thread:', threadId);
+        session.wire = spawnThreadWire(threadId, projectRoot);
+        registerWire(threadId, session.wire, projectRoot);
+        console.log('[WS] Wire spawned, setting up handlers...');
+        setupWireHandlers(session.wire, threadId);
+        console.log('[WS] Handlers set up, initializing wire...');
+        initializeWire(session.wire);
+        console.log('[WS] Wire initialization complete');
+        
+        // Register with ThreadManager
+        if (state?.threadManager) {
+          await state.threadManager.openSession(threadId, session.wire, ws);
+        }
+        return;
+      }
+      
+      if (clientMsg.type === 'thread:open-daily') {
+        // Close current wire if switching threads
+        if (session.wire) {
+          session.wire.kill('SIGTERM');
+          session.wire = null;
+        }
+        await ThreadWebSocketHandler.handleThreadOpenDaily(ws, clientMsg);
+        // Get the thread ID that was opened (today's date)
+        const dailyThreadId = ThreadWebSocketHandler.getCurrentThreadId(ws);
+        if (dailyThreadId) {
+          session.currentThreadId = dailyThreadId;
+          session.wire = spawnThreadWire(dailyThreadId, projectRoot);
+          registerWire(dailyThreadId, session.wire, projectRoot);
+          setupWireHandlers(session.wire, dailyThreadId);
+          initializeWire(session.wire);
+          const dailyState = ThreadWebSocketHandler.getState(ws);
+          if (dailyState?.threadManager) {
+            await dailyState.threadManager.openSession(dailyThreadId, session.wire, ws);
+          }
+        }
+        return;
+      }
+
+      if (clientMsg.type === 'thread:open-agent') {
+        const { agentPath } = clientMsg;
+        if (!agentPath) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Missing agentPath' }));
+          return;
+        }
+
+        // Close current wire if switching
+        if (session.wire) {
+          session.wire.kill('SIGTERM');
+          session.wire = null;
+        }
+
+        const { parseSessionConfig, buildSystemContext, checkSessionInvalidation, getStrategy } = require('./lib/session/session-loader');
+        const agentFolderPath = path.join(AI_WORKSPACES_PATH, 'background-agents', agentPath);
+
+        // Load SESSION.md config
+        const config = parseSessionConfig(agentFolderPath);
+        if (!config) {
+          ws.send(JSON.stringify({ type: 'error', message: `No SESSION.md in ${agentPath}` }));
+          return;
+        }
+
+        // Get or create ThreadManager for this agent container
+        const containerKey = `agent:${agentPath}`;
+        ThreadWebSocketHandler.setWorkspace(ws, containerKey, path.join(AI_WORKSPACES_PATH, 'background-agents'));
+
+        // Override the workspace path to point to the agent folder (not the container key)
+        const state = ThreadWebSocketHandler.getState(ws);
+        if (state?.threadManager) {
+          // ThreadManager was created with the wrong path — recreate with agent folder
+          // This is a workaround: setWorkspace joins aiWorkspacesPath + workspaceId
+        }
+        // Create ThreadManager directly for the agent folder
+        const { ThreadManager } = require('./lib/thread/ThreadManager');
+        const agentThreadManager = new ThreadManager(agentFolderPath);
+        await agentThreadManager.init();
+
+        // Get strategy and resolve thread
+        const strategy = getStrategy(config.threadModel);
+        const { threadId, isNew } = await strategy.resolveThread(agentThreadManager);
+
+        if (!threadId) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Strategy returned no thread' }));
+          return;
+        }
+
+        // Check session invalidation
+        if (config.sessionInvalidation === 'memory-mtime' && !isNew) {
+          const thread = await agentThreadManager.index.get(threadId);
+          const lastMessage = thread?.resumedAt ? new Date(thread.resumedAt).getTime() : 0;
+          if (checkSessionInvalidation(agentFolderPath, lastMessage)) {
+            console.log(`[WS] MEMORY.md changed — archiving thread ${threadId}`);
+            await agentThreadManager.index.suspend(threadId);
+            // Resolve a fresh thread
+            const fresh = await strategy.resolveThread(agentThreadManager);
+            if (fresh.threadId && fresh.threadId !== threadId) {
+              // Use the fresh thread
+              Object.assign(fresh, { threadId: fresh.threadId });
+            }
+          }
+        }
+
+        session.currentThreadId = threadId;
+
+        // Build system context from SESSION.md's system-context list
+        const systemContext = buildSystemContext(agentFolderPath, config.systemContext);
+        session.pendingSystemContext = systemContext;
+
+        // Send thread history to client
+        const history = await agentThreadManager.getHistory(threadId);
+        const richHistory = await agentThreadManager.getRichHistory(threadId);
+        ws.send(JSON.stringify({
+          type: 'thread:opened',
+          threadId,
+          thread: await agentThreadManager.index.get(threadId),
+          history: history?.messages || [],
+          exchanges: richHistory?.exchanges || [],
+          agentPath,
+          strategy: { canBrowseOld: strategy.canBrowseOld, canCreateNew: strategy.canCreateNew },
+        }));
+
+        // Spawn wire
+        console.log(`[WS] Spawning wire for agent persona: ${agentPath}, thread: ${threadId}`);
+        session.wire = spawnThreadWire(threadId, projectRoot);
+        registerWire(threadId, session.wire, projectRoot);
+        setupWireHandlers(session.wire, threadId);
+        initializeWire(session.wire);
+
+        // Track agent wire session for notifications
+        const registry = JSON.parse(fs.readFileSync(path.join(AI_WORKSPACES_PATH, 'background-agents', 'registry.json'), 'utf8'));
+        for (const [botName, agent] of Object.entries(registry.agents || {})) {
+          if (agent.folder === agentPath) {
+            agentWireSessions.set(botName, session.wire);
+            session.wire.on('exit', () => agentWireSessions.delete(botName));
+            break;
+          }
+        }
+
+        await agentThreadManager.openSession(threadId, session.wire, ws);
+        console.log(`[WS] Agent persona session opened: ${agentPath}`);
+        return;
+      }
+
+      if (clientMsg.type === 'thread:rename') {
+        await ThreadWebSocketHandler.handleThreadRename(ws, clientMsg);
+        return;
+      }
+      
+      if (clientMsg.type === 'thread:delete') {
+        await ThreadWebSocketHandler.handleThreadDelete(ws, clientMsg);
+        return;
+      }
+      
+      if (clientMsg.type === 'thread:list') {
+        await ThreadWebSocketHandler.sendThreadList(ws);
+        return;
+      }
+      
+      // File Explorer Messages
+      // --------------------------------------------------
+      
+      if (clientMsg.type === 'file_tree_request') {
+        await handleFileTreeRequest(ws, clientMsg);
+        return;
+      }
+
+      if (clientMsg.type === 'file_content_request') {
+        await handleFileContentRequest(ws, clientMsg);
+        return;
+      }
+      
+      // Workspace Management
+      // --------------------------------------------------
+      
+      if (clientMsg.type === 'set_workspace') {
+        const { workspace, rootFolder } = clientMsg;
+        if (workspace) {
+          setSessionRoot(ws, workspace, rootFolder || null);
+          
+          // Update thread workspace
+          ThreadWebSocketHandler.setWorkspace(ws, workspace, AI_WORKSPACES_PATH);
+          
+          // Send thread list for new workspace
+          await ThreadWebSocketHandler.sendThreadList(ws);
+          
+          ws.send(JSON.stringify({
+            type: 'workspace_changed',
+            workspace,
+            rootFolder: rootFolder || getDefaultProjectRoot()
+          }));
+          
+          if (rootFolder) {
+            ws.send(JSON.stringify({
+              type: 'workspace_config',
+              workspace,
+              projectRoot: rootFolder,
+              projectName: path.basename(rootFolder)
+            }));
+          }
+        }
+        return;
+      }
+      
+      // Wire Protocol Messages
+      // --------------------------------------------------
+      
+      // Initialize can be called manually (but we also auto-initialize)
+      if (clientMsg.type === 'initialize') {
+        if (!session.wire) {
+          ws.send(JSON.stringify({ type: 'error', message: 'No thread open. Create or open a thread first.' }));
+          return;
+        }
         const id = generateId();
-        sendToWire(wire, 'prompt', { user_input: clientMsg.user_input }, id);
-      }
-      else if (clientMsg.type === 'response') {
-        // Client responding to agent request
-        sendToWire(wire, 'response', clientMsg.payload, clientMsg.requestId);
-      }
-      else if (clientMsg.type === 'file_tree_request') {
-        handleFileTreeRequest(ws, clientMsg);
-      }
-      else if (clientMsg.type === 'file_content_request') {
-        handleFileContentRequest(ws, clientMsg);
-      }
-      else if (clientMsg.type === 'initialize') {
-        // Initialize handshake
-        const id = generateId();
-        sendToWire(wire, 'initialize', {
+        sendToWire(session.wire, 'initialize', {
           protocol_version: '1.4',
           client: { name: 'kimi-ide', version: '0.1.0' },
           capabilities: { supports_question: true }
         }, id);
+        return;
       }
+      
+      // Prompt - look up wire from global registry
+      if (clientMsg.type === 'prompt') {
+        console.log('[WS] PROMPT received:', clientMsg.user_input?.slice(0, 50), 'threadId:', clientMsg.threadId?.slice(0,8));
+        
+        // Get wire from global registry using threadId from message
+        const threadId = clientMsg.threadId;
+        const wire = threadId ? getWireForThread(threadId) : session.wire;
+        
+        console.log('[WS] Thread:', threadId?.slice(0,8), 'Wire found:', !!wire);
+        
+        if (!wire) {
+          ws.send(JSON.stringify({ type: 'error', message: 'No active wire for this thread. Please reopen the thread.' }));
+          return;
+        }
+        
+        // Track message in thread (need to ensure thread is "open" for this ws)
+        const threadState = ThreadWebSocketHandler.getState(ws);
+        if (!threadState?.threadId && threadId) {
+          // This connection doesn't have this thread open - set it
+          console.log('[WS] Setting thread for this connection:', threadId.slice(0,8));
+          const state = ThreadWebSocketHandler.getState(ws);
+          if (state) state.threadId = threadId;
+        }
+        
+        await ThreadWebSocketHandler.handleMessageSend(ws, {
+          content: clientMsg.user_input
+        });
+        console.log('[WS] Message tracked in thread');
+        
+        // Send to wire — inject system context on first prompt if pending
+        const id = generateId();
+        const promptParams = { user_input: clientMsg.user_input };
+        if (session.pendingSystemContext) {
+          promptParams.system = session.pendingSystemContext;
+          session.pendingSystemContext = null;
+          console.log('[WS] Injecting system context on first prompt');
+        }
+        console.log('[WS] Sending to wire with id:', id);
+        sendToWire(wire, 'prompt', promptParams, id);
+        console.log('[WS] Prompt sent to wire');
+        return;
+      }
+      
+      if (clientMsg.type === 'response') {
+        const threadState = ThreadWebSocketHandler.getState(ws);
+        const threadId = threadState?.threadId;
+        const wire = threadId ? getWireForThread(threadId) : session.wire;
+        if (wire) {
+          sendToWire(wire, 'response', clientMsg.payload, clientMsg.requestId);
+        }
+        return;
+      }
+      
+      // Unknown message type
+      console.log('[WS] Unknown message type:', clientMsg.type);
+      
     } catch (err) {
-      // Not JSON - treat as raw text prompt
-      const id = generateId();
-      sendToWire(wire, 'prompt', { user_input: text }, id);
+      console.error('[WS] Message handling error:', err);
+      ws.send(JSON.stringify({ type: 'error', message: err.message }));
     }
   });
+  
+  // ==========================================================================
+  // Disconnect Handler
+  // ==========================================================================
   
   ws.on('close', () => {
-    console.log('[WS] Client disconnected');
-    const session = sessions.get(ws);
-    if (session && session.wire) {
-      session.wire.kill();
+    console.log('[WS] Client disconnected:', connectionId.slice(0,8));
+    
+    // Clean up thread state
+    ThreadWebSocketHandler.cleanup(ws);
+    
+    // NOTE: We do NOT kill the wire here. The wire is tied to the thread,
+    // not the WebSocket connection. Other connections may need to use it.
+    // The wire will timeout naturally after 9 minutes of idle.
+    if (session.wire) {
+      console.log('[WS] Detaching from wire (not killing), pid:', session.wire.pid);
     }
+    
     sessions.delete(ws);
+    clearSessionRoot(ws);
   });
   
-  // Send initial connection message
+  // ==========================================================================
+  // Initial Messages
+  // ==========================================================================
+  
   ws.send(JSON.stringify({
     type: 'connected',
-    sessionId
+    connectionId,
+    message: 'Thread-enabled connection established'
+  }));
+  
+  const initialProjectName = path.basename(projectRoot);
+  ws.send(JSON.stringify({
+    type: 'workspace_config',
+    workspace: 'coding-agent',
+    projectRoot,
+    projectName: initialProjectName
   }));
 });
+
+// ============================================================================
+// Server Startup
+// ============================================================================
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`[Server] Running on http://localhost:${PORT}`);
   console.log(`[Server] Kimi path: ${process.env.KIMI_PATH || 'kimi'}`);
+  console.log(`[Server] Thread storage: ${AI_WORKSPACES_PATH}`);
+
+  // Start wiki hooks
+  const wikiPath = path.join(AI_WORKSPACES_PATH, 'wiki');
+  wikiHooks.start(wikiPath);
+
+  // Start project-wide file watcher
+  const { createWatcher } = require('./lib/watcher');
+  const { loadFilters } = require('./lib/watcher/filter-loader');
+  const { createActionHandlers } = require('./lib/watcher/actions');
+  const { createTicket } = require(path.join(getDefaultProjectRoot(), 'ai', 'workspaces', 'issues', 'scripts', 'create-ticket'));
+
+  // Create hold registry for auto-block timers
+  const { createHoldRegistry } = require('./lib/triggers/hold-registry');
+  const issuesDir = path.join(AI_WORKSPACES_PATH, 'issues');
+  const holdRegistry = global.__holdRegistry = createHoldRegistry(issuesDir);
+
+  // Wrap createTicket to hook trigger-created tickets into the hold registry
+  const wrappedCreateTicket = function(ticketData) {
+    const result = createTicket(ticketData);
+    if (ticketData.autoHold && ticketData.triggerName && result?.id) {
+      holdRegistry.hold(ticketData.assignee, ticketData.triggerName, result.id);
+    }
+    return result;
+  };
+
+  const projectWatcher = createWatcher(getDefaultProjectRoot());
+
+  // Load declarative filters (.md) from filters/
+  const filterDir = path.join(__dirname, 'lib', 'watcher', 'filters');
+  const actionHandlers = createActionHandlers({ createTicket: wrappedCreateTicket });
+  const declFilters = loadFilters(filterDir, actionHandlers);
+  for (const f of declFilters) projectWatcher.addFilter(f);
+
+  // Load agent TRIGGERS.md files
+  const { loadTriggers } = require('./lib/triggers/trigger-loader');
+  const { createCronScheduler } = require('./lib/triggers/cron-scheduler');
+  const { evaluateCondition } = require('./lib/watcher/filter-loader');
+
+  const agentsBasePath = path.join(AI_WORKSPACES_PATH, 'background-agents');
+  try {
+    const registry = JSON.parse(fs.readFileSync(path.join(agentsBasePath, 'registry.json'), 'utf8'));
+    const { filters: triggerFilters, cronTriggers } = loadTriggers(
+      getDefaultProjectRoot(), agentsBasePath, registry, actionHandlers
+    );
+
+    for (const f of triggerFilters) projectWatcher.addFilter(f);
+
+    if (cronTriggers.length > 0) {
+      const cronScheduler = createCronScheduler(wrappedCreateTicket, { evaluateCondition });
+      for (const { trigger, assignee } of cronTriggers) {
+        cronScheduler.register(trigger, assignee);
+      }
+      cronScheduler.start();
+    }
+  } catch (err) {
+    console.error(`[Server] Failed to load agent triggers: ${err.message}`);
+  }
+
+  // Start runner heartbeat monitor
+  const { checkHeartbeats } = require('./lib/runner');
+  checkHeartbeats(getDefaultProjectRoot());
 });

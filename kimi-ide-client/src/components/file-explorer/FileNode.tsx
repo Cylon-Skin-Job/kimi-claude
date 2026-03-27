@@ -1,5 +1,5 @@
 import type { FileTreeNode } from '../../types/file-explorer';
-import { getFileIcon, formatFileName } from '../../lib/file-utils';
+import { getFileIcon, formatNodeName } from '../../lib/file-utils';
 import { useFileStore } from '../../state/fileStore';
 import { loadFileContent } from '../../hooks/useFileTree';
 
@@ -30,10 +30,10 @@ export function FileNode({ node, depth }: FileNodeProps) {
       style={{ paddingLeft }}
       onClick={handleClick}
     >
-      <span className="material-symbols-outlined tree-icon">
+      <span className={`material-symbols-outlined tree-icon icon-${icon}`}>
         {icon}
       </span>
-      <span className="tree-label">{formatFileName(node.name)}</span>
+      <span className="tree-label">{formatNodeName(node.name)}</span>
     </div>
   );
 }

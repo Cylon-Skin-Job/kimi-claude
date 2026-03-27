@@ -7,6 +7,7 @@ export interface FileTreeNode {
   type: 'file' | 'folder';
   extension?: string;     // normalized lowercase: "md" (files only)
   hasChildren?: boolean;  // folders only: true if non-empty
+  isSymlink?: boolean;    // true if entry is a symlink
 }
 
 export interface FileInfo {
@@ -74,4 +75,12 @@ export interface FileChangedNotification {
   path: string;
   change: 'created' | 'modified' | 'deleted';
   timestamp: number;
+}
+
+// Server -> Client (workspace configuration on connect)
+export interface WorkspaceConfigMessage {
+  type: 'workspace_config';
+  workspace: string;
+  projectRoot: string;
+  projectName: string;
 }

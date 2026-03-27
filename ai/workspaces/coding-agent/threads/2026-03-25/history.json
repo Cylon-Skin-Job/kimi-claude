@@ -1,0 +1,26 @@
+{
+  "version": "1.0.0",
+  "threadId": "2026-03-25",
+  "createdAt": 1774481508927,
+  "updatedAt": 1774499239536,
+  "exchanges": [
+    {
+      "seq": 1,
+      "ts": 1774499239536,
+      "user": "Hello",
+      "assistant": {
+        "parts": [
+          {
+            "type": "think",
+            "content": "The user is saying \"Hello\" multiple times - it looks like they're testing or greeting me. I should respond simply and ask how I can help."
+          },
+          {
+            "type": "text",
+            "content": "Hello! 👋 I'm here and ready to help you. \n\nWhat can I do for you today?"
+          }
+        ]
+      },
+      "metadata": []
+    }
+  ]
+}

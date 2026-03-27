@@ -6,11 +6,15 @@ interface FileState {
   viewMode: 'tree' | 'viewer';
   selectedFile: FileInfo | null;
   fileContent: string;
+  fileSize: number;
 
   // Tree state
   rootNodes: FileTreeNode[];
-  folderChildren: Record<string, FileTreeNode[]>; // path -> children
   expandedFolders: Set<string>;
+  
+  // Folder children cache - stores children for each expanded folder path
+  // This persists when navigating between tree and viewer
+  folderChildren: Map<string, FileTreeNode[]>;
 
   // Pending file request (set before WS request, consumed on response)
   pendingFile: FileInfo | null;
@@ -22,11 +26,12 @@ interface FileState {
   // Actions
   setRootNodes: (nodes: FileTreeNode[]) => void;
   setPendingFile: (file: FileInfo | null) => void;
-  setFolderChildren: (path: string, children: FileTreeNode[]) => void;
   expandFolder: (path: string) => void;
   collapseFolder: (path: string) => void;
   toggleFolder: (path: string) => void;
-  openFile: (file: FileInfo, content: string) => void;
+  setFolderChildren: (path: string, children: FileTreeNode[]) => void;
+  getFolderChildren: (path: string) => FileTreeNode[] | undefined;
+  openFile: (file: FileInfo, content: string, size?: number) => void;
   closeFile: () => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
@@ -37,19 +42,16 @@ export const useFileStore = create<FileState>((set, get) => ({
   viewMode: 'tree',
   selectedFile: null,
   fileContent: '',
+  fileSize: 0,
   pendingFile: null,
   rootNodes: [],
-  folderChildren: {},
   expandedFolders: new Set(),
+  folderChildren: new Map(),
   isLoading: false,
   error: null,
 
   setRootNodes: (nodes) => set({ rootNodes: nodes }),
   setPendingFile: (file) => set({ pendingFile: file }),
-
-  setFolderChildren: (path, children) => set((state) => ({
-    folderChildren: { ...state.folderChildren, [path]: children },
-  })),
 
   expandFolder: (path) => set((state) => {
     const next = new Set(state.expandedFolders);
@@ -63,6 +65,16 @@ export const useFileStore = create<FileState>((set, get) => ({
     return { expandedFolders: next };
   }),
 
+  setFolderChildren: (path, children) => set((state) => {
+    const next = new Map(state.folderChildren);
+    next.set(path, children);
+    return { folderChildren: next };
+  }),
+
+  getFolderChildren: (path) => {
+    return get().folderChildren.get(path);
+  },
+
   toggleFolder: (path) => {
     const { expandedFolders } = get();
     if (expandedFolders.has(path)) {
@@ -72,10 +84,11 @@ export const useFileStore = create<FileState>((set, get) => ({
     }
   },
 
-  openFile: (file, content) => set({
+  openFile: (file, content, size = 0) => set({
     viewMode: 'viewer',
     selectedFile: file,
     fileContent: content,
+    fileSize: size,
     error: null,
   }),
 
@@ -83,6 +96,7 @@ export const useFileStore = create<FileState>((set, get) => ({
     viewMode: 'tree',
     selectedFile: null,
     fileContent: '',
+    fileSize: 0,
   }),
 
   setLoading: (loading) => set({ isLoading: loading }),
@@ -92,10 +106,11 @@ export const useFileStore = create<FileState>((set, get) => ({
     viewMode: 'tree',
     selectedFile: null,
     fileContent: '',
+    fileSize: 0,
     pendingFile: null,
     rootNodes: [],
-    folderChildren: {},
     expandedFolders: new Set(),
+    folderChildren: new Map(),
     isLoading: false,
     error: null,
   }),

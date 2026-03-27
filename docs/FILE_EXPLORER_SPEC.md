@@ -465,25 +465,14 @@ interface FileViewerHeaderProps {
 
 ### Naming Conventions
 
-**Folder Display Names (One-to-One)**:
+**File/Folder Display Names (As-Is)**:
 ```typescript
-// Folder name on disk matches display exactly
-// "architecture-docs" → "architecture-docs"
-// "MyFolder" → "MyFolder"
-function formatFolderName(name: string): string {
-  return name; // No transformation - disk name is display name
-}
-```
-
-**File Display Names (Literal)**:
-```typescript
-// File name with hyphens/underscores replaced by spaces
-// my-file.md → "my file.md"
-// my_component.ts → "my component.ts"
-function formatFileName(name: string): string {
-  return name
-    .replace(/-/g, ' ')
-    .replace(/_/g, ' ');
+// File names displayed exactly as they appear on disk
+// No transformation of hyphens, underscores, or other characters
+// my-file.md → "my-file.md"
+// my_component.ts → "my_component.ts"
+function formatNodeName(name: string): string {
+  return name; // Return as-is
 }
 ```
 

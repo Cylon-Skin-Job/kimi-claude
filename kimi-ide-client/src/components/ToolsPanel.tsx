@@ -1,20 +1,20 @@
-import { WORKSPACE_CONFIGS, type WorkspaceId } from '../types';
+import { useWorkspaceStore } from '../state/workspaceStore';
 
 interface ToolsPanelProps {
-  currentWorkspace: WorkspaceId;
-  onSwitch: (id: WorkspaceId) => void;
+  currentWorkspace: string;
+  onSwitch: (id: string) => void;
 }
 
 export function ToolsPanel({ currentWorkspace, onSwitch }: ToolsPanelProps) {
-  const workspaces = Object.entries(WORKSPACE_CONFIGS) as [WorkspaceId, typeof WORKSPACE_CONFIGS[WorkspaceId]][];
-  
+  const configs = useWorkspaceStore((s) => s.workspaceConfigs);
+
   return (
     <nav className="tools-panel">
-      {workspaces.map(([id, config]) => (
+      {configs.map((config) => (
         <button
-          key={id}
-          className={`tool-btn ${currentWorkspace === id ? 'active' : ''}`}
-          onClick={() => onSwitch(id)}
+          key={config.id}
+          className={`tool-btn ${currentWorkspace === config.id ? 'active' : ''}`}
+          onClick={() => onSwitch(config.id)}
           title={config.name}
         >
           <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>
