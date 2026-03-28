@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "id": "system",
+  "label": "System",
+  "description": "System-level documentation — ships with the app, frozen between releases",
+  "type": "collection",
+  "rank": 99,
+  "icon": "settings_system_daydream",
+  "color": null,
+  "created": "2026-03-27T00:00:00Z",
+  "updated": "2026-03-27T23:30:00Z",
+  "frozen": true,
+  "children": ["system-overview", "evidence-gated-execution", "attestation-card", "workflow-design", "agent-folder-structure", "validation-subagent", "universal-index", "setup", "template-fallback", "panel-rename"],
+  "edges_out": null,
+  "edges_in": null,
+  "sources": null,
+  "settings": {}
+}

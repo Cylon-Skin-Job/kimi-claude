@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "last_updated": "2026-03-28T01:39:59.694Z",
+  "last_updated": "2026-03-28T05:09:14.825Z",
   "collections": [
     {
       "id": "project",
@@ -376,6 +376,25 @@
       ],
       "sources": []
     },
+    "system/attestation-card": {
+      "slug": "Attestation Card",
+      "collection": "system",
+      "collectionLabel": "System",
+      "collectionRank": 99,
+      "rank": 3,
+      "frozen": true,
+      "edges_out": [
+        "Evidence-Gated-Execution",
+        "Workflow-Design",
+        "Validation-Subagent",
+        "System-Overview"
+      ],
+      "edges_in": [
+        "Evidence-Gated-Execution",
+        "System-Overview"
+      ],
+      "sources": []
+    },
     "system/evidence-gated-execution": {
       "slug": "Evidence-Gated Execution",
       "collection": "system",
@@ -390,6 +409,23 @@
       "edges_in": [
         "System-Overview"
       ],
+      "sources": []
+    },
+    "system/panel-rename": {
+      "slug": "Panel Rename Spec",
+      "collection": "system",
+      "collectionLabel": "System",
+      "collectionRank": 99,
+      "rank": 13,
+      "frozen": true,
+      "edges_out": [
+        "System-Overview",
+        "Universal-Index",
+        "Setup",
+        "Template-Fallback",
+        "Agent-Folder-Structure"
+      ],
+      "edges_in": [],
       "sources": []
     },
     "system/setup": {
@@ -458,18 +494,25 @@
       "sources": []
     },
     "system/validation-subagent": {
-      "slug": "Validation Subagent",
+      "slug": "Validation",
       "collection": "system",
       "collectionLabel": "System",
       "collectionRank": 99,
       "rank": 10,
       "frozen": true,
       "edges_out": [
-        "Evidence-Gated-Execution"
+        "Evidence-Gated-Execution",
+        "Attestation-Card",
+        "Workflow-Design",
+        "Agent-Folder-Structure",
+        "System-Overview",
+        "Setup"
       ],
       "edges_in": [
         "System-Overview",
-        "Evidence-Gated-Execution"
+        "Evidence-Gated-Execution",
+        "Attestation-Card",
+        "Workflow-Design"
       ],
       "sources": []
     },

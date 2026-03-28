@@ -1,0 +1,22 @@
+{
+  "version": "1.0",
+  "id": "skills",
+  "folderName": "skills",
+  "label": "Skills",
+  "description": "Manage Claude Code commands and Cursor skills — view, test, sync across tools",
+  "type": "skill-manager",
+  "icon": "dynamic_form",
+  "rank": 6,
+  "sort": "alphabetical",
+  "created": "2026-03-20T20:00:00-07:00",
+  "settings": {
+    "hasChat": true,
+    "layout": "sidebar-chat-content",
+    "theme": {
+      "primary": "#a855f7",
+      "sidebar_bg": "#150a1a",
+      "content_bg": "#0d0d0d",
+      "panel_border": "#a855f733"
+    }
+  }
+}

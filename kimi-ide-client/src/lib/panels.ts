@@ -1,0 +1,170 @@
+/**
+ * @module panels
+ * @role Shared panel discovery and config loading
+ * @reads ai/panels/index.json, ai/panels/{id}/index.json
+ *
+ * Loads panel definitions from the repo filesystem via WebSocket.
+ * Knows nothing about any specific panel type.
+ */
+
+// --- Types ---
+
+export interface PanelTheme {
+  primary: string;
+  sidebar_bg: string;
+  content_bg: string;
+  panel_border: string;
+}
+
+export type PanelLayout = 'full' | 'chat-content' | 'sidebar-chat-content';
+
+export interface PanelConfig {
+  id: string;
+  name: string;
+  description?: string;
+  type: string;
+  icon: string;
+  hasChat: boolean;
+  layout: PanelLayout;
+  theme: PanelTheme;
+  rank?: number;
+  /** True if panel has a ui/ folder with module.js (runtime-loaded plugin) */
+  hasUiFolder?: boolean;
+}
+
+// --- Helpers ---
+
+/**
+ * Request a file from a panel via WebSocket.
+ * Returns a promise that resolves with the file content or rejects on error.
+ */
+export function fetchPanelFile(ws: WebSocket, panel: string, filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'file_content_response' && msg.panel === panel && msg.path === filePath) {
+          ws.removeEventListener('message', handleMessage);
+          if (msg.success) {
+            resolve(msg.content);
+          } else {
+            reject(new Error(msg.error || `Failed to load ${panel}/${filePath}`));
+          }
+        }
+      } catch { /* ignore */ }
+    };
+
+    ws.addEventListener('message', handleMessage);
+    ws.send(JSON.stringify({
+      type: 'file_content_request',
+      panel,
+      path: filePath,
+    }));
+
+    setTimeout(() => {
+      ws.removeEventListener('message', handleMessage);
+      reject(new Error(`Timeout loading ${panel}/${filePath}`));
+    }, 5000);
+  });
+}
+
+/**
+ * Load a single panel's config from its index.json.
+ */
+export async function loadPanelConfig(ws: WebSocket, panelId: string): Promise<PanelConfig | null> {
+  try {
+    // Use __panels__ pseudo-panel so the server always resolves to
+    // ai/panels/{id}/index.json — even for explorer, which has
+    // a special getPanelPath that maps to the project root.
+    const raw = await fetchPanelFile(ws, '__panels__', `${panelId}/index.json`);
+    const json = JSON.parse(raw);
+    const hasChat = json.settings?.hasChat ?? true;
+
+    // Check if panel has a ui/ folder with module.js
+    const hasUiFolder = await fetchPanelFile(ws, '__panels__', `${panelId}/ui/module.js`)
+      .then(() => true)
+      .catch(() => false);
+
+    return {
+      id: json.id || panelId,
+      name: json.label || panelId,
+      description: json.description,
+      type: json.type || 'placeholder',
+      icon: json.icon || 'folder',
+      hasChat,
+      layout: json.settings?.layout || (hasChat ? 'sidebar-chat-content' : 'full') as PanelLayout,
+      theme: {
+        primary: json.settings?.theme?.primary || '#888888',
+        sidebar_bg: json.settings?.theme?.sidebar_bg || '#111111',
+        content_bg: json.settings?.theme?.content_bg || '#0d0d0d',
+        panel_border: json.settings?.theme?.panel_border || '#88888833',
+      },
+      rank: json.rank,
+      hasUiFolder,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Discover all panels by requesting the folder listing of ai/panels/.
+ * Returns panel IDs (folder names).
+ */
+export function discoverPanels(ws: WebSocket): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'file_tree_response' && msg.panel === '__panels__') {
+          ws.removeEventListener('message', handleMessage);
+          if (msg.success) {
+            const folders = (msg.nodes || [])
+              .filter((n: { type: string }) => n.type === 'directory' || n.type === 'folder')
+              .map((n: { name: string }) => n.name);
+            resolve(folders);
+          } else {
+            reject(new Error(msg.error || 'Failed to discover panels'));
+          }
+        }
+      } catch { /* ignore */ }
+    };
+
+    ws.addEventListener('message', handleMessage);
+    ws.send(JSON.stringify({
+      type: 'file_tree_request',
+      panel: '__panels__',
+      path: '',
+    }));
+
+    setTimeout(() => {
+      ws.removeEventListener('message', handleMessage);
+      reject(new Error('Timeout discovering panels'));
+    }, 5000);
+  });
+}
+
+/**
+ * Load all panel configs. Discovers panel folders, loads each config,
+ * returns sorted by rank (from index.json rank field).
+ */
+export async function loadAllPanels(ws: WebSocket): Promise<PanelConfig[]> {
+  const ids = await discoverPanels(ws);
+  const configs = await Promise.all(
+    ids.map((id) => loadPanelConfig(ws, id))
+  );
+  // Filter nulls and sort by rank (panels without rank go last)
+  return configs
+    .filter((c): c is PanelConfig => c !== null)
+    .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999));
+}
+
+/**
+ * Apply a panel theme as CSS custom properties on a target element.
+ */
+export function applyPanelTheme(el: HTMLElement, theme: PanelTheme) {
+  el.style.setProperty('--ws-primary', theme.primary);
+  el.style.setProperty('--ws-sidebar-bg', theme.sidebar_bg);
+  el.style.setProperty('--ws-content-bg', theme.content_bg);
+  el.style.setProperty('--ws-panel-border', theme.panel_border);
+}

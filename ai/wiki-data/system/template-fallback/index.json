@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "id": "template-fallback",
+  "label": "Template Fallback",
+  "description": "Resolution chain — real file overrides template, template provides defaults",
+  "type": "page",
+  "rank": 12,
+  "icon": "article",
+  "color": null,
+  "created": "2026-03-27T00:00:00Z",
+  "updated": "2026-03-27T22:00:00Z",
+  "frozen": true,
+  "children": null,
+  "edges_out": ["Setup", "Universal-Index", "Agent-Folder-Structure"],
+  "edges_in": ["Setup"],
+  "sources": [],
+  "settings": {}
+}
