@@ -1,7 +1,7 @@
 /**
  * @module agentStore
  * @role State management for the agent-tiles workspace
- * @reads index.json via file_content_request (same pattern as wikiStore, ticketStore)
+ * @reads agents.json via file_content_request (same pattern as wikiStore, ticketStore)
  */
 
 import { create } from 'zustand';

@@ -21,7 +21,7 @@ const ISSUES_REL = path.join('ai', 'workspaces', 'issues');
 async function pull(projectRoot) {
   const issuesDir = path.join(projectRoot, ISSUES_REL);
   const syncPath = path.join(issuesDir, 'sync.json');
-  const indexPath = path.join(issuesDir, 'index.json');
+  const indexPath = path.join(issuesDir, 'tickets.json');
 
   const sync = JSON.parse(fs.readFileSync(syncPath, 'utf8'));
   const result = { updated: 0, created: 0, errors: [] };

@@ -10,7 +10,7 @@ const { push } = require('./push');
 
 /**
  * Pull latest state from GitLab into local tickets.
- * Updates local files + index.json. Does not delete anything.
+ * Updates local files + tickets.json. Does not delete anything.
  *
  * @param {string} projectRoot
  * @returns {Promise<{ updated: number, created: number, errors: string[] }>}

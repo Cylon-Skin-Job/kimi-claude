@@ -421,8 +421,8 @@ async function handleFileContentRequest(ws, msg) {
 
     let content = await fsPromises.readFile(targetPath, 'utf-8');
 
-    // Enrich agents index.json with human-readable schedule labels
-    if (workspace === 'background-agents' && requestPath === 'index.json') {
+    // Enrich agents dashboard with human-readable schedule labels
+    if (workspace === 'background-agents' && requestPath === 'agents.json') {
       try {
         const { cronToLabel } = require('./lib/cron-label');
         const index = JSON.parse(content);

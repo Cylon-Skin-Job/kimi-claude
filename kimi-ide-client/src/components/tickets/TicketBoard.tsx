@@ -131,7 +131,7 @@ export function TicketBoard() {
       const index = JSON.parse(content);
       useTicketStore.getState().setTicketsFromIndex(index.tickets || {});
     } catch {
-      useTicketStore.getState().setError('Failed to parse index.json');
+      useTicketStore.getState().setError('Failed to parse tickets.json');
     }
   }, []);
 
@@ -141,6 +141,7 @@ export function TicketBoard() {
 
   useWorkspaceData({
     workspace: 'issues',
+    indexPath: 'tickets.json',
     onIndex,
     onError,
   });

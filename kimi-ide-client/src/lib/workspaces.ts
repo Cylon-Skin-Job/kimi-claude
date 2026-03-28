@@ -1,7 +1,7 @@
 /**
  * @module workspaces
  * @role Shared workspace discovery and config loading
- * @reads ai/workspaces/workspaces.json, ai/workspaces/{id}/workspace.json
+ * @reads ai/workspaces/index.json, ai/workspaces/{id}/index.json
  *
  * Loads workspace definitions from the repo filesystem via WebSocket.
  * Knows nothing about any specific workspace type.
@@ -69,16 +69,16 @@ export function fetchWorkspaceFile(ws: WebSocket, workspace: string, filePath: s
 }
 
 /**
- * Load a single workspace's config from its workspace.json.
+ * Load a single workspace's config from its index.json.
  */
 export async function loadWorkspaceConfig(ws: WebSocket, workspaceId: string): Promise<WorkspaceConfig | null> {
   try {
     // Use __workspaces__ pseudo-workspace so the server always resolves to
-    // ai/workspaces/{id}/workspace.json — even for coding-agent, which has
+    // ai/workspaces/{id}/index.json — even for coding-agent, which has
     // a special getWorkspacePath that maps to the project root.
-    const raw = await fetchWorkspaceFile(ws, '__workspaces__', `${workspaceId}/workspace.json`);
+    const raw = await fetchWorkspaceFile(ws, '__workspaces__', `${workspaceId}/index.json`);
     const json = JSON.parse(raw);
-    const hasChat = json.hasChat ?? true;
+    const hasChat = json.settings?.hasChat ?? true;
 
     // Check if workspace has a ui/ folder with module.js
     const hasUiFolder = await fetchWorkspaceFile(ws, '__workspaces__', `${workspaceId}/ui/module.js`)
@@ -87,17 +87,17 @@ export async function loadWorkspaceConfig(ws: WebSocket, workspaceId: string): P
 
     return {
       id: json.id || workspaceId,
-      name: json.name || workspaceId,
+      name: json.label || workspaceId,
       description: json.description,
       type: json.type || 'placeholder',
       icon: json.icon || 'folder',
       hasChat,
-      layout: json.layout || (hasChat ? 'sidebar-chat-content' : 'full') as WorkspaceLayout,
+      layout: json.settings?.layout || (hasChat ? 'sidebar-chat-content' : 'full') as WorkspaceLayout,
       theme: {
-        primary: json.theme?.primary || '#888888',
-        sidebar_bg: json.theme?.sidebar_bg || '#111111',
-        content_bg: json.theme?.content_bg || '#0d0d0d',
-        panel_border: json.theme?.panel_border || '#88888833',
+        primary: json.settings?.theme?.primary || '#888888',
+        sidebar_bg: json.settings?.theme?.sidebar_bg || '#111111',
+        content_bg: json.settings?.theme?.content_bg || '#0d0d0d',
+        panel_border: json.settings?.theme?.panel_border || '#88888833',
       },
       rank: json.rank,
       hasUiFolder,
@@ -146,7 +146,7 @@ export function discoverWorkspaces(ws: WebSocket): Promise<string[]> {
 
 /**
  * Load all workspace configs. Discovers workspace folders, loads each config,
- * returns sorted by rank (from workspaces.json embedded rank or workspace.json order).
+ * returns sorted by rank (from index.json rank field).
  */
 export async function loadAllWorkspaces(ws: WebSocket): Promise<WorkspaceConfig[]> {
   const ids = await discoverWorkspaces(ws);

@@ -279,7 +279,7 @@ export function AgentTiles() {
       const index = JSON.parse(content);
       useAgentStore.getState().setAgentsFromIndex(index.agents || {});
     } catch {
-      useAgentStore.getState().setError('Failed to parse index.json');
+      useAgentStore.getState().setError('Failed to parse agents.json');
     }
   }, []);
 
@@ -296,6 +296,7 @@ export function AgentTiles() {
 
   const { request } = useWorkspaceData({
     workspace: 'background-agents',
+    indexPath: 'agents.json',
     onIndex,
     onFileContent,
     onError,

@@ -256,7 +256,7 @@
   overflow-y: auto;
 }
 
-/* Layout classes — driven by workspace.json "layout" field */
+/* Layout classes — driven by index.json "layout" field */
 .layout-full {
   grid-template-columns: 1fr;
 }

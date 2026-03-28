@@ -2,7 +2,7 @@
  * @module submodule-registry
  * @role Maps workspace type strings to React components
  *
- * Future use: ContentArea will look up components by workspace.json "type"
+ * Future use: ContentArea will look up components by index.json "type"
  * instead of the current ID-based CONTENT_COMPONENTS map.
  * Currently used by registerSubmodule() for runtime plugin registration.
  */

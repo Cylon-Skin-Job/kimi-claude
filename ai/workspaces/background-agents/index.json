@@ -1,36 +1,28 @@
 {
   "version": "1.0",
-  "last_updated": "2026-03-24T12:00:00Z",
-  "agents": {
-    "wiki-manager": {
-      "bot_name": "kimi-wiki",
-      "description": "Manages wiki pages — updates, audits, edge consistency",
-      "icon": "edit_note",
-      "color": "#e91e8a",
-      "status": "idle",
-      "last_run": null,
-      "pending_tickets": 0,
-      "schedule": "0 9 * * *"
+  "id": "background-agents",
+  "folderName": "background-agents",
+  "label": "Agents",
+  "description": "Agent command center — tiles UI for all background agents, their status, runs, and pending tickets",
+  "type": "agent-tiles",
+  "icon": "smart_toy",
+  "rank": 5,
+  "sort": "ranked",
+  "created": "2026-03-20T20:00:00-07:00",
+  "settings": {
+    "hasChat": false,
+    "layout": "full",
+    "theme": {
+      "primary": "#ef4444",
+      "sidebar_bg": "#1a0a0a",
+      "content_bg": "#0d0d0d",
+      "panel_border": "#ef444433"
     },
-    "code-manager": {
-      "bot_name": "kimi-code",
-      "description": "Manages code quality — bug fixes, reviews, test generation",
-      "icon": "code",
-      "color": "#f97316",
-      "status": "idle",
-      "last_run": null,
-      "pending_tickets": 0,
-      "schedule": null
-    },
-    "ops-manager": {
-      "bot_name": "kimi-ops",
-      "description": "Manages operations — dependency audits, documentation",
-      "icon": "shield",
-      "color": "#eab308",
-      "status": "idle",
-      "last_run": null,
-      "pending_tickets": 0,
-      "schedule": "0 6 * * 1"
+    "folders": {
+      "System": {
+        "description": "Default agents that ship with the app",
+        "reserved": true
+      }
     }
   }
 }

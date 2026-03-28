@@ -22,7 +22,7 @@ const pending = new Map();
 const DEBOUNCE_MS = 200;
 
 /**
- * Claim a ticket — write state: claimed to file + index.json.
+ * Claim a ticket — write state: claimed to file + tickets.json.
  * Prevents other instances from dispatching the same ticket.
  * Returns true if claim succeeded, false if ticket was already claimed/closed.
  */
@@ -40,8 +40,8 @@ function claimTicket(issuesDir, ticket) {
   const updated = content.replace(/^state: open$/m, 'state: claimed');
   fs.writeFileSync(filePath, updated, 'utf8');
 
-  // Update index.json
-  const indexPath = path.join(issuesDir, 'index.json');
+  // Update tickets.json
+  const indexPath = path.join(issuesDir, 'tickets.json');
   try {
     const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
     if (index.tickets[ticket.frontmatter.id]) {
@@ -67,7 +67,7 @@ function releaseClaim(issuesDir, ticket) {
   const updated = content.replace(/^state: claimed$/m, 'state: open');
   fs.writeFileSync(filePath, updated, 'utf8');
 
-  const indexPath = path.join(issuesDir, 'index.json');
+  const indexPath = path.join(issuesDir, 'tickets.json');
   try {
     const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
     if (index.tickets[ticket.frontmatter.id]) {

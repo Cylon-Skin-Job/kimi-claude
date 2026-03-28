@@ -1,7 +1,7 @@
 /**
  * @module ticketStore
  * @role State management for the ticket-board workspace
- * @reads index.json via file_content_request (same pattern as wikiStore)
+ * @reads tickets.json via file_content_request (same pattern as wikiStore)
  */
 
 import { create } from 'zustand';

@@ -16,9 +16,9 @@ import type { WorkspaceConfig, WorkspaceTheme } from '../lib/workspaces';
 export interface WorkspaceContext {
   /** Workspace ID (folder name) */
   workspace: string;
-  /** Parsed workspace.json config */
+  /** Parsed index.json config */
   config: WorkspaceConfig;
-  /** Theme from workspace.json */
+  /** Theme from index.json */
   theme: WorkspaceTheme;
 
   /** Send an event to the WebSocket server */

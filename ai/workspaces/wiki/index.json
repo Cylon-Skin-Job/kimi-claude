@@ -1,20 +1,23 @@
 {
+  "version": "1.0",
   "id": "wiki",
-  "name": "Wiki",
+  "folderName": "wiki",
+  "label": "Wiki",
   "description": "Living reference layer — browse topics, read pages, create update tickets",
   "type": "wiki-viewer",
   "icon": "full_coverage",
-  "hasChat": true,
-  "layout": "full",
   "rank": 4,
-  "theme": {
-    "primary": "#ec4899",
-    "sidebar_bg": "#1a1020",
-    "content_bg": "#0d0d0d",
-    "panel_border": "#ec489933"
-  },
-  "createdAt": "2026-03-20T14:00:00-07:00",
+  "sort": "ranked",
+  "created": "2026-03-20T14:00:00-07:00",
   "settings": {
+    "hasChat": true,
+    "layout": "full",
+    "theme": {
+      "primary": "#ec4899",
+      "sidebar_bg": "#1a1020",
+      "content_bg": "#0d0d0d",
+      "panel_border": "#ec489933"
+    },
     "syncTarget": "gitlab",
     "gitlabProjectId": 80453361,
     "gitlabNamespace": "Cylon-Skin-Job/kimi-claude",
