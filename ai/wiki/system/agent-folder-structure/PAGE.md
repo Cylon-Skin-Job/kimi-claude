@@ -1,6 +1,6 @@
 # Agent Folder Structure
 
-> One folder per agent. Standard files. The server reads them and enforces. That's it.
+> One folder per agent. Groups organize agents into rows. The server reads them and enforces. That's it.
 
 ---
 
@@ -10,19 +10,89 @@ If you are building a new agent — or you are an agent-building agent — this 
 
 ---
 
-## The Standard Files
+## Agent Groups
 
-Every agent lives in `ai/workspaces/background-agents/System/{agent-id}/` and contains:
+Agents live inside **groups** — named folders that organize agents into rows in the tiles UI. Each group is a folder with its own `index.json` and one or more agent folders inside it.
+
+```
+ai/workspaces/background-agents/
+├── index.json                    ← workspace identity
+├── agents.json                   ← agent status dashboard
+├── registry.json                 ← bot name → agent path mapping
+│
+├── System/                       ← ships with app, frozen (rank 1)
+│   ├── index.json                ← group identity
+│   ├── wiki-manager/             ← agent
+│   ├── code-manager/             ← agent
+│   └── ops-manager/              ← agent
+│
+├── Research Tools/               ← user-created (rank 10)
+│   ├── index.json                ← group identity
+│   ├── paper-scraper/            ← agent
+│   └── enrichment-agent/         ← agent
+│
+└── My Automations/               ← user-created (rank 20)
+    ├── index.json
+    └── daily-reporter/
+```
+
+### The System Group
+
+`System/` ships with the app and is `frozen: true`. It contains the default agents (wiki-manager, code-manager, ops-manager). The user cannot modify agents in this group — but they can **clone** an agent from System into another group and customize the clone.
+
+On app update, System agents are updated automatically (new workflows, improved prompts, etc.) without affecting user-created agents.
+
+### Creating a New Group
+
+1. Create a folder inside `ai/workspaces/background-agents/` (e.g., `Research Tools/`)
+2. Add an `index.json` following the [Universal Index](../universal-index/PAGE.md) schema:
+
+```json
+{
+  "version": "1.0",
+  "id": "research-tools",
+  "label": "Research Tools",
+  "type": "agent-group",
+  "rank": 10,
+  "sort": "ranked",
+  "frozen": false,
+  "children": [],
+  "settings": {}
+}
+```
+
+3. The tiles UI renders a new row labeled "Research Tools" beneath System
+
+New groups default to rank 10 (after System at rank 1, before any high-numbered groups). Adjust rank to control ordering.
+
+### Cloning an Agent
+
+To create a new agent based on an existing one:
+
+1. Copy the agent folder from one group to another (e.g., `System/wiki-manager/` → `Research Tools/my-wiki-agent/`)
+2. Edit IDENTITY.md to define the new agent's role and scope
+3. Rename the `bot_name` in workflow PROMPT.md frontmatter to a unique name
+4. Add the new bot name to `registry.json`
+5. Clear LESSONS.md, HISTORY.md, MEMORY.md (those belong to the original)
+6. The new agent is immediately functional with the cloned workflows as a starting point
+
+---
+
+## The Standard Agent Files
+
+Every agent folder contains:
 
 ```
 {agent-id}/
+├── index.json         ← agent identity (universal index schema)
 ├── IDENTITY.md        ← who the agent is (loaded at session start)
 ├── SESSION.md         ← session configuration (thread model, timeout, context loading)
 ├── TRIGGERS.md        ← what events activate this agent
 ├── MEMORY.md          ← user preferences discovered through conversation
 ├── LESSONS.md         ← process learnings accumulated across runs
 ├── HISTORY.md         ← activity log (recent events, daily summaries)
-├── workflows/         ← numbered workflow definitions
+├── styles.css         ← UI styling for the agent tile
+├── workflows/         ← workflow definitions
 │   ├── {Workflow Name}/
 │   │   └── PROMPT.md  ← orchestrator instructions with YAML frontmatter
 │   └── ...
@@ -43,6 +113,27 @@ Every agent lives in `ai/workspaces/background-agents/System/{agent-id}/` and co
 ---
 
 ## File-by-File Guide
+
+### index.json — Agent Identity
+
+Follows the [Universal Index](../universal-index/PAGE.md) schema. Declares the agent's ID, label, icon, rank within its group, and settings.
+
+```json
+{
+  "version": "1.0",
+  "id": "wiki-manager",
+  "label": "Wiki Manager",
+  "description": "Manages the project wiki as a living knowledge base",
+  "type": "agent",
+  "rank": 1,
+  "icon": "edit_note",
+  "color": "#e91e8a",
+  "sort": "manual",
+  "created": "2026-03-20T20:00:00Z",
+  "frozen": false,
+  "settings": {}
+}
+```
 
 ### IDENTITY.md — Who the Agent Is
 
@@ -115,6 +206,10 @@ Append-only log of things the agent learned across runs. After each run, if the 
 
 What the agent has done recently. Daily summaries, event timestamps. The agent updates this after each run. Useful for the user to see recent activity at a glance.
 
+### styles.css — Agent Tile Styling
+
+Custom CSS for this agent's tile in the UI. Falls back to template if not present. See [Template Fallback](../template-fallback/PAGE.md).
+
 ### workflows/ — The Work Definitions
 
 Each subfolder is a named workflow containing a `PROMPT.md` with YAML frontmatter and numbered orchestrator steps.
@@ -139,7 +234,7 @@ limits:
   confidence_threshold: 70            # below this = stop
 scope:
   read: ["*"]                         # what can be read
-  write: ["ai/wiki/project/**"]        # what can be written
+  write: ["ai/wiki/project/**"]       # what can be written
 schedule:                              # optional cron trigger
   cron: "0 9 * * *"
   ticket_title: "Daily freshness check"
@@ -202,36 +297,52 @@ runs/{timestamp}/
 
 ## Registry — How Agents Are Discovered
 
-`ai/workspaces/background-agents/registry.json` maps bot names to agent folders:
+`ai/workspaces/background-agents/registry.json` maps bot names to agent folders. The folder path includes the group:
 
 ```json
 {
   "agents": {
     "kimi-wiki": { "folder": "System/wiki-manager", "status": "idle" },
     "kimi-code": { "folder": "System/code-manager", "status": "idle" },
-    "kimi-ops":  { "folder": "System/ops-manager", "status": "idle" }
+    "kimi-ops":  { "folder": "System/ops-manager", "status": "idle" },
+    "my-scraper": { "folder": "Research Tools/paper-scraper", "status": "idle" }
   }
 }
 ```
 
-The `bot_name` in a workflow's YAML frontmatter must match a key in this registry. That's the dispatch key — when a ticket is assigned to `kimi-wiki`, the runner looks up `System/wiki-manager` and runs the matching workflow.
+The `bot_name` in a workflow's YAML frontmatter must match a key in this registry. That's the dispatch key — when a ticket is assigned to `my-scraper`, the runner looks up `Research Tools/paper-scraper` and runs the matching workflow.
 
 ---
 
 ## Creating a New Agent
 
-1. Create folder: `ai/workspaces/background-agents/System/{agent-id}/`
-2. Write IDENTITY.md (who it is, what it owns, read/write scope)
-3. Write SESSION.md (thread model, timeout, context loading)
-4. Write TRIGGERS.md (what events activate it)
-5. Create empty MEMORY.md, LESSONS.md, HISTORY.md
-6. Create `workflows/` with at least one workflow PROMPT.md
-7. Create empty `runs/` directory
-8. Add entry to `registry.json` with bot name → folder mapping
-9. Read [Workflow Design Guide](../workflow-design/PAGE.md) to ensure workflows implement EGE
-10. Read [Evidence-Gated Execution](../evidence-gated-execution/PAGE.md) to understand the validation philosophy
+### From scratch
 
-[Agent-building agent that automates steps 1-10 not yet implemented]
+1. Choose or create a group folder (e.g., `Research Tools/`)
+2. Create the agent folder inside it: `Research Tools/{agent-id}/`
+3. Add `index.json` (type: "agent", with label, icon, rank)
+4. Write IDENTITY.md (who it is, what it owns, read/write scope)
+5. Write SESSION.md (thread model, timeout, context loading)
+6. Write TRIGGERS.md (what events activate it)
+7. Create empty MEMORY.md, LESSONS.md, HISTORY.md
+8. Create `workflows/` with at least one workflow PROMPT.md
+9. Create empty `runs/` directory
+10. Add entry to `registry.json` with bot name → group/folder mapping
+11. Add the agent ID to the group's `index.json` children array
+12. Read [Workflow Design Guide](../workflow-design/PAGE.md) to ensure workflows implement EGE
+13. Read [Evidence-Gated Execution](../evidence-gated-execution/PAGE.md) to understand the validation philosophy
+
+### By cloning
+
+1. Copy an existing agent folder to a new group (or the same group with a new name)
+2. Update `index.json` with a new ID and label
+3. Update IDENTITY.md for the new role
+4. Change `bot_name` in all workflow PROMPT.md files to a unique name
+5. Add the new bot name to `registry.json`
+6. Clear LESSONS.md, HISTORY.md, MEMORY.md
+7. Add the agent ID to the group's `index.json` children array
+
+[Agent-building agent that automates these steps not yet implemented]
 
 ---
 
