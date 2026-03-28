@@ -18,9 +18,9 @@ The system is designed so that when a user downloads the app and opens a project
 
 Two wiki collections, each a set of linked topic pages:
 
-**System Wiki** (`ai/system-wiki/`) — Ships with the app. Frozen between releases. Describes *how the system works*: validation philosophy, workflow design patterns, agent conventions. Every agent reads it. No agent writes it. Updated only by app releases.
+**System Wiki** (`ai/wiki/system/`) — Ships with the app. Frozen between releases. Describes *how the system works*: validation philosophy, workflow design patterns, agent conventions. Every agent reads it. No agent writes it. Updated only by app releases.
 
-**Project Wiki** (`ai/project-wiki/`) — Per-project, living, agent-maintained. Describes *how this project works*: architecture, secrets, integrations, decisions. Agents read and write it through ticketed workflows. Syncs to GitLab for browser-readable access. [GitLab sync currently implemented via `scripts/sync-wiki.sh`]
+**Project Wiki** (`ai/wiki/project/`) — Per-project, living, agent-maintained. Describes *how this project works*: architecture, secrets, integrations, decisions. Agents read and write it through ticketed workflows. Syncs to GitLab for browser-readable access. [GitLab sync currently implemented via `scripts/sync-wiki.sh`]
 
 Both wikis follow the same structure: topic folders containing `PAGE.md` (the published page) and `LOG.md` (the change trail). An `index.json` maps the topic graph — edges between pages — so agents can traverse on demand without preloading everything.
 
@@ -44,7 +44,7 @@ The execution machinery lives in `ai/workspaces/`. Each workspace is a domain:
 |-----------|---------|
 | `background-agents/` | Agent definitions, workflows, runners |
 | `issues/` | Ticketing — dispatch, sync, lifecycle |
-| `wiki/` | Wiki agent — maintains project-wiki content |
+| `wiki/` | Wiki agent — maintains project wiki content |
 | `coding-agent/` | Code workspace — interactive development |
 | `capture/` | Specs, designs, research capture |
 | `skills/` | Skill definitions and maintenance |

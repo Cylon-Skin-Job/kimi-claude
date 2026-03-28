@@ -289,20 +289,19 @@ This same pattern applies everywhere folders need discovery and ordering:
 
 The schema is the same. The `type` field differentiates. A workspace `index.json` has `type: "workspace"`. An agent has `type: "agent"`. The server reads the type and applies the appropriate behavior.
 
-[Unified index pattern across workspaces and agents not yet implemented — currently these use workspace.json, registry.json, and other formats. Migration planned.]
+Wiki topics and workspaces now use the universal index pattern. Domain-specific data lives in separate named files (e.g., `tickets.json`, `agents.json`) so that `index.json` is always the identity/config file.
+
+[Agent folders not yet migrated to universal index — currently use registry.json. Migration planned.]
 
 ---
 
-## Migration Path
+## Migration Status
 
-Current state: wiki topics use a flat `index.json` at the collection root with all topic metadata inline. Workspaces use `workspaces.json`. Agents use `registry.json`.
-
-Target state: every folder has its own `index.json`. Parent indexes list children. Child indexes describe themselves.
-
-Migration steps:
-1. Wiki: split flat `index.json` into per-topic `index.json` files, parent lists children only
-2. Workspaces: convert `workspaces.json` entries into per-workspace `index.json` files
-3. Agents: convert `registry.json` entries into per-agent `index.json` files
-4. Server: update discovery to follow the recursive pattern
-
-[Migration not yet started]
+| Area | Status | Notes |
+|------|--------|-------|
+| Wiki topics | Done | Per-topic index.json with edges, sources, rank |
+| Wiki collections | Done | Per-collection index.json with children, sort, frozen |
+| Workspaces | Done | Per-workspace index.json with settings (theme, layout, hasChat) |
+| Workspace root | Done | `ai/workspaces/index.json` with children array |
+| Background agents | Partial | registry.json still in use, workspace has index.json |
+| Server discovery | Not started | Server needs to read the recursive index chain |

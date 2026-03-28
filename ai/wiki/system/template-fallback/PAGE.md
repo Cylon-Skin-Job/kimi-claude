@@ -18,12 +18,12 @@ A resolution pattern where every file request checks the project's real files fi
 ## The Resolution Chain
 
 ```
-Request for: ai/workspaces/wiki/workspace.json
+Request for: ai/workspaces/wiki/index.json
 
-  1. Check: ai/workspaces/wiki/workspace.json
+  1. Check: ai/workspaces/wiki/index.json
      → Exists? Return it. Done.
 
-  2. Check: ai/templates/workspaces/wiki/workspace.json
+  2. Check: ai/templates/workspaces/wiki/index.json
      → Exists? Return it. Done.
 
   3. Neither exists? → Error (ENOENT)
@@ -35,7 +35,7 @@ The same pattern applies to every file the server reads from the workspace or wi
 |-----------|---------------|
 | `ai/workspaces/{ws}/{file}` | `ai/templates/workspaces/{ws}/{file}` |
 | `ai/wiki/{collection}/{topic}/{file}` | `ai/templates/wiki/{collection}/{topic}/{file}` |
-| `ai/workspaces/workspaces.json` | `ai/templates/workspaces/workspaces.json` |
+| `ai/workspaces/index.json` | `ai/templates/workspaces/index.json` |
 
 ### Path Mapping
 
@@ -119,17 +119,17 @@ Server startup:
 
 ```
 First boot:
-  templates/workspaces/wiki/workspace.json  ← only copy
+  templates/workspaces/wiki/index.json  ← only copy
   (setup copies to real location)
-  workspaces/wiki/workspace.json            ← now exists, identical to template
+  workspaces/wiki/index.json            ← now exists, identical to template
 
 User customizes:
-  workspaces/wiki/workspace.json            ← modified
-  templates/workspaces/wiki/workspace.json  ← unchanged (ignored)
+  workspaces/wiki/index.json            ← modified
+  templates/workspaces/wiki/index.json  ← unchanged (ignored)
 
 App update:
-  templates/workspaces/wiki/workspace.json  ← updated by app
-  workspaces/wiki/workspace.json            ← untouched (user's version wins)
+  templates/workspaces/wiki/index.json  ← updated by app
+  workspaces/wiki/index.json            ← untouched (user's version wins)
 ```
 
 The user never loses customizations. New template features only apply to projects that haven't overridden that file yet. This is the same model as VS Code's `defaultSettings.json` vs `settings.json`.
@@ -140,9 +140,9 @@ The user never loses customizations. New template features only apply to project
 
 **Copy on setup:** Files that agents will modify (LESSONS.md, HISTORY.md, MEMORY.md, index.json for collections that agents populate). These need to exist as real files so agents can write to them.
 
-**Fallback at runtime:** Files that are usually left at defaults (workspace.json, styles.css, SESSION.md, api.json). These don't need to be copied unless the user customizes them.
+**Fallback at runtime:** Files that are usually left at defaults (index.json, styles.css, SESSION.md, api.json). These don't need to be copied unless the user customizes them.
 
-**Always copy:** The wiki system collection (so app updates can patch it). The workspaces.json master list (so workspace discovery works without template resolution).
+**Always copy:** The wiki system collection (so app updates can patch it). The index.json master list (so workspace discovery works without template resolution).
 
 ---
 

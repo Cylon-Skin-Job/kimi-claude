@@ -17,7 +17,7 @@ User opens app → project has no ai/ folder
   ├─ Copy ai/templates/workspaces/* → ai/workspaces/*
   ├─ Copy ai/templates/wiki/* → ai/wiki/*
   ├─ Create ai/STATE.md (empty)
-  ├─ Each workspace gets default index.json, workspace.json, agent files
+  ├─ Each workspace gets default index.json, agent files
   ├─ Wiki gets default root index, project collection (empty), system collection (populated)
   │
   └─ Done. All agents functional. Wiki browsable. Tickets dispatchable.
@@ -31,13 +31,13 @@ No wizard. No prompts. The app copies files and starts. The user sees a working 
 
 | Workspace | Contents |
 |-----------|----------|
-| `capture/` | workspace.json, specs folder |
-| `coding-agent/` | workspace.json, api.json, sessions folder |
-| `issues/` | workspace.json, index.json, sync.json, scripts/ |
-| `terminal/` | workspace.json |
-| `wiki/` | workspace.json, api.json, PROMPT.md, TOOLS.md, WORKFLOW.md |
-| `background-agents/` | workspace.json, registry.json, index.json, System/ agents with IDENTITY.md, SESSION.md, styles.css, workflows/, TRIGGERS.md |
-| `workspaces.json` | Master workspace list with ranks and UI config |
+| `index.json` | Root workspace index with children and sort order |
+| `capture/` | index.json, specs folder |
+| `coding-agent/` | index.json, api.json, sessions folder |
+| `issues/` | index.json, tickets.json, sync.json, scripts/ |
+| `terminal/` | index.json |
+| `wiki/` | index.json, api.json, PROMPT.md, TOOLS.md, WORKFLOW.md |
+| `background-agents/` | index.json, agents.json, registry.json, System/ agents with IDENTITY.md, SESSION.md, styles.css, workflows/, TRIGGERS.md |
 
 **Wiki** (from `ai/templates/wiki/`):
 
@@ -62,31 +62,31 @@ The copied files are now the project's own. They can be modified freely:
 ```
 ai/templates/
 ├── workspaces/
-│   ├── workspaces.json           ← master workspace list
+│   ├── index.json                ← root workspace index with children
 │   ├── capture/
-│   │   └── workspace.json
+│   │   └── index.json
 │   ├── coding-agent/
-│   │   ├── workspace.json
+│   │   ├── index.json
 │   │   └── api.json
 │   ├── issues/
-│   │   ├── workspace.json
 │   │   ├── index.json
+│   │   ├── tickets.json
 │   │   ├── sync.json
 │   │   └── scripts/
 │   │       ├── create-ticket.js
 │   │       └── sync-tickets.js
 │   ├── terminal/
-│   │   └── workspace.json
+│   │   └── index.json
 │   ├── wiki/
-│   │   ├── workspace.json
+│   │   ├── index.json
 │   │   ├── api.json
 │   │   ├── PROMPT.md
 │   │   ├── TOOLS.md
 │   │   └── WORKFLOW.md
 │   └── background-agents/
-│       ├── workspace.json
-│       ├── registry.json
 │       ├── index.json
+│       ├── agents.json
+│       ├── registry.json
 │       └── System/
 │           ├── wiki-manager/
 │           │   ├── IDENTITY.md
@@ -156,8 +156,8 @@ After setup, the user or an agent can add new workspaces:
 
 1. Create folder in `ai/workspaces/{new-workspace}/`
 2. Add `index.json` following the [Universal Index](../universal-index/PAGE.md) schema
-3. Add workspace-specific files (workspace.json, api.json, etc.)
-4. Add the workspace ID to `ai/workspaces/workspaces.json`
+3. Add workspace-specific files (api.json, PROMPT.md, etc.)
+4. Add the workspace ID to `ai/workspaces/index.json` children array
 
 Or, if a template exists:
 

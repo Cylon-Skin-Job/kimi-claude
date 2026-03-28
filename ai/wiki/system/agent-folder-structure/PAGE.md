@@ -139,7 +139,7 @@ limits:
   confidence_threshold: 70            # below this = stop
 scope:
   read: ["*"]                         # what can be read
-  write: ["ai/project-wiki/**"]       # what can be written
+  write: ["ai/wiki/project/**"]        # what can be written
 schedule:                              # optional cron trigger
   cron: "0 9 * * *"
   ticket_title: "Daily freshness check"
@@ -245,7 +245,7 @@ ai/workspaces/{workspace}/
 ├── TOOLS.md          ← allowed/restricted/denied tool access
 ├── WORKFLOW.md       ← process rules (injected before every write)
 ├── api.json          ← model/provider preferences
-└── workspace.json    ← workspace metadata
+└── index.json        ← workspace identity (universal index schema)
 ```
 
 **Key difference:** WORKFLOW.md injects *just-in-time before writes*, not at session start. This keeps process rules fresh in context when the agent makes mutations. TOOLS.md is enforced server-side — the agent cannot override restrictions.

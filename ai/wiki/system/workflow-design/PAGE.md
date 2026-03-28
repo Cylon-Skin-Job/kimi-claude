@@ -180,7 +180,7 @@ scope:
 
 You are an orchestrator. You delegate each step to a sub-agent and evaluate the result before proceeding. You follow Evidence-Gated Execution — no mutation without a validated attestation.
 
-Read the system wiki's Evidence-Gated Execution page (ai/system-wiki/evidence-gated-execution/PAGE.md) if you need to understand the philosophy.
+Read the system wiki's Evidence-Gated Execution page (ai/wiki/system/evidence-gated-execution/PAGE.md) if you need to understand the philosophy.
 
 ## Steps
 
