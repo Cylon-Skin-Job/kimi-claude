@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "id": "setup",
+  "label": "Setup",
+  "description": "First boot process — template copying, workspace creation, initial state",
+  "type": "page",
+  "rank": 11,
+  "icon": "article",
+  "color": null,
+  "created": "2026-03-27T00:00:00Z",
+  "updated": "2026-03-27T22:00:00Z",
+  "frozen": true,
+  "children": null,
+  "edges_out": ["Template-Fallback", "Universal-Index", "Agent-Folder-Structure", "System-Overview"],
+  "edges_in": ["System-Overview"],
+  "sources": [],
+  "settings": {}
+}
