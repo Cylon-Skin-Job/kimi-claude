@@ -57,6 +57,57 @@ The copied files are now the project's own. They can be modified freely:
 
 ---
 
+## Project Types
+
+On first launch, the user chooses a project type. Each type ships a different set of default workspaces and templates tailored to that domain. When creating additional projects later, the user picks from the same list.
+
+[Planned for future production — currently only the Coding project type exists.]
+
+| Type | Description | Default Workspaces |
+|------|-------------|-------------------|
+| **Coding** | Software development — write, edit, test, deploy code | capture, coding-agent, terminal, issues, wiki, background-agents, skills |
+| **Research Vault** | Download, store, and enrich scientific papers and documents in structured JSON for RAG use. Background scrapers gather material on configured topics, enrichment agents extract metadata and build citation graphs. | capture, research-ingest, enrichment-agent, wiki, issues, background-agents |
+| **Office Suite** | Document creation, spreadsheets, presentations, and collaboration tools — all local-first with AI assistance | capture, documents, wiki, issues, background-agents |
+| **Bookkeeper** | Accounting, invoicing, expense tracking, and financial reporting — local-first with optional cloud sync | capture, ledger, reports, wiki, issues, background-agents |
+| **Studio** | Creative production — image, video, and music creation using CLI tools, headless open source projects, and custom pipelines. Integrates with Research Vault for content sourcing. | capture, media-pipeline, canvas, timeline, wiki, issues, background-agents |
+
+### How Project Types Work
+
+Each project type is a folder in `ai/templates/project-types/`:
+
+```
+ai/templates/project-types/
+├── coding/
+│   └── workspaces/        ← workspace templates for coding projects
+├── research-vault/
+│   └── workspaces/
+├── office-suite/
+│   └── workspaces/
+├── bookkeeper/
+│   └── workspaces/
+└── studio/
+    └── workspaces/
+```
+
+On setup, the selected project type's workspaces are copied into `ai/workspaces/`. The system wiki and wiki tree are the same for all project types — only the workspace set differs.
+
+### Cross-Project Pipelines
+
+Projects can feed into each other:
+
+```
+Research Vault (scrapers gather medical research)
+  → enrichment agents produce structured packets
+  → packets feed into Studio
+  → Studio produces short-form content about the research
+```
+
+Each project is its own repo with its own `ai/` folder. The connection between projects is through shared file paths, APIs, or agent-to-agent ticket creation.
+
+[Cross-project pipelines not yet implemented]
+
+---
+
 ## The Template Folder
 
 ```
