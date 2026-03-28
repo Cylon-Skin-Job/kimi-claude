@@ -10,7 +10,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { markdownToHtml } from '../../lib/transforms';
 import { useWikiStore } from '../../state/wikiStore';
-import { useWorkspaceStore } from '../../state/workspaceStore';
+import { usePanelStore } from '../../state/panelStore';
 
 export function PageViewer() {
   const activeTopic = useWikiStore((s) => s.activeTopic);
@@ -76,11 +76,11 @@ export function PageViewer() {
   const handleTabClick = (tab: 'page' | 'log' | 'runs') => {
     setActiveTab(tab);
     if (tab === 'log' && activeTopic && !logContent) {
-      const ws = useWorkspaceStore.getState().ws;
+      const ws = usePanelStore.getState().ws;
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
           type: 'file_content_request',
-          workspace: 'wiki',
+          panel: 'wiki-viewer',
           path: `${activeTopic}/LOG.md`,
         }));
       }

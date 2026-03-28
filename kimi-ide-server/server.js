@@ -4,7 +4,7 @@
  * This version includes persistent, named conversations with lifecycle management.
  * 
  * @see lib/thread/README.md - Thread management documentation
- * @see ../ai/workspaces/capture/specs/SPEC.md - Full specification
+ * @see ../ai/panels/capture/specs/SPEC.md - Full specification
  */
 
 const express = require('express');
@@ -63,13 +63,13 @@ const wss = new WebSocket.Server({ server });
 const clientDistPath = path.join(__dirname, '..', 'kimi-ide-client', 'dist');
 app.use(express.static(clientDistPath));
 
-// Serve workspace files (images, etc.) via HTTP
+// Serve panel files (images, etc.) via HTTP
 // Uses fuzzy filename matching to handle macOS Unicode spaces in screenshot names
-app.get('/api/workspace-file/:workspace/{*filePath}', (req, res) => {
-  const workspace = req.params.workspace;
+app.get('/api/panel-file/:panel/{*filePath}', (req, res) => {
+  const panel = req.params.panel;
   const rawPath = req.params.filePath;
   const filePath = Array.isArray(rawPath) ? rawPath.join('/') : rawPath;
-  const dirPath = path.join(getDefaultProjectRoot(), 'ai', 'workspaces', workspace, path.dirname(filePath));
+  const dirPath = path.join(getDefaultProjectRoot(), 'ai', 'panels', panel, path.dirname(filePath));
   const fileName = path.basename(filePath);
 
   try {
@@ -138,11 +138,11 @@ function getDefaultProjectRoot() {
   return path.resolve(path.join(__dirname, '..'));
 }
 
-// AI workspaces path for thread storage
+// AI panels path for thread storage
 // Relative to PROJECT ROOT (not server directory)
 // This allows the IDE to work with any project, not just kimi-claude
-const AI_WORKSPACES_PATH = path.join(getDefaultProjectRoot(), 'ai', 'workspaces');
-console.log(`[Server] AI workspaces path: ${AI_WORKSPACES_PATH}`);
+const AI_PANELS_PATH = path.join(getDefaultProjectRoot(), 'ai', 'panels');
+console.log(`[Server] AI panels path: ${AI_PANELS_PATH}`);
 
 // ============================================================================
 // File Explorer Functions (unchanged from original)
@@ -150,14 +150,14 @@ console.log(`[Server] AI workspaces path: ${AI_WORKSPACES_PATH}`);
 
 const sessionRoots = new Map();
 
-function setSessionRoot(ws, workspace, rootFolder) {
-  sessionRoots.set(ws, { workspace, rootFolder });
-  console.log(`[Session] Workspace '${workspace}' root set to: ${rootFolder}`);
+function setSessionRoot(ws, panel, rootFolder) {
+  sessionRoots.set(ws, { panel, rootFolder });
+  console.log(`[Session] Panel '${panel}' root set to: ${rootFolder}`);
 }
 
-function getSessionRoot(ws, workspace) {
+function getSessionRoot(ws, panel) {
   const session = sessionRoots.get(ws);
-  if (session && session.workspace === workspace && session.rootFolder) {
+  if (session && session.panel === panel && session.rootFolder) {
     return session.rootFolder;
   }
   return getDefaultProjectRoot();
@@ -167,26 +167,26 @@ function clearSessionRoot(ws) {
   sessionRoots.delete(ws);
 }
 
-function getWorkspacePath(workspace, ws) {
-  // coding-agent gets the project root (file explorer browses the whole project)
-  if (workspace === 'coding-agent') {
-    return getSessionRoot(ws, workspace);
+function getPanelPath(panel, ws) {
+  // explorer gets the project root (file explorer browses the whole project)
+  if (panel === 'explorer') {
+    return getSessionRoot(ws, panel);
   }
-  // __workspaces__ pseudo-workspace: resolves to ai/workspaces/ itself (for discovery)
-  if (workspace === '__workspaces__') {
-    const wsRoot = path.join(getDefaultProjectRoot(), 'ai', 'workspaces');
-    if (fs.existsSync(wsRoot)) return wsRoot;
+  // __panels__ pseudo-panel: resolves to ai/panels/ itself (for discovery)
+  if (panel === '__panels__') {
+    const panelsRoot = path.join(getDefaultProjectRoot(), 'ai', 'panels');
+    if (fs.existsSync(panelsRoot)) return panelsRoot;
     return null;
   }
-  // Wiki workspace resolves to ai/wiki/ (the unified wiki tree)
-  if (workspace === 'wiki') {
-    const wikiRoot = path.join(getDefaultProjectRoot(), 'ai', 'wiki');
+  // Wiki panel resolves to ai/wiki-data/ (the unified wiki tree)
+  if (panel === 'wiki-viewer') {
+    const wikiRoot = path.join(getDefaultProjectRoot(), 'ai', 'wiki-data');
     if (fs.existsSync(wikiRoot)) return wikiRoot;
     return null;
   }
-  // All other workspaces resolve to their ai/workspaces/{id}/ folder
-  const wsPath = path.join(getDefaultProjectRoot(), 'ai', 'workspaces', workspace);
-  if (fs.existsSync(wsPath)) return wsPath;
+  // All other panels resolve to their ai/panels/{id}/ folder
+  const panelPath = path.join(getDefaultProjectRoot(), 'ai', 'panels', panel);
+  if (fs.existsSync(panelPath)) return panelPath;
   return null;
 }
 
@@ -250,29 +250,29 @@ function parseExtension(filename) {
 }
 
 async function handleFileTreeRequest(ws, msg) {
-  const workspace = msg.workspace || 'coding-agent';
+  const panel = msg.panel || 'explorer';
   const requestPath = msg.path || '';
-  const workspacePath = getWorkspacePath(workspace, ws);
+  const panelPath = getPanelPath(panel, ws);
 
-  if (workspacePath === null) {
+  if (panelPath === null) {
     ws.send(JSON.stringify({
       type: 'file_tree_response',
-      workspace,
+      panel,
       path: requestPath,
       success: false,
-      error: `Workspace "${workspace}" is not filesystem-backed`,
-      code: 'ENOTWORKSPACE',
+      error: `Panel "${panel}" is not filesystem-backed`,
+      code: 'ENOTPANEL',
     }));
     return;
   }
 
-  const basePath = path.resolve(workspacePath);
+  const basePath = path.resolve(panelPath);
   const targetPath = requestPath ? path.join(basePath, requestPath) : basePath;
 
   if (!isPathAllowed(basePath, targetPath)) {
     ws.send(JSON.stringify({
       type: 'file_tree_response',
-      workspace,
+      panel,
       path: requestPath,
       success: false,
       error: 'Invalid path',
@@ -287,7 +287,7 @@ async function handleFileTreeRequest(ws, msg) {
     if (entries.length > 1000) {
       ws.send(JSON.stringify({
         type: 'file_tree_response',
-        workspace,
+        panel,
         path: requestPath,
         success: false,
         error: `Folder has ${entries.length} items (max 1000). Use terminal to explore.`,
@@ -361,7 +361,7 @@ async function handleFileTreeRequest(ws, msg) {
 
     ws.send(JSON.stringify({
       type: 'file_tree_response',
-      workspace,
+      panel,
       path: requestPath,
       success: true,
       nodes: [...folders, ...files],
@@ -369,7 +369,7 @@ async function handleFileTreeRequest(ws, msg) {
   } catch (err) {
     ws.send(JSON.stringify({
       type: 'file_tree_response',
-      workspace,
+      panel,
       path: requestPath,
       success: false,
       error: err.message,
@@ -379,29 +379,29 @@ async function handleFileTreeRequest(ws, msg) {
 }
 
 async function handleFileContentRequest(ws, msg) {
-  const workspace = msg.workspace || 'coding-agent';
+  const panel = msg.panel || 'explorer';
   const requestPath = msg.path || '';
-  const workspacePath = getWorkspacePath(workspace, ws);
+  const panelPath = getPanelPath(panel, ws);
 
-  if (workspacePath === null) {
+  if (panelPath === null) {
     ws.send(JSON.stringify({
       type: 'file_content_response',
-      workspace,
+      panel,
       path: requestPath,
       success: false,
-      error: `Workspace "${workspace}" is not filesystem-backed`,
-      code: 'ENOTWORKSPACE',
+      error: `Panel "${panel}" is not filesystem-backed`,
+      code: 'ENOTPANEL',
     }));
     return;
   }
 
-  const basePath = path.resolve(workspacePath);
+  const basePath = path.resolve(panelPath);
   const targetPath = path.join(basePath, requestPath);
 
   if (!isPathAllowed(basePath, targetPath)) {
     ws.send(JSON.stringify({
       type: 'file_content_response',
-      workspace,
+      panel,
       path: requestPath,
       success: false,
       error: 'Invalid path',
@@ -416,7 +416,7 @@ async function handleFileContentRequest(ws, msg) {
     if (stat.isDirectory()) {
       ws.send(JSON.stringify({
         type: 'file_content_response',
-        workspace,
+        panel,
         path: requestPath,
         success: false,
         error: 'Expected file, got directory',
@@ -428,7 +428,7 @@ async function handleFileContentRequest(ws, msg) {
     let content = await fsPromises.readFile(targetPath, 'utf-8');
 
     // Enrich agents dashboard with human-readable schedule labels
-    if (workspace === 'background-agents' && requestPath === 'agents.json') {
+    if (panel === 'agents' && requestPath === 'agents.json') {
       try {
         const { cronToLabel } = require('./lib/cron-label');
         const index = JSON.parse(content);
@@ -445,7 +445,7 @@ async function handleFileContentRequest(ws, msg) {
 
     ws.send(JSON.stringify({
       type: 'file_content_response',
-      workspace,
+      panel,
       path: requestPath,
       success: true,
       content,
@@ -455,7 +455,7 @@ async function handleFileContentRequest(ws, msg) {
   } catch (err) {
     ws.send(JSON.stringify({
       type: 'file_content_response',
-      workspace,
+      panel,
       path: requestPath,
       success: false,
       error: err.message,
@@ -543,9 +543,9 @@ wss.on('connection', (ws) => {
   };
   sessions.set(ws, session);
   
-  // Set up code workspace for thread management
-  // Must match frontend workspace ID ('coding-agent')
-  ThreadWebSocketHandler.setWorkspace(ws, 'coding-agent', AI_WORKSPACES_PATH);
+  // Set up code panel for thread management
+  // Must match frontend panel ID ('explorer')
+  ThreadWebSocketHandler.setPanel(ws, 'explorer', AI_PANELS_PATH);
   
   // Send thread list on connect (async but don't block)
   ThreadWebSocketHandler.sendThreadList(ws).catch(err => {
@@ -745,7 +745,7 @@ wss.on('connection', (ws) => {
             // Save rich exchange to history.json
             const threadId = session.currentThreadId;
             if (threadId) {
-              const threadDir = path.join(AI_WORKSPACES_PATH, 'coding-agent', 'threads', threadId);
+              const threadDir = path.join(AI_PANELS_PATH, 'explorer', 'threads', threadId);
               const historyFile = new HistoryFile(threadDir);
               historyFile.addExchange(
                 threadId,
@@ -934,7 +934,7 @@ wss.on('connection', (ws) => {
         }
 
         const { parseSessionConfig, buildSystemContext, checkSessionInvalidation, getStrategy } = require('./lib/session/session-loader');
-        const agentFolderPath = path.join(AI_WORKSPACES_PATH, 'background-agents', agentPath);
+        const agentFolderPath = path.join(AI_PANELS_PATH, 'agents', agentPath);
 
         // Load SESSION.md config
         const config = parseSessionConfig(agentFolderPath);
@@ -945,13 +945,13 @@ wss.on('connection', (ws) => {
 
         // Get or create ThreadManager for this agent container
         const containerKey = `agent:${agentPath}`;
-        ThreadWebSocketHandler.setWorkspace(ws, containerKey, path.join(AI_WORKSPACES_PATH, 'background-agents'));
+        ThreadWebSocketHandler.setPanel(ws, containerKey, path.join(AI_PANELS_PATH, 'agents'));
 
-        // Override the workspace path to point to the agent folder (not the container key)
+        // Override the panel path to point to the agent folder (not the container key)
         const state = ThreadWebSocketHandler.getState(ws);
         if (state?.threadManager) {
           // ThreadManager was created with the wrong path — recreate with agent folder
-          // This is a workaround: setWorkspace joins aiWorkspacesPath + workspaceId
+          // This is a workaround: setPanel joins aiPanelsPath + panelId
         }
         // Create ThreadManager directly for the agent folder
         const { ThreadManager } = require('./lib/thread/ThreadManager');
@@ -1010,7 +1010,7 @@ wss.on('connection', (ws) => {
         initializeWire(session.wire);
 
         // Track agent wire session for notifications
-        const registry = JSON.parse(fs.readFileSync(path.join(AI_WORKSPACES_PATH, 'background-agents', 'registry.json'), 'utf8'));
+        const registry = JSON.parse(fs.readFileSync(path.join(AI_PANELS_PATH, 'agents', 'registry.json'), 'utf8'));
         for (const [botName, agent] of Object.entries(registry.agents || {})) {
           if (agent.folder === agentPath) {
             agentWireSessions.set(botName, session.wire);
@@ -1052,30 +1052,30 @@ wss.on('connection', (ws) => {
         return;
       }
       
-      // Workspace Management
+      // Panel Management
       // --------------------------------------------------
-      
-      if (clientMsg.type === 'set_workspace') {
-        const { workspace, rootFolder } = clientMsg;
-        if (workspace) {
-          setSessionRoot(ws, workspace, rootFolder || null);
-          
-          // Update thread workspace
-          ThreadWebSocketHandler.setWorkspace(ws, workspace, AI_WORKSPACES_PATH);
-          
-          // Send thread list for new workspace
+
+      if (clientMsg.type === 'set_panel') {
+        const { panel, rootFolder } = clientMsg;
+        if (panel) {
+          setSessionRoot(ws, panel, rootFolder || null);
+
+          // Update thread panel
+          ThreadWebSocketHandler.setPanel(ws, panel, AI_PANELS_PATH);
+
+          // Send thread list for new panel
           await ThreadWebSocketHandler.sendThreadList(ws);
-          
+
           ws.send(JSON.stringify({
-            type: 'workspace_changed',
-            workspace,
+            type: 'panel_changed',
+            panel,
             rootFolder: rootFolder || getDefaultProjectRoot()
           }));
-          
+
           if (rootFolder) {
             ws.send(JSON.stringify({
-              type: 'workspace_config',
-              workspace,
+              type: 'panel_config',
+              panel,
               projectRoot: rootFolder,
               projectName: path.basename(rootFolder)
             }));
@@ -1197,8 +1197,8 @@ wss.on('connection', (ws) => {
   
   const initialProjectName = path.basename(projectRoot);
   ws.send(JSON.stringify({
-    type: 'workspace_config',
-    workspace: 'coding-agent',
+    type: 'panel_config',
+    panel: 'explorer',
     projectRoot,
     projectName: initialProjectName
   }));
@@ -1212,21 +1212,21 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`[Server] Running on http://localhost:${PORT}`);
   console.log(`[Server] Kimi path: ${process.env.KIMI_PATH || 'kimi'}`);
-  console.log(`[Server] Thread storage: ${AI_WORKSPACES_PATH}`);
+  console.log(`[Server] Thread storage: ${AI_PANELS_PATH}`);
 
-  // Start wiki hooks — watches ai/wiki/ tree (collections with topics)
-  const wikiPath = path.join(getDefaultProjectRoot(), 'ai', 'wiki');
+  // Start wiki hooks — watches ai/wiki-data/ tree (collections with topics)
+  const wikiPath = path.join(getDefaultProjectRoot(), 'ai', 'wiki-data');
   wikiHooks.start(wikiPath);
 
   // Start project-wide file watcher
   const { createWatcher } = require('./lib/watcher');
   const { loadFilters } = require('./lib/watcher/filter-loader');
   const { createActionHandlers } = require('./lib/watcher/actions');
-  const { createTicket } = require(path.join(getDefaultProjectRoot(), 'ai', 'workspaces', 'issues', 'scripts', 'create-ticket'));
+  const { createTicket } = require(path.join(getDefaultProjectRoot(), 'ai', 'panels', 'issues', 'scripts', 'create-ticket'));
 
   // Create hold registry for auto-block timers
   const { createHoldRegistry } = require('./lib/triggers/hold-registry');
-  const issuesDir = path.join(AI_WORKSPACES_PATH, 'issues');
+  const issuesDir = path.join(AI_PANELS_PATH, 'issues');
   const holdRegistry = global.__holdRegistry = createHoldRegistry(issuesDir);
 
   // Wrap createTicket to hook trigger-created tickets into the hold registry
@@ -1251,7 +1251,7 @@ server.listen(PORT, () => {
   const { createCronScheduler } = require('./lib/triggers/cron-scheduler');
   const { evaluateCondition } = require('./lib/watcher/filter-loader');
 
-  const agentsBasePath = path.join(AI_WORKSPACES_PATH, 'background-agents');
+  const agentsBasePath = path.join(AI_PANELS_PATH, 'agents');
   try {
     const registry = JSON.parse(fs.readFileSync(path.join(agentsBasePath, 'registry.json'), 'utf8'));
     const { filters: triggerFilters, cronTriggers } = loadTriggers(

@@ -10,7 +10,7 @@ The Kimi IDE Server is a Node.js/Express application that:
 - Spawns and manages Kimi CLI wire processes (`kimi --wire --yolo`)
 - Bridges WebSocket communication between the React client and Kimi CLI
 - Serves static files from the React client build (`kimi-ide-client/dist/`)
-- Provides file explorer APIs for workspace navigation
+- Provides file explorer APIs for panel navigation
 - Persists configuration and chat history
 
 **Key Technologies:** Node.js, Express, WebSocket (ws), JSON-RPC 2.0, UUID
@@ -108,8 +108,8 @@ kimi-ide-server/
 
 **Responsibilities:**
 - Load/save user configuration from `data/config.json`
-- Project-specific settings and workspace state
-- Chat history persistence (separate files per project/workspace)
+- Project-specific settings and panel state
+- Chat history persistence (separate files per project/panel)
 
 **API:**
 ```javascript
@@ -117,7 +117,7 @@ getConfig()                    // Get current config (cached)
 updateConfig(updates)          // Merge and save updates
 setLastProject(projectPath)    // Track most recent project
 getProjectConfig(projectPath)  // Get project-specific config
-setWorkspaceState(...)         // Save workspace UI state
+setPanelState(...)         // Save panel UI state
 saveChatHistory(...)           // Persist chat messages
 loadChatHistory(...)           // Retrieve chat messages
 ```
@@ -130,7 +130,7 @@ loadChatHistory(...)           // Retrieve chat messages
   projects: {
     '/path/to/project': {
       path: '/path/to/project',
-      workspaces: { 'code': { ...state } }
+      panels: { 'code': { ...state } }
     }
   },
   settings: {
@@ -185,9 +185,9 @@ Bidirectional JSON messages. See `STREAMING_RENDER_SPEC.md` for complete specifi
 - Hidden file/folder exclusion (dotfiles)
 - `node_modules` exclusion
 
-**Workspaces:**
-- `code` — Maps to current project root (filesystem-backed)
-- Other workspaces — GUI-based (null = no filesystem access)
+**Panels:**
+- `explorer` — Maps to current project root (filesystem-backed)
+- Other panels — GUI-based (null = no filesystem access)
 
 **Project Root Resolution:**
 1. Use `config.lastProject` if set and exists
@@ -249,7 +249,7 @@ node server.js
 ### Adding New File Explorer Features
 
 1. Add handler function (follow `handleFileTreeRequest` pattern)
-2. Validate workspace with `getWorkspacePath()`
+2. Validate panel with `getPanelPath()`
 3. Apply path traversal guard: `path.resolve(targetPath).startsWith(basePath)`
 4. Register in WebSocket message handler switch
 

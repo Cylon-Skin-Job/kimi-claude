@@ -2,19 +2,19 @@
  * @module TileRow
  * @role Generic horizontal row of document tiles for a folder
  *
- * Fetches file list + content from the server for a given workspace/folder,
+ * Fetches file list + content from the server for a given panel/folder,
  * renders each file as a scaled-down DocumentTile in a scrollable row.
  *
- * Reusable across any workspace — Capture, Agents, etc.
+ * Reusable across any panel — Capture, Agents, etc.
  */
 
 import { useEffect, useState } from 'react';
-import { useWorkspaceStore } from '../../state/workspaceStore';
+import { usePanelStore } from '../../state/panelStore';
 import { DocumentTile, isImageFile } from './DocumentTile';
 
 interface TileRowProps {
   label: string;
-  workspace: string;
+  panel: string;
   folder: string;
   onFileClick?: (filePath: string) => void;
   onFileSelect?: (file: FileWithContent, siblings: FileWithContent[]) => void;
@@ -31,8 +31,8 @@ export interface FileWithContent extends FileEntry {
   content: string;
 }
 
-export function TileRow({ label, workspace, folder, onFileClick, onFileSelect }: TileRowProps) {
-  const ws = useWorkspaceStore((s) => s.ws);
+export function TileRow({ label, panel, folder, onFileClick, onFileSelect }: TileRowProps) {
+  const ws = usePanelStore((s) => s.ws);
   const [files, setFiles] = useState<FileWithContent[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -49,7 +49,7 @@ export function TileRow({ label, workspace, folder, onFileClick, onFileSelect }:
         const msg = JSON.parse(event.data);
 
         // File tree response — get list of files in this folder
-        if (msg.type === 'file_tree_response' && msg.workspace === workspace && msg.path === folder) {
+        if (msg.type === 'file_tree_response' && msg.panel === panel && msg.path === folder) {
           const fileEntries = (msg.nodes || []).filter(
             (n: FileEntry) => n.type === 'file' && !n.name.startsWith('.')
           );
@@ -90,14 +90,14 @@ export function TileRow({ label, workspace, folder, onFileClick, onFileSelect }:
             pending.set(entry.path, entry);
             socket.send(JSON.stringify({
               type: 'file_content_request',
-              workspace,
+              panel,
               path: entry.path,
             }));
           }
         }
 
         // File content response — collect content
-        if (msg.type === 'file_content_response' && msg.workspace === workspace && msg.success) {
+        if (msg.type === 'file_content_response' && msg.panel === panel && msg.success) {
           const entry = pending.get(msg.path);
           if (entry) {
             pending.delete(msg.path);
@@ -122,7 +122,7 @@ export function TileRow({ label, workspace, folder, onFileClick, onFileSelect }:
     // Request the file tree for this folder
     socket.send(JSON.stringify({
       type: 'file_tree_request',
-      workspace,
+      panel,
       path: folder,
     }));
 
@@ -138,7 +138,7 @@ export function TileRow({ label, workspace, folder, onFileClick, onFileSelect }:
       socket.removeEventListener('message', handleMessage);
       clearTimeout(timeout);
     };
-  }, [ws, workspace, folder]);
+  }, [ws, panel, folder]);
 
   return (
     <div className="tile-row">
@@ -160,7 +160,7 @@ export function TileRow({ label, workspace, folder, onFileClick, onFileSelect }:
               name={file.name}
               content={file.content}
               extension={file.extension}
-              workspace={workspace}
+              panel={panel}
               folderPath={folder}
               onClick={() => {
                 onFileClick?.(file.path);

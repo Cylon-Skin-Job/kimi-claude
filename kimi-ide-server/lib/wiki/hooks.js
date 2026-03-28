@@ -1,5 +1,5 @@
 /**
- * Wiki lifecycle hooks — watches ai/wiki/ tree for topic creation and page edits.
+ * Wiki lifecycle hooks — watches ai/wiki-data/ tree for topic creation and page edits.
  *
  * The wiki tree has collections (project/, system/, etc.) each containing topic folders.
  * This module scans all collections, builds a merged topics.json at the wiki root,

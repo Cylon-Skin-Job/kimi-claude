@@ -2,7 +2,7 @@
  * Multi-thread strategy — manual thread selection.
  *
  * User sees a thread list, picks one to open, or creates new.
- * No auto-selection. Used by the coding-agent workspace.
+ * No auto-selection. Used by the explorer panel.
  */
 
 module.exports = {

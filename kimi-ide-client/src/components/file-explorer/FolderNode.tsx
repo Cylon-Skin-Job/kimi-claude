@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { FileTreeNode } from '../../types/file-explorer';
 import { formatNodeName } from '../../lib/file-utils';
 import { useFileStore } from '../../state/fileStore';
-import { useWorkspaceStore } from '../../state/workspaceStore';
+import { usePanelStore } from '../../state/panelStore';
 import { FileTree } from './FileTree';
 
 interface FolderNodeProps {
@@ -14,7 +14,7 @@ export function FolderNode({ node, depth }: FolderNodeProps) {
   const expandedFolders = useFileStore((s) => s.expandedFolders);
   const folderChildren = useFileStore((s) => s.folderChildren);
   const isLoading = useFileStore((s) => s.isLoading);
-  const ws = useWorkspaceStore((s) => s.ws);
+  const ws = usePanelStore((s) => s.ws);
   const wsRef = useRef(ws);
   
   // Keep wsRef current without triggering re-renders
@@ -60,7 +60,7 @@ export function FolderNode({ node, depth }: FolderNodeProps) {
             currentWs.addEventListener('message', handleMessage);
             currentWs.send(JSON.stringify({
               type: 'file_tree_request',
-              workspace: 'coding-agent',
+              panel: 'explorer',
               path: node.path,
             }));
             // Timeout after 5 seconds

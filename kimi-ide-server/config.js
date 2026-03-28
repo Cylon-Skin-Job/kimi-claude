@@ -101,36 +101,44 @@ function setLastProject(projectPath) {
   return updateConfig({ lastProject: projectPath });
 }
 
-// Workspace-specific state (chat history, UI state, etc.)
-function getWorkspaceState(projectPath, workspaceId) {
+// Panel-specific state (chat history, UI state, etc.)
+function getPanelState(projectPath, panelId) {
   const project = getProjectConfig(projectPath);
-  if (!project || !project.workspaces) return null;
-  return project.workspaces[workspaceId] || null;
+  // Migration guard: if panels undefined but workspaces exists, copy over
+  if (project && !project.panels && project.workspaces) {
+    project.panels = project.workspaces;
+  }
+  if (!project || !project.panels) return null;
+  return project.panels[panelId] || null;
 }
 
-function setWorkspaceState(projectPath, workspaceId, state) {
+function setPanelState(projectPath, panelId, state) {
   const config = getConfig();
   if (!config.projects[projectPath]) {
-    config.projects[projectPath] = { path: projectPath, workspaces: {} };
+    config.projects[projectPath] = { path: projectPath, panels: {} };
   }
-  if (!config.projects[projectPath].workspaces) {
-    config.projects[projectPath].workspaces = {};
+  // Migration guard: if panels undefined but workspaces exists, copy over
+  if (!config.projects[projectPath].panels && config.projects[projectPath].workspaces) {
+    config.projects[projectPath].panels = config.projects[projectPath].workspaces;
   }
-  config.projects[projectPath].workspaces[workspaceId] = {
-    ...config.projects[projectPath].workspaces[workspaceId],
+  if (!config.projects[projectPath].panels) {
+    config.projects[projectPath].panels = {};
+  }
+  config.projects[projectPath].panels[panelId] = {
+    ...config.projects[projectPath].panels[panelId],
     ...state
   };
   return updateConfig({ projects: config.projects });
 }
 
-// Chat history storage (separate file per project/workspace for performance)
-function getChatHistoryPath(projectPath, workspaceId) {
+// Chat history storage (separate file per project/panel for performance)
+function getChatHistoryPath(projectPath, panelId) {
   const safeProjectName = path.basename(projectPath).replace(/[^a-zA-Z0-9]/g, '_');
-  return path.join(DATA_DIR, `chat_${safeProjectName}_${workspaceId}.json`);
+  return path.join(DATA_DIR, `chat_${safeProjectName}_${panelId}.json`);
 }
 
-function saveChatHistory(projectPath, workspaceId, messages) {
-  const filePath = getChatHistoryPath(projectPath, workspaceId);
+function saveChatHistory(projectPath, panelId, messages) {
+  const filePath = getChatHistoryPath(projectPath, panelId);
   try {
     fs.writeFileSync(filePath, JSON.stringify(messages, null, 2), 'utf8');
     return true;
@@ -140,8 +148,8 @@ function saveChatHistory(projectPath, workspaceId, messages) {
   }
 }
 
-function loadChatHistory(projectPath, workspaceId) {
-  const filePath = getChatHistoryPath(projectPath, workspaceId);
+function loadChatHistory(projectPath, panelId) {
+  const filePath = getChatHistoryPath(projectPath, panelId);
   if (!fs.existsSync(filePath)) return [];
   
   try {
@@ -163,8 +171,8 @@ module.exports = {
   getProjectConfig,
   setProjectConfig,
   setLastProject,
-  getWorkspaceState,
-  setWorkspaceState,
+  getPanelState,
+  setPanelState,
   saveChatHistory,
   loadChatHistory
 };

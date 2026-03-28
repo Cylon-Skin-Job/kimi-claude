@@ -1,5 +1,5 @@
 /**
- * Ticket dispatch watcher — watches the issues workspace for new/changed tickets
+ * Ticket dispatch watcher — watches the issues panel for new/changed tickets
  * and dispatches to agents when a ticket is assigned to a known bot.
  *
  * The dispatch key is the assignee field. If the assignee matches a bot name
@@ -80,7 +80,7 @@ function releaseClaim(issuesDir, ticket) {
 }
 
 function loadRegistry(projectRoot) {
-  const registryPath = path.join(projectRoot, 'ai', 'workspaces', 'background-agents', 'registry.json');
+  const registryPath = path.join(projectRoot, 'ai', 'panels', 'agents', 'registry.json');
   try {
     return JSON.parse(fs.readFileSync(registryPath, 'utf8'));
   } catch {
@@ -153,7 +153,7 @@ function dispatch(ticket, registry) {
 }
 
 function startDispatchWatcher(projectRoot) {
-  const issuesDir = path.join(projectRoot, 'ai', 'workspaces', 'issues');
+  const issuesDir = path.join(projectRoot, 'ai', 'panels', 'issues');
 
   if (!fs.existsSync(issuesDir)) {
     console.error(`Issues directory not found: ${issuesDir}`);

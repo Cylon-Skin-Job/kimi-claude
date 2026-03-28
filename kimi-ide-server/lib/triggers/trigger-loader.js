@@ -16,7 +16,7 @@ const { buildFilter, evaluateCondition, applyTemplate } = require('../watcher/fi
  * Scan agent folders for TRIGGERS.md and build filters + cron triggers.
  *
  * @param {string} projectRoot - Absolute path to project root
- * @param {string} agentsBasePath - Absolute path to background-agents workspace
+ * @param {string} agentsBasePath - Absolute path to agents panel
  * @param {Object} registry - Parsed registry.json { agents: { botName: { folder } } }
  * @param {Object} actionHandlers - Action handlers from createActionHandlers()
  * @returns {{ filters: Array, cronTriggers: Array<{ trigger: Object, assignee: string }> }}

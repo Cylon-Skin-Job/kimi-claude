@@ -5,13 +5,13 @@
  * Current turn     → LiveSegmentRenderer (orb gatekeeper → animated typing)
  */
 
-import { useWorkspaceStore } from '../state/workspaceStore';
+import { usePanelStore } from '../state/panelStore';
 import type { Message, AssistantTurn, StreamSegment } from '../types';
 import { LiveSegmentRenderer } from './LiveSegmentRenderer';
 import { InstantSegmentRenderer } from './InstantSegmentRenderer';
 
 interface MessageListProps {
-  workspace: string;
+  panel: string;
   messages: Message[];
   currentTurn: AssistantTurn | null;
   segments: StreamSegment[];
@@ -20,16 +20,16 @@ interface MessageListProps {
 }
 
 export function MessageList({
-  workspace,
+  panel,
   messages,
   currentTurn,
   segments,
   lastUserMsgRef,
   showOrb,
 }: MessageListProps) {
-  const pendingTurnEnd = useWorkspaceStore((s) => s.workspaces[workspace].pendingTurnEnd);
-  const finalizeTurn = useWorkspaceStore((s) => s.finalizeTurn);
-  const onRevealComplete = pendingTurnEnd ? () => finalizeTurn(workspace) : undefined;
+  const pendingTurnEnd = usePanelStore((s) => s.panels[panel].pendingTurnEnd);
+  const finalizeTurn = usePanelStore((s) => s.finalizeTurn);
+  const onRevealComplete = pendingTurnEnd ? () => finalizeTurn(panel) : undefined;
 
   // Find the last user message index for scroll anchoring
   let lastUserIdx = -1;

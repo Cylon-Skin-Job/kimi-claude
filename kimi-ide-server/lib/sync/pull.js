@@ -10,7 +10,7 @@ const path = require('path');
 const { loadTicket, loadAllTickets } = require('../tickets/loader');
 const { gitlabGet } = require('./request');
 
-const ISSUES_REL = path.join('ai', 'workspaces', 'issues');
+const ISSUES_REL = path.join('ai', 'panels', 'issues');
 
 /**
  * Pull issues updated since last sync.

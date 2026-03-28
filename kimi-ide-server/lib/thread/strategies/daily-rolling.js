@@ -3,7 +3,7 @@
  *
  * On open: find today's thread by date field, or create a new UUID thread
  * tagged with today's date. Old threads are viewable but not resumable.
- * Used by agent personas and the issues workspace.
+ * Used by agent personas and the issues panel.
  */
 
 const { v4: uuidv4 } = require('uuid');

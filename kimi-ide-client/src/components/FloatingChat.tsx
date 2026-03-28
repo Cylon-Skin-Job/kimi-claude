@@ -12,10 +12,10 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { ChatArea } from './ChatArea';
 
 interface FloatingChatProps {
-  workspace: string;
+  panel: string;
 }
 
-export function FloatingChat({ workspace }: FloatingChatProps) {
+export function FloatingChat({ panel }: FloatingChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [initialized, setInitialized] = useState(false);
@@ -81,7 +81,7 @@ export function FloatingChat({ workspace }: FloatingChatProps) {
         >
           <div className="floating-chat-header">
             <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>chat_bubble</span>
-            <span className="floating-chat-title">{workspace} assistant</span>
+            <span className="floating-chat-title">{panel} assistant</span>
             <button
               className="floating-chat-close"
               onClick={() => setIsOpen(false)}
@@ -90,7 +90,7 @@ export function FloatingChat({ workspace }: FloatingChatProps) {
             </button>
           </div>
           <div className="floating-chat-body">
-            <ChatArea workspace={workspace} />
+            <ChatArea panel={panel} />
           </div>
         </div>
       )}

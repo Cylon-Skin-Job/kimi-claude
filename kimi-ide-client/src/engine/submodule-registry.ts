@@ -1,6 +1,6 @@
 /**
  * @module submodule-registry
- * @role Maps workspace type strings to React components
+ * @role Maps panel type strings to React components
  *
  * Future use: ContentArea will look up components by index.json "type"
  * instead of the current ID-based CONTENT_COMPONENTS map.
@@ -8,17 +8,17 @@
  */
 
 import type { ComponentType } from 'react';
-import type { WorkspaceConfig } from '../lib/workspaces';
+import type { PanelConfig } from '../lib/panels';
 
 export interface SubmoduleProps {
-  workspace: string;
-  config: WorkspaceConfig;
+  panel: string;
+  config: PanelConfig;
 }
 
 const SUBMODULE_REGISTRY: Record<string, ComponentType<SubmoduleProps>> = {};
 
 /**
- * Look up the React component for a workspace type.
+ * Look up the React component for a panel type.
  * Returns undefined for unknown types (caller should render placeholder).
  */
 export function getSubmodule(type: string): ComponentType<SubmoduleProps> | undefined {

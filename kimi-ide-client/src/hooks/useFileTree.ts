@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useWorkspaceStore } from '../state/workspaceStore';
+import { usePanelStore } from '../state/panelStore';
 import { useFileStore } from '../state/fileStore';
 
 // Re-export standalone functions so existing imports don't break
@@ -11,8 +11,8 @@ export { loadRootTree, loadFolderChildren, loadExpandedFolders, loadFileContent 
  * for root tree and file content responses.
  */
 export function useFileTreeListener() {
-  const ws = useWorkspaceStore((state) => state.ws);
-  const currentWorkspace = useWorkspaceStore((state) => state.currentWorkspace);
+  const ws = usePanelStore((state) => state.ws);
+  const currentPanel = usePanelStore((state) => state.currentPanel);
   const lastWsRef = useRef<WebSocket | null>(null);
 
   // Listen for file-related WebSocket responses
@@ -63,11 +63,11 @@ export function useFileTreeListener() {
 
   // Load root tree when first connecting or reconnecting
   useEffect(() => {
-    if (!ws || currentWorkspace !== 'coding-agent') return;
+    if (!ws || currentPanel !== 'explorer') return;
     if (ws === lastWsRef.current) return;
     if (ws.readyState !== WebSocket.OPEN) return;
 
     lastWsRef.current = ws;
     _loadRootTree();
-  }, [ws, currentWorkspace]);
+  }, [ws, currentPanel]);
 }

@@ -1,25 +1,25 @@
 /**
  * @module RuntimeModule
- * @role React wrapper for runtime-loaded workspace ui/ modules
+ * @role React wrapper for runtime-loaded panel ui/ modules
  *
- * Renders a container div, loads the workspace's ui/ folder contents
+ * Renders a container div, loads the panel's ui/ folder contents
  * (template.html, styles.css, module.js), and manages the mount/unmount
  * lifecycle of the vanilla JS module.
  */
 
 import { useEffect, useRef } from 'react';
-import type { WorkspaceConfig } from '../lib/workspaces';
+import type { PanelConfig } from '../lib/panels';
 import { loadAndMount, unmountModule } from '../engine/runtime-module';
-import { useWorkspaceStore } from '../state/workspaceStore';
+import { usePanelStore } from '../state/panelStore';
 
 interface RuntimeModuleProps {
-  workspace: string;
-  config: WorkspaceConfig;
+  panel: string;
+  config: PanelConfig;
 }
 
-export function RuntimeModule({ workspace, config }: RuntimeModuleProps) {
+export function RuntimeModule({ panel, config }: RuntimeModuleProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const ws = useWorkspaceStore((s) => s.ws);
+  const ws = usePanelStore((s) => s.ws);
   const mountedRef = useRef(false);
 
   useEffect(() => {
@@ -30,10 +30,10 @@ export function RuntimeModule({ workspace, config }: RuntimeModuleProps) {
     mountedRef.current = true;
 
     loadAndMount(config, el).catch((err) => {
-      console.error(`[RuntimeModule] Failed to load ${workspace}:`, err);
+      console.error(`[RuntimeModule] Failed to load ${panel}:`, err);
       el.innerHTML = `
         <div style="padding: 24px; color: var(--text-dim, #888);">
-          <p>Failed to load workspace plugin</p>
+          <p>Failed to load panel plugin</p>
           <p style="font-size: 0.8rem; opacity: 0.6;">${err.message}</p>
         </div>
       `;
@@ -41,15 +41,15 @@ export function RuntimeModule({ workspace, config }: RuntimeModuleProps) {
 
     return () => {
       mountedRef.current = false;
-      unmountModule(workspace);
+      unmountModule(panel);
     };
-  }, [ws, workspace, config]);
+  }, [ws, panel, config]);
 
   return (
     <div
       ref={containerRef}
       className="runtime-module-container"
-      data-workspace={workspace}
+      data-panel={panel}
       style={{ width: '100%', height: '100%', overflow: 'auto' }}
     />
   );

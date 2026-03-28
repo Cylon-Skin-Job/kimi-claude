@@ -13,7 +13,7 @@ const path = require('path');
 const { loadTicket, loadAllTickets } = require('../tickets/loader');
 const { gitlabPost, gitlabPut } = require('./request');
 
-const ISSUES_REL = path.join('ai', 'workspaces', 'issues');
+const ISSUES_REL = path.join('ai', 'panels', 'issues');
 
 /**
  * Push local tickets to GitLab.

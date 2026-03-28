@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { useWorkspaceStore } from '../state/workspaceStore';
-import { applyWorkspaceTheme } from '../lib/workspaces';
+import { usePanelStore } from '../state/panelStore';
+import { applyPanelTheme } from '../lib/panels';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { ToolsPanel } from './ToolsPanel';
 import { Sidebar } from './Sidebar';
@@ -14,21 +14,21 @@ function App() {
   // so discovery can complete and populate configs
   useWebSocket();
 
-  const currentWorkspace = useWorkspaceStore((state) => state.currentWorkspace);
-  const setCurrentWorkspace = useWorkspaceStore((state) => state.setCurrentWorkspace);
-  const ws = useWorkspaceStore((state) => state.ws);
-  const configs = useWorkspaceStore((state) => state.workspaceConfigs);
-  const getConfig = useWorkspaceStore((state) => state.getWorkspaceConfig);
+  const currentPanel = usePanelStore((state) => state.currentPanel);
+  const setCurrentPanel = usePanelStore((state) => state.setCurrentPanel);
+  const ws = usePanelStore((state) => state.ws);
+  const configs = usePanelStore((state) => state.panelConfigs);
+  const getConfig = usePanelStore((state) => state.getPanelConfig);
   const isConnected = ws?.readyState === WebSocket.OPEN;
   const containerRef = useRef<HTMLDivElement>(null);
 
   const loading = configs.length === 0;
 
-  // Apply workspace theme as CSS custom properties
+  // Apply panel theme as CSS custom properties
   useEffect(() => {
-    const config = getConfig(currentWorkspace);
+    const config = getConfig(currentPanel);
     if (config && containerRef.current) {
-      applyWorkspaceTheme(containerRef.current, config.theme);
+      applyPanelTheme(containerRef.current, config.theme);
       containerRef.current.style.setProperty('--theme-primary', config.theme.primary);
       const hex = config.theme.primary;
       const r = parseInt(hex.slice(1, 3), 16);
@@ -38,14 +38,14 @@ function App() {
       containerRef.current.style.setProperty('--theme-border', `rgba(${r}, ${g}, ${b}, 0.3)`);
       containerRef.current.style.setProperty('--theme-border-glow', `rgba(${r}, ${g}, ${b}, 0.6)`);
     }
-  }, [currentWorkspace, getConfig, configs]);
+  }, [currentPanel, getConfig, configs]);
 
-  // Once discovery completes, set currentWorkspace to first available if current isn't valid
+  // Once discovery completes, set currentPanel to first available if current isn't valid
   useEffect(() => {
-    if (configs.length > 0 && !configs.find((c) => c.id === currentWorkspace)) {
-      setCurrentWorkspace(configs[0].id);
+    if (configs.length > 0 && !configs.find((c) => c.id === currentPanel)) {
+      setCurrentPanel(configs[0].id);
     }
-  }, [configs, currentWorkspace, setCurrentWorkspace]);
+  }, [configs, currentPanel, setCurrentPanel]);
 
   if (loading) {
     return (
@@ -63,14 +63,14 @@ function App() {
             </div>
           </div>
         </header>
-        <div className="workspace-container" style={{
+        <div className="panel-container" style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           color: 'var(--text-dim, #555)',
           fontSize: '0.875rem',
         }}>
-          Discovering workspaces...
+          Discovering panels...
         </div>
       </div>
     );
@@ -96,32 +96,32 @@ function App() {
 
       {/* Tools Panel */}
       <ToolsPanel
-        currentWorkspace={currentWorkspace}
-        onSwitch={setCurrentWorkspace}
+        currentPanel={currentPanel}
+        onSwitch={setCurrentPanel}
       />
 
-      {/* Workspace Container */}
-      <div className="workspace-container">
+      {/* Panel Container */}
+      <div className="panel-container">
         {configs.map((config) => {
           const layout = config.layout || (config.hasChat ? 'sidebar-chat-content' : 'full');
 
           return (
             <div
               key={config.id}
-              className={`workspace layout-${layout} ${currentWorkspace === config.id ? 'active' : ''}`}
+              className={`panel layout-${layout} ${currentPanel === config.id ? 'active' : ''}`}
             >
               {layout === 'full' ? (
-                <ContentArea workspace={config.id} />
+                <ContentArea panel={config.id} />
               ) : layout === 'chat-content' ? (
                 <>
-                  <ChatArea workspace={config.id} />
-                  <ContentArea workspace={config.id} />
+                  <ChatArea panel={config.id} />
+                  <ContentArea panel={config.id} />
                 </>
               ) : (
                 <>
-                  <Sidebar workspace={config.id} />
-                  <ChatArea workspace={config.id} />
-                  <ContentArea workspace={config.id} />
+                  <Sidebar panel={config.id} />
+                  <ChatArea panel={config.id} />
+                  <ContentArea panel={config.id} />
                 </>
               )}
             </div>

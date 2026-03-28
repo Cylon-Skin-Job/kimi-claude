@@ -15,7 +15,7 @@ interface DocumentTileProps {
   name: string;
   content: string;
   extension?: string;
-  workspace?: string;
+  panel?: string;
   folderPath?: string;
   onClick?: () => void;
 }
@@ -115,7 +115,7 @@ export function isImageFile(name: string): boolean {
   return IMAGE_EXTENSIONS.has(ext);
 }
 
-export function DocumentTile({ name, content, extension, workspace, folderPath, onClick }: DocumentTileProps) {
+export function DocumentTile({ name, content, extension, panel, folderPath, onClick }: DocumentTileProps) {
   const ext = extension || name.split('.').pop()?.toLowerCase() || '';
   const icon = ICON_MAP[ext] || 'draft';
   const isMarkdown = ext === 'md';
@@ -126,7 +126,7 @@ export function DocumentTile({ name, content, extension, workspace, folderPath, 
       <div className="doc-tile-preview">
         {isImage ? (
           <img
-            src={`/api/workspace-file/${workspace}/${folderPath}/${encodeURIComponent(name)}`}
+            src={`/api/panel-file/${panel}/${folderPath}/${encodeURIComponent(name)}`}
             alt={name}
             loading="lazy"
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}

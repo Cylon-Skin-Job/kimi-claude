@@ -15,7 +15,7 @@ import { isImageFile } from '../tile-row/DocumentTile';
 interface FilePageViewProps {
   file: FileWithContent;
   siblings: FileWithContent[];
-  workspace: string;
+  panel: string;
   folder: string;
   onBack: () => void;
   onSelectSibling: (file: FileWithContent) => void;
@@ -24,7 +24,7 @@ interface FilePageViewProps {
 export function FilePageView({
   file,
   siblings,
-  workspace,
+  panel,
   folder,
   onBack,
   onSelectSibling,
@@ -45,7 +45,7 @@ export function FilePageView({
       <div className="file-page-content">
         {isImage ? (
           <img
-            src={`/api/workspace-file/${workspace}/${folder}/${encodeURIComponent(file.name)}`}
+            src={`/api/panel-file/${panel}/${folder}/${encodeURIComponent(file.name)}`}
             alt={file.name}
             className="file-page-image"
           />
@@ -70,7 +70,7 @@ export function FilePageView({
                 <div className="ribbon-tile-preview">
                   {sibIsImage ? (
                     <img
-                      src={`/api/workspace-file/${workspace}/${folder}/${encodeURIComponent(sib.name)}`}
+                      src={`/api/panel-file/${panel}/${folder}/${encodeURIComponent(sib.name)}`}
                       alt={sib.name}
                       loading="lazy"
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}

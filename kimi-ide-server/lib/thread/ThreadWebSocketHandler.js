@@ -1,11 +1,11 @@
 /**
  * ThreadWebSocketHandler - Manages WebSocket connections with thread switching
- * 
+ *
  * Each WebSocket connection:
- * - Has a current workspace
- * - Can switch between threads within that workspace
+ * - Has a current panel
+ * - Can switch between threads within that panel
  * - Manages one wire process at a time (per active thread)
- * 
+ *
  * Multiple tabs = multiple WebSockets = independent sessions
  */
 
@@ -13,52 +13,52 @@ const path = require('path');
 const { ThreadManager } = require('./ThreadManager');
 const { v4: uuidv4 } = require('uuid');
 
-// Global registry: workspaceId -> ThreadManager
+// Global registry: panelId -> ThreadManager
 const threadManagers = new Map();
 
-// Per-WS state: ws -> { workspaceId, threadId, threadManager }
+// Per-WS state: ws -> { panelId, threadId, threadManager }
 const wsState = new Map();
 
 /**
- * Get or create ThreadManager for a workspace
- * @param {string} workspaceId 
- * @param {string} aiWorkspacesPath 
+ * Get or create ThreadManager for a panel
+ * @param {string} panelId
+ * @param {string} aiPanelsPath
  * @returns {ThreadManager}
  */
-function getThreadManager(workspaceId, aiWorkspacesPath) {
-  if (!threadManagers.has(workspaceId)) {
-    const workspacePath = path.join(aiWorkspacesPath, workspaceId);
-    const manager = new ThreadManager(workspacePath);
-    threadManagers.set(workspaceId, manager);
+function getThreadManager(panelId, aiPanelsPath) {
+  if (!threadManagers.has(panelId)) {
+    const panelPath = path.join(aiPanelsPath, panelId);
+    const manager = new ThreadManager(panelPath);
+    threadManagers.set(panelId, manager);
     // Initialize async (don't block)
     manager.init().catch(err => {
-      console.error(`[ThreadManager] Failed to init ${workspaceId}:`, err);
+      console.error(`[ThreadManager] Failed to init ${panelId}:`, err);
     });
   }
-  return threadManagers.get(workspaceId);
+  return threadManagers.get(panelId);
 }
 
 /**
- * Set workspace for a WebSocket connection
+ * Set panel for a WebSocket connection
  * @param {import('ws').WebSocket} ws
- * @param {string} workspaceId
- * @param {string} aiWorkspacesPath
+ * @param {string} panelId
+ * @param {string} aiPanelsPath
  */
-function setWorkspace(ws, workspaceId, aiWorkspacesPath) {
+function setPanel(ws, panelId, aiPanelsPath) {
   const existing = wsState.get(ws);
-  
-  // Close current thread if switching workspaces
+
+  // Close current thread if switching panels
   if (existing && existing.threadId) {
     closeCurrentThread(ws);
   }
-  
-  const manager = getThreadManager(workspaceId, aiWorkspacesPath);
-  
+
+  const manager = getThreadManager(panelId, aiPanelsPath);
+
   wsState.set(ws, {
-    workspaceId,
+    panelId,
     threadId: null,
     threadManager: manager,
-    aiWorkspacesPath
+    aiPanelsPath
   });
 }
 
@@ -111,7 +111,7 @@ async function sendThreadList(ws) {
     return;
   }
   
-  console.log('[ThreadWS] Getting threads from manager for workspace:', state.workspaceId);
+  console.log('[ThreadWS] Getting threads from manager for panel:', state.panelId);
   const threads = await state.threadManager.listThreads();
   console.log('[ThreadWS] Sending', threads.length, 'threads');
   
@@ -148,7 +148,7 @@ async function findExistingNewChat(ws) {
 async function handleThreadCreate(ws, msg) {
   const state = wsState.get(ws);
   if (!state) {
-    ws.send(JSON.stringify({ type: 'error', message: 'No workspace set' }));
+    ws.send(JSON.stringify({ type: 'error', message: 'No panel set' }));
     return;
   }
   
@@ -200,7 +200,7 @@ async function handleThreadCreate(ws, msg) {
 async function handleThreadOpen(ws, msg) {
   const state = wsState.get(ws);
   if (!state) {
-    ws.send(JSON.stringify({ type: 'error', message: 'No workspace set' }));
+    ws.send(JSON.stringify({ type: 'error', message: 'No panel set' }));
     return;
   }
   
@@ -260,7 +260,7 @@ async function handleThreadOpen(ws, msg) {
 async function handleThreadOpenDaily(ws, msg) {
   const state = wsState.get(ws);
   if (!state) {
-    ws.send(JSON.stringify({ type: 'error', message: 'No workspace set' }));
+    ws.send(JSON.stringify({ type: 'error', message: 'No panel set' }));
     return;
   }
 
@@ -306,7 +306,7 @@ async function handleThreadOpenDaily(ws, msg) {
 async function handleThreadRename(ws, msg) {
   const state = wsState.get(ws);
   if (!state) {
-    ws.send(JSON.stringify({ type: 'error', message: 'No workspace set' }));
+    ws.send(JSON.stringify({ type: 'error', message: 'No panel set' }));
     return;
   }
   
@@ -342,7 +342,7 @@ async function handleThreadRename(ws, msg) {
 async function handleThreadDelete(ws, msg) {
   const state = wsState.get(ws);
   if (!state) {
-    ws.send(JSON.stringify({ type: 'error', message: 'No workspace set' }));
+    ws.send(JSON.stringify({ type: 'error', message: 'No panel set' }));
     return;
   }
   
@@ -462,7 +462,7 @@ function getCurrentThreadManager(ws) {
 
 module.exports = {
   // Setup
-  setWorkspace,
+  setPanel,
   getState,
   cleanup,
   

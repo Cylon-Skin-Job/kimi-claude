@@ -15,7 +15,7 @@ const HOLD_DURATION_MS = 9 * 60 * 1000; // 9 minutes
 /**
  * Create a hold registry.
  *
- * @param {string} issuesDir - Absolute path to issues workspace
+ * @param {string} issuesDir - Absolute path to issues panel
  * @returns {Object} Registry with hold(), release(), getHolds() methods
  */
 function createHoldRegistry(issuesDir, options = {}) {

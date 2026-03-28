@@ -18,12 +18,12 @@ const DEFAULT_CONFIG = {
 
 class ThreadManager {
   /**
-   * @param {string} workspacePath - Path to workspace directory (e.g., ai/workspaces/{id})
+   * @param {string} panelPath - Path to panel directory (e.g., ai/panels/{id})
    * @param {Partial<import('./types').ThreadManagerConfig>} [config]
    */
-  constructor(workspacePath, config = {}) {
-    this.workspacePath = workspacePath;
-    this.threadsDir = path.join(workspacePath, 'threads');
+  constructor(panelPath, config = {}) {
+    this.panelPath = panelPath;
+    this.threadsDir = path.join(panelPath, 'threads');
     this.config = { ...DEFAULT_CONFIG, ...config };
     
     /** @type {ThreadIndex} */
@@ -199,7 +199,7 @@ class ThreadManager {
     /** @type {import('./types').ThreadSession} */
     const session = {
       threadId,
-      workspaceId: path.basename(this.workspacePath),
+      panelId: path.basename(this.panelPath),
       wireProcess,
       ws,
       lastActivity: Date.now(),

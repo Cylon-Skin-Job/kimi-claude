@@ -215,7 +215,7 @@ async function runTests() {
 
 // Cleanup function for test data
 async function cleanup() {
-  const testDir = path.join(__dirname, '..', '..', '..', '..', 'ai', 'workspaces', 'default');
+  const testDir = path.join(__dirname, '..', '..', '..', '..', 'ai', 'panels', 'default');
   try {
     await fs.rm(testDir, { recursive: true, force: true });
     console.log('🧹 Cleaned up test data');

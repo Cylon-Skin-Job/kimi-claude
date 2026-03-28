@@ -146,7 +146,7 @@ function attachOutputMonitor(proc, runId) {
  * Execute a run: create folder, spawn wire, send prompt.
  *
  * @param {string} projectRoot
- * @param {string} agentFolder - Relative folder inside background-agents (e.g. "agents/wiki-updater")
+ * @param {string} agentFolder - Relative folder inside agents (e.g. "agents/wiki-updater")
  * @param {{ frontmatter: Object, body: string, filename: string }} ticket
  * @returns {Promise<{ runId: string, runPath: string, status: string }>}
  */

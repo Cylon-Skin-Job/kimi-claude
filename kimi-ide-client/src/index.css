@@ -331,8 +331,8 @@ body {
   color: var(--text-white);
 }
 
-/* Workspace placeholder */
-.workspace-placeholder {
+/* Panel placeholder */
+.panel-placeholder {
   height: 100%;
   display: flex;
   flex-direction: column;

@@ -2,7 +2,7 @@
  * Thread Management Types
  * 
  * Based on SPEC.md - Thread Management Specification
- * @see ../../../ai/workspaces/capture/specs/SPEC.md
+ * @see ../../../ai/panels/capture/specs/SPEC.md
  */
 
 /**
@@ -31,7 +31,7 @@
 /**
  * @typedef {Object} ThreadSession
  * @property {string} threadId - Thread ID (Kimi session ID)
- * @property {string} workspaceId - Workspace this thread belongs to
+ * @property {string} panelId - Panel this thread belongs to
  * @property {import('child_process').ChildProcess} wireProcess - Kimi CLI wire process
  * @property {import('ws').WebSocket} [ws] - WebSocket connection (if any)
  * @property {number} lastActivity - Timestamp of last activity (for idle timeout)
@@ -42,7 +42,7 @@
  * @typedef {Object} ThreadManagerConfig
  * @property {number} maxActiveSessions - Max active sessions before FIFO eviction (default: 10)
  * @property {number} idleTimeoutMinutes - Minutes before idle session is killed (default: 9)
- * @property {string} aiWorkspacesPath - Path to ai/workspaces directory
+ * @property {string} aiPanelsPath - Path to ai/panels directory
  */
 
 /**

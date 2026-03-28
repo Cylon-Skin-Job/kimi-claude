@@ -1,1 +1,0 @@
-# Lessons for Edge Consistency

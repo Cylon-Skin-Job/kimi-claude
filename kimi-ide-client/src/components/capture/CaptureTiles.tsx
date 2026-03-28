@@ -1,6 +1,6 @@
 /**
  * @module CaptureTiles
- * @role Tile grid view for the Capture workspace
+ * @role Tile grid view for the Capture panel
  *
  * Two modes:
  * - Grid: renders each subfolder as a horizontal TileRow (default)
@@ -54,7 +54,7 @@ export function CaptureTiles() {
       <FilePageView
         file={selected.file}
         siblings={selected.siblings}
-        workspace="capture"
+        panel="capture"
         folder={selected.folder}
         onBack={handleBack}
         onSelectSibling={handleSelectSibling}
@@ -73,7 +73,7 @@ export function CaptureTiles() {
         <TileRow
           key={row.folder}
           label={row.label}
-          workspace="capture"
+          panel="capture"
           folder={row.folder}
           onFileSelect={handleFileSelect(row.folder)}
         />

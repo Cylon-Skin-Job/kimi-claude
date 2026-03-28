@@ -10,7 +10,7 @@ const fs = require('fs').promises;
 const { ThreadWebSocketHandler, ThreadManager } = require('./index');
 
 const TEST_DIR = path.join(__dirname, '.test-ws');
-const AI_WORKSPACES_PATH = TEST_DIR;
+const AI_PANELS_PATH = TEST_DIR;
 
 // Mock WebSocket
 class MockWebSocket {
@@ -42,29 +42,29 @@ async function cleanup() {
   } catch {}
 }
 
-async function testWorkspaceSetup() {
-  console.log('\n🏢 Testing workspace setup...');
-  
+async function testPanelSetup() {
+  console.log('\n🏢 Testing panel setup...');
+
   const ws = new MockWebSocket();
-  
-  // Set workspace
-  ThreadWebSocketHandler.setWorkspace(ws, 'test-workspace', AI_WORKSPACES_PATH);
-  
+
+  // Set panel
+  ThreadWebSocketHandler.setPanel(ws, 'test-panel', AI_PANELS_PATH);
+
   const state = ThreadWebSocketHandler.getState(ws);
   if (!state) throw new Error('State should be set');
-  if (state.workspaceId !== 'test-workspace') throw new Error('Wrong workspace ID');
+  if (state.panelId !== 'test-panel') throw new Error('Wrong panel ID');
   if (!state.threadManager) throw new Error('ThreadManager should be created');
-  
-  console.log('✅ Workspace setup works');
+
+  console.log('✅ Panel setup works');
 }
 
 async function testThreadCreate() {
   console.log('\n📝 Testing thread:create...');
   
   const ws = new MockWebSocket();
-  ThreadWebSocketHandler.setWorkspace(ws, 'create-test', AI_WORKSPACES_PATH);
+  ThreadWebSocketHandler.setPanel(ws, 'create-test', AI_PANELS_PATH);
   
-  // Clear messages from setWorkspace
+  // Clear messages from setPanel
   ws.messages = [];
   
   // Create thread
@@ -91,7 +91,7 @@ async function testThreadRename() {
   console.log('\n✏️ Testing thread:rename...');
   
   const ws = new MockWebSocket();
-  ThreadWebSocketHandler.setWorkspace(ws, 'rename-test', AI_WORKSPACES_PATH);
+  ThreadWebSocketHandler.setPanel(ws, 'rename-test', AI_PANELS_PATH);
   ws.messages = [];
   
   // Create thread first
@@ -116,7 +116,7 @@ async function testThreadDelete() {
   console.log('\n🗑️ Testing thread:delete...');
   
   const ws = new MockWebSocket();
-  ThreadWebSocketHandler.setWorkspace(ws, 'delete-test', AI_WORKSPACES_PATH);
+  ThreadWebSocketHandler.setPanel(ws, 'delete-test', AI_PANELS_PATH);
   ws.messages = [];
   
   // Create thread
@@ -148,7 +148,7 @@ async function testMessageSend() {
   console.log('\n💬 Testing message:send...');
   
   const ws = new MockWebSocket();
-  ThreadWebSocketHandler.setWorkspace(ws, 'msg-test', AI_WORKSPACES_PATH);
+  ThreadWebSocketHandler.setPanel(ws, 'msg-test', AI_PANELS_PATH);
   ws.messages = [];
   
   // Create and open thread
@@ -177,7 +177,7 @@ async function testThreadSwitching() {
   console.log('\n🔄 Testing thread switching...');
   
   const ws = new MockWebSocket();
-  ThreadWebSocketHandler.setWorkspace(ws, 'switch-test', AI_WORKSPACES_PATH);
+  ThreadWebSocketHandler.setPanel(ws, 'switch-test', AI_PANELS_PATH);
   ws.messages = [];
   
   // Create two threads
@@ -219,7 +219,7 @@ async function testCleanup() {
   console.log('\n🧹 Testing cleanup...');
   
   const ws = new MockWebSocket();
-  ThreadWebSocketHandler.setWorkspace(ws, 'cleanup-test', AI_WORKSPACES_PATH);
+  ThreadWebSocketHandler.setPanel(ws, 'cleanup-test', AI_PANELS_PATH);
   ws.messages = [];
   
   // Create thread
@@ -242,7 +242,7 @@ async function runTests() {
   try {
     await cleanup();
     
-    await testWorkspaceSetup();
+    await testPanelSetup();
     await testThreadCreate();
     await testThreadRename();
     await testThreadDelete();

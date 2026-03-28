@@ -22,27 +22,27 @@ export type FileErrorCode =
   | 'EACCES'
   | 'ENOTDIR'
   | 'EISDIR'
-  | 'ENOTWORKSPACE'
+  | 'ENOTPANEL'
   | 'ETOOLARGE'
   | 'UNKNOWN';
 
 // Client -> Server
 export interface FileTreeRequest {
   type: 'file_tree_request';
-  workspace: string;
+  panel: string;
   path?: string;
 }
 
 export interface FileContentRequest {
   type: 'file_content_request';
-  workspace: string;
+  panel: string;
   path: string;
 }
 
 // Server -> Client (success)
 export interface FileTreeResponse {
   type: 'file_tree_response';
-  workspace: string;
+  panel: string;
   path: string;
   success: true;
   nodes: FileTreeNode[];
@@ -50,7 +50,7 @@ export interface FileTreeResponse {
 
 export interface FileContentResponse {
   type: 'file_content_response';
-  workspace: string;
+  panel: string;
   path: string;
   success: true;
   content: string;
@@ -61,7 +61,7 @@ export interface FileContentResponse {
 // Server -> Client (error)
 export interface FileOperationError {
   type: 'file_tree_response' | 'file_content_response';
-  workspace: string;
+  panel: string;
   path: string;
   success: false;
   error: string;
@@ -71,16 +71,16 @@ export interface FileOperationError {
 // Server -> Client (file watching stub)
 export interface FileChangedNotification {
   type: 'file_changed';
-  workspace: string;
+  panel: string;
   path: string;
   change: 'created' | 'modified' | 'deleted';
   timestamp: number;
 }
 
-// Server -> Client (workspace configuration on connect)
-export interface WorkspaceConfigMessage {
-  type: 'workspace_config';
-  workspace: string;
+// Server -> Client (panel configuration on connect)
+export interface PanelConfigMessage {
+  type: 'panel_config';
+  panel: string;
   projectRoot: string;
   projectName: string;
 }

@@ -6,13 +6,13 @@
  * Writes directly to the Zustand store. React components read from the store only.
  */
 
-import { useWorkspaceStore } from '../state/workspaceStore';
+import { usePanelStore } from '../state/panelStore';
 import { toolNameToSegmentType, SEGMENT_ICONS } from '../lib/instructions';
 import { isGroupable, getSummaryField } from '../lib/segmentCatalog';
 import { setLoggerWs, captureConsoleLogs } from '../lib/logger';
 import { loadRootTree } from '../lib/file-tree';
 import { showToast } from '../lib/toast';
-import { loadAllWorkspaces } from '../lib/workspaces';
+import { loadAllPanels } from '../lib/panels';
 import type { WebSocketMessage, ExchangeData, AssistantPart, StreamSegment, SegmentType } from '../types';
 
 // --- Types ---
@@ -51,18 +51,18 @@ export function connectWs() {
   ws.onopen = () => {
     console.log('[WS] Connected');
     group = null;
-    const store = useWorkspaceStore.getState();
+    const store = usePanelStore.getState();
     store.setWs(ws);
     setLoggerWs(ws);
     captureConsoleLogs();
     ws.send(JSON.stringify({ type: 'initialize' }));
 
-    // Discover workspaces
-    loadAllWorkspaces(ws).then((configs) => {
-      console.log(`[WS] Discovered ${configs.length} workspaces`);
-      useWorkspaceStore.getState().setWorkspaceConfigs(configs);
+    // Discover panels
+    loadAllPanels(ws).then((configs) => {
+      console.log(`[WS] Discovered ${configs.length} panels`);
+      usePanelStore.getState().setPanelConfigs(configs);
     }).catch((err) => {
-      console.error('[WS] Workspace discovery failed:', err);
+      console.error('[WS] Panel discovery failed:', err);
     });
   };
 
@@ -77,7 +77,7 @@ export function connectWs() {
 
   ws.onclose = () => {
     console.log('[WS] Disconnected');
-    useWorkspaceStore.getState().setWs(null);
+    usePanelStore.getState().setWs(null);
     reconnectTimer = setTimeout(connectWs, 3000);
   };
 
@@ -101,8 +101,8 @@ export function disconnectWs() {
 // Every store read uses getState() — always fresh, no stale closures.
 
 function handleMessage(msg: WebSocketMessage) {
-  const store = useWorkspaceStore.getState();
-  const workspace = store.currentWorkspace;
+  const store = usePanelStore.getState();
+  const panel = store.currentPanel;
 
   switch (msg.type) {
     case 'connected':
@@ -111,13 +111,13 @@ function handleMessage(msg: WebSocketMessage) {
 
     case 'turn_begin': {
       console.log('[WS] Turn begin');
-      const wsState = store.workspaces[workspace];
-      if (wsState) {
-        const prevTurn = wsState.currentTurn;
-        const segments = wsState.segments;
+      const panelState = store.panels[panel];
+      if (panelState) {
+        const prevTurn = panelState.currentTurn;
+        const segments = panelState.segments;
 
         if (prevTurn) {
-          store.addMessage(workspace, {
+          store.addMessage(panel, {
             id: prevTurn.id,
             type: 'assistant',
             content: prevTurn.content,
@@ -127,10 +127,10 @@ function handleMessage(msg: WebSocketMessage) {
         }
       }
 
-      store.resetSegments(workspace);
+      store.resetSegments(panel);
       group = null;
 
-      store.setCurrentTurn(workspace, {
+      store.setCurrentTurn(panel, {
         id: msg.turnId || '',
         content: '',
         status: 'streaming',
@@ -151,11 +151,11 @@ function handleMessage(msg: WebSocketMessage) {
           console.log(`[TIMING] FIRST TOKEN (content) at ${t.firstTokenAt.toFixed(1)}ms — TTFT: ${ttft.toFixed(1)}ms`);
         }
         group = null;
-        store.appendSegment(workspace, 'text', msg.text);
+        store.appendSegment(panel, 'text', msg.text);
 
-        const turn = useWorkspaceStore.getState().workspaces[workspace]?.currentTurn;
+        const turn = usePanelStore.getState().panels[panel]?.currentTurn;
         if (turn) {
-          store.updateTurnContent(workspace, turn.content + msg.text);
+          store.updateTurnContent(panel, turn.content + msg.text);
         }
       }
       break;
@@ -170,7 +170,7 @@ function handleMessage(msg: WebSocketMessage) {
           console.log(`[TIMING] FIRST TOKEN (thinking) at ${t.firstTokenAt.toFixed(1)}ms — TTFT: ${ttft.toFixed(1)}ms`);
         }
         group = null;
-        store.appendSegment(workspace, 'think', msg.text);
+        store.appendSegment(panel, 'think', msg.text);
       }
       break;
 
@@ -184,8 +184,8 @@ function handleMessage(msg: WebSocketMessage) {
           group.count++;
         } else {
           group = null;
-          const segIndex = useWorkspaceStore.getState().workspaces[workspace]?.segments.length ?? 0;
-          store.pushSegment(workspace, {
+          const segIndex = usePanelStore.getState().panels[panel]?.segments.length ?? 0;
+          store.pushSegment(panel, {
             type: segType,
             content: '',
             toolCallId,
@@ -200,7 +200,7 @@ function handleMessage(msg: WebSocketMessage) {
         }
       } else {
         group = null;
-        store.pushSegment(workspace, {
+        store.pushSegment(panel, {
           type: segType,
           content: '',
           toolCallId,
@@ -219,11 +219,11 @@ function handleMessage(msg: WebSocketMessage) {
         const summaryLine = typeof summaryValue === 'string'
           ? summaryValue
           : msg.toolOutput?.slice(0, 80) || group.type;
-        const prefix = useWorkspaceStore.getState().workspaces[workspace]?.segments[group.segmentIndex]?.content ? '\n' : '';
-        store.appendSegmentContentByIndex(workspace, group.segmentIndex, prefix + summaryLine);
+        const prefix = usePanelStore.getState().panels[panel]?.segments[group.segmentIndex]?.content ? '\n' : '';
+        store.appendSegmentContentByIndex(panel, group.segmentIndex, prefix + summaryLine);
       } else {
         if (toolCallId) {
-          store.updateSegmentByToolCallId(workspace, toolCallId, {
+          store.updateSegmentByToolCallId(panel, toolCallId, {
             content: msg.toolOutput || '',
             toolArgs: msg.toolArgs,
             toolDisplay: msg.toolDisplay,
@@ -237,22 +237,22 @@ function handleMessage(msg: WebSocketMessage) {
     }
 
     case 'turn_end': {
-      const currentTurn = useWorkspaceStore.getState().workspaces[workspace]?.currentTurn;
+      const currentTurn = usePanelStore.getState().panels[panel]?.currentTurn;
 
       if (currentTurn) {
-        const segs = useWorkspaceStore.getState().workspaces[workspace]?.segments || [];
+        const segs = usePanelStore.getState().panels[panel]?.segments || [];
         if (segs.length > 0) {
           const lastSeg = segs[segs.length - 1];
           if (!lastSeg.complete) {
-            store.updateSegmentByToolCallId(workspace, lastSeg.toolCallId || '', {
+            store.updateSegmentByToolCallId(panel, lastSeg.toolCallId || '', {
               complete: true,
             });
             if (!lastSeg.toolCallId) {
-              store.updateLastSegment(workspace, { complete: true });
+              store.updateLastSegment(panel, { complete: true });
             }
           }
         }
-        store.setPendingTurnEnd(workspace, true);
+        store.setPendingTurnEnd(panel, true);
       }
 
       break;
@@ -289,7 +289,7 @@ function handleMessage(msg: WebSocketMessage) {
       if (msg.thread && msg.threadId) {
         store.addThread({ threadId: msg.threadId, entry: msg.thread });
         store.setCurrentThreadId(msg.threadId);
-        store.clearWorkspace(workspace);
+        store.clearPanel(panel);
         loadRootTree();
       } else {
         console.error('[WS] thread:created missing data:', msg);
@@ -300,14 +300,14 @@ function handleMessage(msg: WebSocketMessage) {
       console.log('[WS] thread:opened:', msg.threadId?.slice(0, 8), 'exchanges:', msg.exchanges?.length, 'history:', msg.history?.length);
       if (msg.threadId && msg.thread) {
         store.setCurrentThreadId(msg.threadId);
-        store.clearWorkspace(workspace);
+        store.clearPanel(panel);
 
         if (msg.exchanges && msg.exchanges.length > 0) {
           console.log('[WS] Loading', msg.exchanges.length, 'exchanges (rich format)');
-          convertExchangesToMessages(workspace, msg.exchanges);
+          convertExchangesToMessages(panel, msg.exchanges);
         } else if (msg.history && msg.history.length > 0) {
           console.log('[WS] Loading', msg.history.length, 'messages (legacy format)');
-          convertHistoryToMessages(workspace, msg.history);
+          convertHistoryToMessages(panel, msg.history);
         }
       }
       break;
@@ -335,10 +335,10 @@ function handleMessage(msg: WebSocketMessage) {
 
 // --- History conversion helpers ---
 
-function convertExchangesToMessages(workspace: string, exchanges: ExchangeData[]) {
-  const store = useWorkspaceStore.getState();
+function convertExchangesToMessages(panel: string, exchanges: ExchangeData[]) {
+  const store = usePanelStore.getState();
   exchanges.forEach((exchange, idx) => {
-    store.addMessage(workspace, {
+    store.addMessage(panel, {
       id: `ex-${idx}-user`,
       type: 'user',
       content: exchange.user,
@@ -351,7 +351,7 @@ function convertExchangesToMessages(workspace: string, exchanges: ExchangeData[]
       .map((p) => p.content)
       .join('');
 
-    store.addMessage(workspace, {
+    store.addMessage(panel, {
       id: `ex-${idx}-assistant`,
       type: 'assistant',
       content: assistantContent,
@@ -382,12 +382,12 @@ function convertPartToSegment(part: AssistantPart): StreamSegment {
 }
 
 function convertHistoryToMessages(
-  workspace: string,
+  panel: string,
   history: { role: 'user' | 'assistant'; content: string; hasToolCalls?: boolean }[],
 ) {
-  const store = useWorkspaceStore.getState();
+  const store = usePanelStore.getState();
   history.forEach((h, idx) => {
-    store.addMessage(workspace, {
+    store.addMessage(panel, {
       id: `hist-${idx}`,
       type: h.role,
       content: h.content,

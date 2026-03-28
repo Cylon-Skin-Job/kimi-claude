@@ -1,26 +1,26 @@
 import { useRef, useEffect, useState } from 'react';
-import { useWorkspaceStore } from '../state/workspaceStore';
+import { usePanelStore } from '../state/panelStore';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 
 interface ChatAreaProps {
-  workspace: string;
+  panel: string;
 }
 
-export function ChatArea({ workspace }: ChatAreaProps) {
+export function ChatArea({ panel }: ChatAreaProps) {
   const lastUserMsgRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const justSentRef = useRef(false);
   const [isSending, setIsSending] = useState(false);
 
   // Store data
-  const messages = useWorkspaceStore((state) => state.workspaces[workspace]?.messages || []);
-  const currentTurn = useWorkspaceStore((state) => state.workspaces[workspace]?.currentTurn || null);
-  const segments = useWorkspaceStore((state) => state.workspaces[workspace]?.segments || []);
-  const contextUsage = useWorkspaceStore((state) => state.contextUsage);
+  const messages = usePanelStore((state) => state.panels[panel]?.messages || []);
+  const currentTurn = usePanelStore((state) => state.panels[panel]?.currentTurn || null);
+  const segments = usePanelStore((state) => state.panels[panel]?.segments || []);
+  const contextUsage = usePanelStore((state) => state.contextUsage);
 
-  const addMessage = useWorkspaceStore((state) => state.addMessage);
-  const sendMessage = useWorkspaceStore((state) => state.sendMessage);
+  const addMessage = usePanelStore((state) => state.addMessage);
+  const sendMessage = usePanelStore((state) => state.sendMessage);
 
   // On send: scroll user bubble to top of viewport
   useEffect(() => {
@@ -44,14 +44,14 @@ export function ChatArea({ workspace }: ChatAreaProps) {
     setIsSending(true);
 
     justSentRef.current = true;
-    addMessage(workspace, {
+    addMessage(panel, {
       id: Date.now().toString(),
       type: 'user',
       content: text,
       timestamp: Date.now()
     });
 
-    sendMessage(text, workspace);
+    sendMessage(text, panel);
   };
 
   return (
@@ -84,11 +84,11 @@ export function ChatArea({ workspace }: ChatAreaProps) {
       <div className="chat-messages" ref={chatContainerRef}>
         {messages.length === 0 && !currentTurn && !showOrb ? (
           <div className="message message-system">
-            {workspace} workspace active - Start a conversation
+            {panel} panel active - Start a conversation
           </div>
         ) : (
           <MessageList
-            workspace={workspace}
+            panel={panel}
             messages={messages}
             currentTurn={currentTurn}
             segments={segments}
@@ -102,7 +102,7 @@ export function ChatArea({ workspace }: ChatAreaProps) {
         <div style={{ minHeight: '80vh' }} />
       </div>
 
-      <ChatInput onSend={handleSend} disabled={false} workspace={workspace} />
+      <ChatInput onSend={handleSend} disabled={false} panel={panel} />
     </section>
   );
 }

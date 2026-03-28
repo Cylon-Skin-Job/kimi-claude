@@ -1,5 +1,5 @@
-// Workspace Types — WorkspaceId is now a string alias (workspaces are discovered dynamically)
-export type WorkspaceId = string;
+// Panel Types — PanelId is now a string alias (panels are discovered dynamically)
+export type PanelId = string;
 
 // All segment types that can appear in the ordered stream
 export type SegmentType =
@@ -42,8 +42,8 @@ export interface AssistantTurn {
   thinkingContent: string;
 }
 
-// Workspace State
-export interface WorkspaceState {
+// Panel State
+export interface PanelState {
   // Messages
   messages: Message[];
   currentTurn: AssistantTurn | null;
@@ -180,6 +180,6 @@ export const TIMING = {
   CODE_RESUME_DELAY: 300,
 } as const;
 
-// WORKSPACE_CONFIGS removed — workspaces are now discovered dynamically.
-// Use useWorkspaceStore().workspaceConfigs instead.
-// See lib/workspaces.ts for WorkspaceConfig type.
+// PANEL_CONFIGS removed — panels are now discovered dynamically.
+// Use usePanelStore().panelConfigs instead.
+// See lib/panels.ts for PanelConfig type.

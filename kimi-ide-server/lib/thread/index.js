@@ -3,7 +3,7 @@
  * 
  * Provides persistent, named conversations with lifecycle management.
  * 
- * @see ../../../ai/workspaces/capture/specs/SPEC.md - Full specification
+ * @see ../../../ai/panels/capture/specs/SPEC.md - Full specification
  */
 
 const { ThreadIndex } = require('./ThreadIndex');

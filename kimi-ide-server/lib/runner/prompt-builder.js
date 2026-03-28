@@ -86,14 +86,14 @@ function parsePrompt(promptPath) {
  * Assemble the full orchestrator context for a run.
  *
  * @param {string} projectRoot
- * @param {string} agentFolder - Relative folder inside background-agents
+ * @param {string} agentFolder - Relative folder inside agents
  * @param {string} runPath - Absolute path to the run directory
  * @param {{ frontmatter: Object, body: string, filename: string }} ticket
  * @returns {{ systemContext: string, userMessage: string }}
  */
 function buildContext(projectRoot, agentFolder, runPath, ticket) {
   const agentBase = path.join(
-    projectRoot, 'ai', 'workspaces', 'background-agents', agentFolder
+    projectRoot, 'ai', 'panels', 'agents', agentFolder
   );
 
   // --- System context ---

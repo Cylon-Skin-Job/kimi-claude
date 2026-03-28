@@ -167,15 +167,15 @@
   border-radius: 0 2px 2px 0;
 }
 
-/* Workspace Container */
-.workspace-container {
+/* Panel Container */
+.panel-container {
   grid-column: 2 / -1;
   grid-row: 2;
   position: relative;
   overflow: hidden;
 }
 
-.workspace {
+.panel {
   position: absolute;
   inset: 0;
   display: grid;
@@ -185,7 +185,7 @@
   transition: opacity 0.2s ease;
 }
 
-.workspace.active {
+.panel.active {
   opacity: 1;
   visibility: visible;
 }

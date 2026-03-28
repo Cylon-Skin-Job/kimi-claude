@@ -123,8 +123,8 @@ async function testChatFileFormat() {
 async function testThreadManager() {
   console.log('\n⚙️  Testing ThreadManager...');
   
-  const workspacePath = path.join(TEST_DIR, 'workspace');
-  const manager = new ThreadManager(workspacePath, {
+  const panelPath = path.join(TEST_DIR, 'panel');
+  const manager = new ThreadManager(panelPath, {
     maxActiveSessions: 2,
     idleTimeoutMinutes: 1
   });

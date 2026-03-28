@@ -63,8 +63,8 @@ function loadAllTickets(dirPath) {
 }
 
 /**
- * Load sync.json from the issues workspace.
- * @param {string} issuesDir - Path to the issues workspace root
+ * Load sync.json from the issues panel.
+ * @param {string} issuesDir - Path to the issues panel root
  * @returns {Object|null}
  */
 function loadSync(issuesDir) {

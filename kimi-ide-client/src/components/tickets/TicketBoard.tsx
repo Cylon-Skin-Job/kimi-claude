@@ -12,8 +12,8 @@
  */
 
 import { useCallback, useEffect, useRef } from 'react';
-import { useWorkspaceData } from '../../hooks/useWorkspaceData';
-import { useWorkspaceStore } from '../../state/workspaceStore';
+import { usePanelData } from '../../hooks/usePanelData';
+import { usePanelStore } from '../../state/panelStore';
 import { useTicketStore, type Ticket } from '../../state/ticketStore';
 import './tickets.css';
 
@@ -123,7 +123,7 @@ function Column({ title, tickets, icon }: { title: string; tickets: Ticket[]; ic
 }
 
 export function TicketBoard() {
-  const ws = useWorkspaceStore((s) => s.ws);
+  const ws = usePanelStore((s) => s.ws);
   const lastDailyWsRef = useRef<WebSocket | null>(null);
 
   const onIndex = useCallback((content: string) => {
@@ -139,8 +139,8 @@ export function TicketBoard() {
     useTicketStore.getState().setError(error);
   }, []);
 
-  useWorkspaceData({
-    workspace: 'issues',
+  usePanelData({
+    panel: 'issues',
     indexPath: 'tickets.json',
     onIndex,
     onError,
@@ -153,7 +153,7 @@ export function TicketBoard() {
     lastDailyWsRef.current = ws;
     ws.send(JSON.stringify({
       type: 'thread:open-daily',
-      workspace: 'issues',
+      panel: 'issues',
     }));
   }, [ws]);
 

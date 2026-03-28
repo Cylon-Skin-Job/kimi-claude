@@ -2,7 +2,7 @@
  * Run Folder Setup — creates the run directory and freezes seed files.
  *
  * Each run lives at:
- *   {projectRoot}/ai/workspaces/background-agents/{agentFolder}/runs/{timestamp}/
+ *   {projectRoot}/ai/panels/agents/{agentFolder}/runs/{timestamp}/
  */
 
 const fs = require('fs');
@@ -22,13 +22,13 @@ function makeTimestamp() {
  * Create a run folder, freeze seed files, write manifest and run-index.
  *
  * @param {string} projectRoot - Absolute path to the project root
- * @param {string} agentFolder - Relative folder inside background-agents (e.g. "agents/wiki-updater")
+ * @param {string} agentFolder - Relative folder inside agents (e.g. "agents/wiki-updater")
  * @param {{ frontmatter: Object, body: string, filename: string }} ticket - Parsed ticket object
  * @returns {{ runId: string, runPath: string, manifest: Object }}
  */
 function createRunFolder(projectRoot, agentFolder, ticket) {
   const runId = makeTimestamp();
-  const agentBase = path.join(projectRoot, 'ai', 'workspaces', 'background-agents', agentFolder);
+  const agentBase = path.join(projectRoot, 'ai', 'panels', 'agents', agentFolder);
   const runPath = path.join(agentBase, 'runs', runId);
 
   // Create run directory (and runs/ parent if needed)
@@ -36,9 +36,9 @@ function createRunFolder(projectRoot, agentFolder, ticket) {
 
   // --- Freeze seed files ---
 
-  // 1. ticket.md — copy from the issues workspace
+  // 1. ticket.md — copy from the issues panel
   const ticketSource = path.join(
-    projectRoot, 'ai', 'workspaces', 'issues', ticket.filename
+    projectRoot, 'ai', 'panels', 'issues', ticket.filename
   );
   if (fs.existsSync(ticketSource)) {
     fs.copyFileSync(ticketSource, path.join(runPath, 'ticket.md'));

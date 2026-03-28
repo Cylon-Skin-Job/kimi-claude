@@ -6,23 +6,23 @@
  * The React listener hook stays in hooks/useFileTree.ts.
  */
 
-import { useWorkspaceStore } from '../state/workspaceStore';
+import { usePanelStore } from '../state/panelStore';
 import { useFileStore } from '../state/fileStore';
 import type { FileInfo, FileTreeNode } from '../types/file-explorer';
 
 export function loadRootTree() {
-  const ws = useWorkspaceStore.getState().ws;
+  const ws = usePanelStore.getState().ws;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   useFileStore.getState().setLoading(true);
   useFileStore.getState().setError(null);
   ws.send(JSON.stringify({
     type: 'file_tree_request',
-    workspace: 'coding-agent',
+    panel: 'explorer',
   }));
 }
 
 export function loadFolderChildren(folderPath: string): Promise<FileTreeNode[]> {
-  const ws = useWorkspaceStore.getState().ws;
+  const ws = usePanelStore.getState().ws;
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     return Promise.reject(new Error('WebSocket not connected'));
   }
@@ -53,7 +53,7 @@ export function loadFolderChildren(folderPath: string): Promise<FileTreeNode[]> 
     ws.addEventListener('message', handleMessage);
     ws.send(JSON.stringify({
       type: 'file_tree_request',
-      workspace: 'coding-agent',
+      panel: 'explorer',
       path: folderPath,
     }));
 
@@ -65,7 +65,7 @@ export function loadFolderChildren(folderPath: string): Promise<FileTreeNode[]> 
 }
 
 export async function loadExpandedFolders(): Promise<void> {
-  const ws = useWorkspaceStore.getState().ws;
+  const ws = usePanelStore.getState().ws;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
   const { expandedFolders, getFolderChildren } = useFileStore.getState();
@@ -91,14 +91,14 @@ export async function loadExpandedFolders(): Promise<void> {
 }
 
 export function loadFileContent(file: FileInfo) {
-  const ws = useWorkspaceStore.getState().ws;
+  const ws = usePanelStore.getState().ws;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   useFileStore.getState().setLoading(true);
   useFileStore.getState().setError(null);
   useFileStore.getState().setPendingFile(file);
   ws.send(JSON.stringify({
     type: 'file_content_request',
-    workspace: 'coding-agent',
+    panel: 'explorer',
     path: file.path,
   }));
 }

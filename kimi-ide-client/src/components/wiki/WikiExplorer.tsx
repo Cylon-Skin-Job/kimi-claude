@@ -1,6 +1,6 @@
 /**
  * @module WikiExplorer
- * @role Top-level wiki workspace component — three-column layout
+ * @role Top-level wiki-viewer panel component — three-column layout
  * @reads wikiStore: indexLoaded
  *
  * Renders: TopicList (left) | PageViewer (center) | EdgePanel (right)
@@ -8,8 +8,8 @@
  */
 
 import { useCallback, useEffect } from 'react';
-import { useWorkspaceData } from '../../hooks/useWorkspaceData';
-import { useWorkspaceStore } from '../../state/workspaceStore';
+import { usePanelData } from '../../hooks/usePanelData';
+import { usePanelStore } from '../../state/panelStore';
 import { useWikiStore } from '../../state/wikiStore';
 import { TopicList } from './TopicList';
 import { PageViewer } from './PageViewer';
@@ -19,7 +19,7 @@ import './wiki.css';
 
 export function WikiExplorer() {
   const activeTopic = useWikiStore((s) => s.activeTopic);
-  const ws = useWorkspaceStore((s) => s.ws);
+  const ws = usePanelStore((s) => s.ws);
 
   const onIndex = useCallback((content: string) => {
     try {
@@ -43,8 +43,8 @@ export function WikiExplorer() {
     useWikiStore.getState().setPageLoading(false);
   }, []);
 
-  const { request } = useWorkspaceData({
-    workspace: 'wiki',
+  const { request } = usePanelData({
+    panel: 'wiki-viewer',
     indexPath: 'topics.json',
     onIndex,
     onFileContent,
@@ -75,7 +75,7 @@ export function WikiExplorer() {
       <TopicList />
       <PageViewer />
       <EdgePanel />
-      <FloatingChat workspace="wiki" />
+      <FloatingChat panel="wiki-viewer" />
     </div>
   );
 }

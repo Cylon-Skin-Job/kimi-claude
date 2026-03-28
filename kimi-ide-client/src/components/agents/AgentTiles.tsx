@@ -1,6 +1,6 @@
 /**
  * @module AgentTiles
- * @role Full-width tile grid for the background-agents workspace
+ * @role Full-width tile grid for the agents panel
  * @reads agentStore: agents, loaded, expandedAgent
  *
  * Displays agent cards in a responsive grid. Clicking a card opens
@@ -8,8 +8,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { useWorkspaceData } from '../../hooks/useWorkspaceData';
-import { useWorkspaceStore } from '../../state/workspaceStore';
+import { usePanelData } from '../../hooks/usePanelData';
+import { usePanelStore } from '../../state/panelStore';
 import { useAgentStore, AGENT_CONFIG_FILES, type Agent } from '../../state/agentStore';
 import { PromptCardView } from './PromptCardView';
 import './agents.css';
@@ -76,7 +76,7 @@ function AgentDetail({ agent, request }: { agent: Agent; request: (path: string)
   const setExpanded = useAgentStore((s) => s.setExpandedAgent);
   const configFiles = useAgentStore((s) => s.configFiles);
   const workflows = useAgentStore((s) => s.workflows);
-  const ws = useWorkspaceStore((s) => s.ws);
+  const ws = usePanelStore((s) => s.ws);
 
   const [activeTab, setActiveTab] = useState<'workflows' | 'runs' | 'settings'>('workflows');
   const [activeFile, setActiveFile] = useState<string | null>(null);
@@ -91,21 +91,21 @@ function AgentDetail({ agent, request }: { agent: Agent; request: (path: string)
       if (!active) return;
       try {
         const msg = JSON.parse(event.data);
-        if (msg.type === 'file_tree_response' && msg.workspace === 'background-agents' && msg.path === `System/${agent.id}`) {
+        if (msg.type === 'file_tree_response' && msg.panel === 'agents' && msg.path === `System/${agent.id}`) {
           const files = (msg.nodes || [])
             .filter((n: any) => n.type === 'file' && AGENT_CONFIG_FILES.includes(n.name))
             .map((n: any) => n.name)
             .sort((a: string, b: string) => AGENT_CONFIG_FILES.indexOf(a) - AGENT_CONFIG_FILES.indexOf(b));
           useAgentStore.getState().setConfigFiles(files);
         }
-        if (msg.type === 'file_tree_response' && msg.workspace === 'background-agents' && msg.path === `System/${agent.id}/workflows`) {
+        if (msg.type === 'file_tree_response' && msg.panel === 'agents' && msg.path === `System/${agent.id}/workflows`) {
           const folders = (msg.nodes || [])
             .filter((n: any) => n.type === 'folder')
             .map((n: any) => n.name)
             .sort();
           useAgentStore.getState().setWorkflows(folders);
         }
-        if (msg.type === 'file_content_response' && msg.workspace === 'background-agents' && msg.success) {
+        if (msg.type === 'file_content_response' && msg.panel === 'agents' && msg.success) {
           // Key by workflow folder name if it's a PROMPT.md, otherwise by filename
           const parts = msg.path.split('/');
           const fileName = parts[parts.length - 1];
@@ -121,8 +121,8 @@ function AgentDetail({ agent, request }: { agent: Agent; request: (path: string)
     };
 
     ws.addEventListener('message', handleMessage);
-    ws.send(JSON.stringify({ type: 'file_tree_request', workspace: 'background-agents', path: `System/${agent.id}` }));
-    ws.send(JSON.stringify({ type: 'file_tree_request', workspace: 'background-agents', path: `System/${agent.id}/workflows` }));
+    ws.send(JSON.stringify({ type: 'file_tree_request', panel: 'agents', path: `System/${agent.id}` }));
+    ws.send(JSON.stringify({ type: 'file_tree_request', panel: 'agents', path: `System/${agent.id}/workflows` }));
 
     return () => { active = false; ws.removeEventListener('message', handleMessage); };
   }, [agent.id, ws]);
@@ -294,8 +294,8 @@ export function AgentTiles() {
     useAgentStore.getState().setError(error);
   }, []);
 
-  const { request } = useWorkspaceData({
-    workspace: 'background-agents',
+  const { request } = usePanelData({
+    panel: 'agents',
     indexPath: 'agents.json',
     onIndex,
     onFileContent,

@@ -13,8 +13,8 @@ const { spawn } = require('child_process');
 const { v4: uuidv4, v4: generateId } = require('uuid');
 const { ThreadWebSocketHandler } = require('./index');
 
-// AI workspaces base path
-const AI_WORKSPACES_PATH = path.join(__dirname, '..', '..', '..', 'ai', 'workspaces');
+// AI panels base path
+const AI_PANELS_PATH = path.join(__dirname, '..', '..', '..', 'ai', 'panels');
 
 /**
  * Create a wire process for a thread
@@ -76,8 +76,8 @@ function sendToWire(wire, method, params, id = null) {
  * @param {object} options.sessions - Map to store session state (ws -> session)
  * @param {Function} options.getDefaultProjectRoot - Function to get project root
  * @param {Function} options.logWire - Function to log wire messages
- * @param {Function} [options.setSessionRoot] - Optional: existing workspace root management
- * @param {Function} [options.getSessionRoot] - Optional: existing workspace root management
+ * @param {Function} [options.setSessionRoot] - Optional: existing panel root management
+ * @param {Function} [options.getSessionRoot] - Optional: existing panel root management
  * @returns {Function} WebSocket connection handler
  */
 function createWebSocketHandler(options) {
@@ -101,8 +101,8 @@ function createWebSocketHandler(options) {
     };
     sessions.set(ws, session);
     
-    // Set default workspace (can be changed by client)
-    ThreadWebSocketHandler.setWorkspace(ws, 'default', AI_WORKSPACES_PATH);
+    // Set default panel (can be changed by client)
+    ThreadWebSocketHandler.setPanel(ws, 'default', AI_PANELS_PATH);
     
     // Send thread list on connect
     ThreadWebSocketHandler.sendThreadList(ws);
@@ -395,5 +395,5 @@ function createWebSocketHandler(options) {
 module.exports = {
   createWebSocketHandler,
   spawnThreadWire,
-  AI_WORKSPACES_PATH
+  AI_PANELS_PATH
 };

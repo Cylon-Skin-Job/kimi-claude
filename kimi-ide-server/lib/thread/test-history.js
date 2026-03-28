@@ -8,7 +8,7 @@ const { HistoryFile } = require('./HistoryFile');
 const { ThreadManager } = require('./ThreadManager');
 
 const TEST_DIR = path.join(__dirname, '..', '..', '..', 'test-output');
-const WORKSPACE_DIR = path.join(TEST_DIR, 'ai', 'workspaces', 'test-workspace');
+const WORKSPACE_DIR = path.join(TEST_DIR, 'ai', 'panels', 'test-panel');
 
 async function cleanup() {
   try {

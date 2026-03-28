@@ -1,5 +1,0 @@
-# History
-
-## Recent
-
-## Daily Summaries

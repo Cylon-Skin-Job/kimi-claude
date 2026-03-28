@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useWorkspaceStore } from '../state/workspaceStore';
+import { usePanelStore } from '../state/panelStore';
 import { logger } from '../lib/logger';
 
 interface SidebarProps {
-  workspace: string;
+  panel: string;
 }
 
 interface ConfirmationModal {
@@ -13,11 +13,11 @@ interface ConfirmationModal {
   onCancel: () => void;
 }
 
-export function Sidebar({ workspace }: SidebarProps) {
-  const config = useWorkspaceStore((s) => s.getWorkspaceConfig(workspace));
-  const ws = useWorkspaceStore((state) => state.ws);
-  const threads = useWorkspaceStore((state) => state.threads);
-  const currentThreadId = useWorkspaceStore((state) => state.currentThreadId);
+export function Sidebar({ panel }: SidebarProps) {
+  const config = usePanelStore((s) => s.getPanelConfig(panel));
+  const ws = usePanelStore((state) => state.ws);
+  const threads = usePanelStore((state) => state.threads);
+  const currentThreadId = usePanelStore((state) => state.currentThreadId);
   
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -34,7 +34,7 @@ export function Sidebar({ workspace }: SidebarProps) {
     if (ws?.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'thread:list' }));
     }
-  }, [ws, workspace]);
+  }, [ws, panel]);
 
   // Handle WebSocket messages for confirmation modal
   useEffect(() => {
@@ -149,7 +149,7 @@ export function Sidebar({ workspace }: SidebarProps) {
   
   return (
     <aside className="sidebar">
-      <div className="sidebar-header">{config?.name || workspace}</div>
+      <div className="sidebar-header">{config?.name || panel}</div>
       
       <button 
         className="new-chat-btn"
