@@ -6,23 +6,91 @@
 
 ## What This Is
 
-Evidence-Gated Execution (EGE) is the default execution pattern for all agents in the kimi-claude system. Before any agent modifies state — wiki pages, code, tickets, configuration — it must produce a structured attestation, validate that attestation independently, and then execute only what the validated attestation describes.
+Evidence-Gated Execution (EGE) is the validation philosophy for the entire system. It defines when and how AI work gets checked — from background agents running autonomously to the user invoking a quick review in chat.
 
-The pattern has three phases:
+The core principle: **every autonomous mutation must be backed by evidence, verified independently, and recorded as an artifact.** But the system is not a straightjacket — interactive work with a human in the loop is exempt. The user decides when to invoke validation, not the system.
 
-1. **Produce** — Gather evidence, reason about the change, write the attestation. The trained attention is on *making the case*.
-2. **Validate** — Shift roles. The trained attention is now on *breaking the case*. Does the evidence support the change? Are sources real? Is anything hallucinated?
-3. **Execute** — The validated attestation becomes the specification. Make exactly the changes it describes. Record the outcome back onto the attestation.
+---
 
-The attestation is a persistent artifact — it lives alongside the thing it changed as proof that the change was reasoned about, challenged, and executed deliberately.
+## When EGE Applies
+
+### Mandatory: Background Agents
+
+Any agent acting autonomously — wiki updates, code changes via tickets, scheduled maintenance — follows the full EGE loop. No exceptions. The human is not watching, so the system must verify.
+
+The validation is baked into the [Workflow Design Guide](../workflow-design/PAGE.md) as numbered steps:
+
+```
+1. GATHER    → collect evidence from real sources
+2. ATTEST    → produce the attestation (what to change, why, evidence, confidence)
+3. VALIDATE  → independently verify the attestation (sub-agent, fresh context)
+4. EXECUTE   → make exactly the changes the validated attestation describes
+5. RECORD    → write the outcome back, update logs
+```
+
+The gate is between ATTEST and EXECUTE. Nothing executes until VALIDATE passes. See [Workflow Design Guide](../workflow-design/PAGE.md) for implementation details and templates.
+
+### Optional: Interactive Chat
+
+When you're working with an AI assistant in chat, YOU are the validator. You see the diff, you approve or reject. Adding a mandatory 5-step gate to "change this CSS color" is hostile UX.
+
+Instead, the system offers tools you invoke when you want them:
+
+| Tool | What It Does | When To Use |
+|------|-------------|-------------|
+| `/validate` | Runs local checks: tests, build, lint, style, wiki accuracy. Reports findings. | After significant changes, before committing |
+| `/pr` or `/commit` | Generates an [Attestation Card](../attestation-card/PAGE.md) embedded in the PR. A fresh AI instance reviews it. | When shipping work for review |
+| Nothing | You saw the diff. You're satisfied. Move on. | Quick edits, minor fixes |
+
+See [Validation](../validation-subagent/PAGE.md) for details on both tools and the review flow.
+
+### The Boundary
+
+**Human in the loop = optional.** The user has `/validate` and attestation cards available but is never forced to use them.
+
+**Agent acting autonomously = mandatory.** Every workflow step produces evidence. The VALIDATE phase is a required workflow step. The [Attestation Card](../attestation-card/PAGE.md) is the artifact.
+
+---
+
+## The Three Phases
+
+### 1. Produce
+
+Gather evidence, reason about the change, write the attestation. The trained attention is on *making the case*.
+
+- Read the target files, git history, wiki pages, STATE.md
+- Propose specific changes with cited sources
+- Assess confidence per change
+- Document risks
+
+The output is an [Attestation Card](../attestation-card/PAGE.md) — a structured document that records the full reasoning chain.
+
+### 2. Validate
+
+Shift roles. The trained attention is now on *breaking the case*.
+
+The validator receives ONLY the attestation — not the gather output, not the reasoning chain. Its sole job is to verify:
+
+- Does each cited source exist and say what the attestation claims?
+- Does the proposed change follow from the evidence?
+- Is the confidence level justified?
+- Are there sources that should have been consulted but weren't?
+
+**Independence is critical.** The research (CoVe, Meta AI) shows that when a model can see its own reasoning during verification, it repeats hallucinations instead of catching them. The validator works from claims and sources alone.
+
+In background workflows, this is a sub-agent call within the orchestrator — not a separate standing agent. In PR review, this is a fresh AI instance that only sees the diff and the card.
+
+### 3. Execute
+
+The validated attestation becomes the specification. Make exactly the changes it describes. Nothing more, nothing less. Record the outcome back onto the attestation.
 
 ---
 
 ## The Attestation
 
-The discrete artifact produced by this pattern. Each attestation is a file that captures the full reasoning chain: what was gathered, what was proposed, why it was validated, and what was actually done.
+The discrete artifact produced by this pattern. See [Attestation Card](../attestation-card/PAGE.md) for the full template, variants, and generation flow.
 
-*Schema and format: TBD — to be designed based on our implementation needs.*
+In background workflows, the attestation lives in the run folder (`runs/{timestamp}/attestation.md`). In PRs, it's embedded in the PR description. In `/validate`, it's printed to chat (not persisted).
 
 ---
 
@@ -128,18 +196,10 @@ Reinforcement learning to train models to ground responses in retrieved evidence
 
 ---
 
-## Our Implementation
+## Related
 
-*TBD — this section will be built as we design how EGE applies to kimi-claude's workspace agents, workflow templates, and the wiki knowledge graph.*
-
----
-
-## Open Questions
-
-- What is the attestation schema?
-- How does the validation phase achieve independence from the production phase?
-- What external tools/sources does the validator reference?
-- How do attestations relate to existing run folder evidence cards?
-- How does EGE differ in skill-driven (active) vs workflow-driven (background) contexts?
-- Should agent-building agents inject EGE into every workflow by default?
-- How do attestations become edges in the knowledge graph?
+- [Validation](../validation-subagent/PAGE.md) — how validation works in practice (background + foreground)
+- [Attestation Card](../attestation-card/PAGE.md) — the artifact template, generation flow, review agent
+- [Workflow Design Guide](../workflow-design/PAGE.md) — how to build EGE-compliant workflows
+- [System Overview](../system-overview/PAGE.md) — how EGE fits into the three-layer architecture
+- [Agent Folder Structure](../agent-folder-structure/PAGE.md) — where attestations live in run folders
