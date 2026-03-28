@@ -178,6 +178,12 @@ function getWorkspacePath(workspace, ws) {
     if (fs.existsSync(wsRoot)) return wsRoot;
     return null;
   }
+  // Wiki workspace resolves to ai/wiki/ (the unified wiki tree)
+  if (workspace === 'wiki') {
+    const wikiRoot = path.join(getDefaultProjectRoot(), 'ai', 'wiki');
+    if (fs.existsSync(wikiRoot)) return wikiRoot;
+    return null;
+  }
   // All other workspaces resolve to their ai/workspaces/{id}/ folder
   const wsPath = path.join(getDefaultProjectRoot(), 'ai', 'workspaces', workspace);
   if (fs.existsSync(wsPath)) return wsPath;
@@ -1208,8 +1214,8 @@ server.listen(PORT, () => {
   console.log(`[Server] Kimi path: ${process.env.KIMI_PATH || 'kimi'}`);
   console.log(`[Server] Thread storage: ${AI_WORKSPACES_PATH}`);
 
-  // Start wiki hooks
-  const wikiPath = path.join(AI_WORKSPACES_PATH, 'wiki');
+  // Start wiki hooks — watches ai/wiki/ tree (collections with topics)
+  const wikiPath = path.join(getDefaultProjectRoot(), 'ai', 'wiki');
   wikiHooks.start(wikiPath);
 
   // Start project-wide file watcher

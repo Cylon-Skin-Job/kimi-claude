@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "id": "panel-rename",
+  "label": "Panel Rename Spec",
+  "description": "Complete spec for renaming workspace → panel across the entire system",
+  "type": "page",
+  "rank": 13,
+  "icon": "article",
+  "color": null,
+  "created": "2026-03-27T00:00:00Z",
+  "updated": "2026-03-27T23:00:00Z",
+  "frozen": true,
+  "children": null,
+  "edges_out": ["System-Overview", "Universal-Index", "Setup", "Template-Fallback", "Agent-Folder-Structure"],
+  "edges_in": [],
+  "sources": [],
+  "settings": {}
+}

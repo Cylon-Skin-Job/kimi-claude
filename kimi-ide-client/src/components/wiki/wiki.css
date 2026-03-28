@@ -80,6 +80,29 @@
   white-space: nowrap;
 }
 
+.wiki-collection-group {
+  margin-bottom: 4px;
+}
+
+.wiki-collection-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px 4px;
+  color: var(--text-dim, #888);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.wiki-collection-group:first-child .wiki-collection-header {
+  padding-top: 4px;
+}
+
+.wiki-frozen-icon {
+  color: var(--text-dim, #666);
+}
+
 /* --- Page Viewer (center) --- */
 
 .wiki-page-viewer {

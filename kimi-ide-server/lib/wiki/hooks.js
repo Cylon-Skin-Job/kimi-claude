@@ -1,8 +1,12 @@
 /**
- * Wiki lifecycle hooks — watches for topic creation and page edits.
+ * Wiki lifecycle hooks — watches ai/wiki/ tree for topic creation and page edits.
  *
- * on_create: new topic folder with PAGE.md → rebuild index, log entry
- * on_edit:   existing PAGE.md modified → update index, log entry
+ * The wiki tree has collections (project/, system/, etc.) each containing topic folders.
+ * This module scans all collections, builds a merged topics.json at the wiki root,
+ * and watches for changes across all collections.
+ *
+ * topics.json is the client-facing index — it merges all collections into one flat
+ * topic map with a `collection` field per topic so file paths resolve correctly.
  *
  * Pure data-access + filesystem module (Layer 4).
  * Does not emit events or touch DOM.
@@ -14,61 +18,128 @@ const path = require('path');
 
 const DEBOUNCE_MS = 500;
 const pending = new Map();
-let watcher = null;
-let knownTopics = new Set();
+const watchers = [];
+const knownTopics = new Map(); // "collection/topic" → true
 let onIndexRebuilt = null;
 
 /**
- * Rebuild index.json from the current state of topic folders.
- * Idempotent — running twice produces the same result.
+ * Discover collections by reading the root index.json children array.
+ * Falls back to scanning for directories if no index.json exists.
  */
-async function rebuildIndex(wikiPath) {
-  const indexPath = path.join(wikiPath, 'index.json');
-
-  // Read existing index to preserve edges
-  let existing = { version: '1.0', last_updated: null, topics: {} };
+async function discoverCollections(wikiRoot) {
+  const indexPath = path.join(wikiRoot, 'index.json');
   try {
-    existing = JSON.parse(await fsPromises.readFile(indexPath, 'utf8'));
+    const raw = JSON.parse(await fsPromises.readFile(indexPath, 'utf8'));
+    if (raw.children && Array.isArray(raw.children)) {
+      return raw.children;
+    }
   } catch {}
 
-  const entries = await fsPromises.readdir(wikiPath, { withFileTypes: true });
+  // Fallback: scan for directories that contain an index.json
+  const entries = await fsPromises.readdir(wikiRoot, { withFileTypes: true });
+  return entries
+    .filter(e => e.isDirectory())
+    .map(e => e.name)
+    .filter(name => {
+      try {
+        fs.accessSync(path.join(wikiRoot, name, 'index.json'));
+        return true;
+      } catch { return false; }
+    });
+}
+
+/**
+ * Build the merged topics.json from all collections.
+ * Each topic gets a `collection` field so the client knows the file path.
+ * Topic IDs are prefixed with collection: "system/evidence-gated-execution"
+ */
+async function rebuildTopicsIndex(wikiRoot) {
+  const collections = await discoverCollections(wikiRoot);
   const topics = {};
+  const collectionMeta = [];
 
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const pagePath = path.join(wikiPath, entry.name, 'PAGE.md');
+  for (const collectionId of collections) {
+    const collectionPath = path.join(wikiRoot, collectionId);
+
+    // Read collection index.json for metadata
+    let collectionIndex = { label: formatSlug(collectionId), rank: 50, sort: 'ranked', frozen: false };
     try {
-      await fsPromises.access(pagePath);
-    } catch {
-      continue; // No PAGE.md, not a topic
-    }
+      const raw = JSON.parse(await fsPromises.readFile(path.join(collectionPath, 'index.json'), 'utf8'));
+      collectionIndex = {
+        label: raw.label || formatSlug(collectionId),
+        rank: raw.rank ?? 50,
+        sort: raw.sort || 'ranked',
+        frozen: raw.frozen || false,
+      };
+    } catch {}
 
-    // Preserve existing edges, default to empty
-    const prev = existing.topics[entry.name] || {};
-    topics[entry.name] = {
-      slug: formatSlug(entry.name),
-      edges_out: prev.edges_out || [],
-      edges_in: prev.edges_in || [],
-      sources: prev.sources || [],
-    };
+    collectionMeta.push({ id: collectionId, ...collectionIndex });
+
+    // Scan for topic folders with PAGE.md
+    let entries;
+    try {
+      entries = await fsPromises.readdir(collectionPath, { withFileTypes: true });
+    } catch { continue; }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const pagePath = path.join(collectionPath, entry.name, 'PAGE.md');
+      try {
+        await fsPromises.access(pagePath);
+      } catch { continue; }
+
+      // Read topic's own index.json for metadata
+      let topicIndex = {};
+      try {
+        topicIndex = JSON.parse(await fsPromises.readFile(
+          path.join(collectionPath, entry.name, 'index.json'), 'utf8'
+        ));
+      } catch {}
+
+      const topicId = `${collectionId}/${entry.name}`;
+      topics[topicId] = {
+        slug: topicIndex.label || formatSlug(entry.name),
+        collection: collectionId,
+        collectionLabel: collectionIndex.label,
+        collectionRank: collectionIndex.rank,
+        rank: topicIndex.rank ?? 10,
+        frozen: topicIndex.frozen ?? collectionIndex.frozen,
+        edges_out: topicIndex.edges_out || [],
+        edges_in: topicIndex.edges_in || [],
+        sources: topicIndex.sources || [],
+      };
+    }
   }
+
+  // Sort collections by rank
+  collectionMeta.sort((a, b) => a.rank - b.rank);
 
   const index = {
     version: '1.0',
     last_updated: new Date().toISOString(),
+    collections: collectionMeta,
     topics,
   };
 
-  await fsPromises.writeFile(indexPath, JSON.stringify(index, null, 2) + '\n', 'utf8');
-  console.log(`[WikiHooks] Rebuilt index.json — ${Object.keys(topics).length} topics`);
+  const topicsPath = path.join(wikiRoot, 'topics.json');
+  await fsPromises.writeFile(topicsPath, JSON.stringify(index, null, 2) + '\n', 'utf8');
+  console.log(`[WikiHooks] Rebuilt topics.json — ${Object.keys(topics).length} topics across ${collections.length} collections`);
 
   if (typeof onIndexRebuilt === 'function') {
-    try { onIndexRebuilt(indexPath); } catch (err) {
+    try { onIndexRebuilt(topicsPath); } catch (err) {
       console.error('[WikiHooks] onIndexRebuilt callback error:', err);
     }
   }
 
   return index;
+}
+
+/**
+ * Format a folder name into a display slug.
+ * "workspace-index" → "Workspace-Index"
+ */
+function formatSlug(name) {
+  return name.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-');
 }
 
 /**
@@ -83,7 +154,6 @@ async function appendLog(topicPath, message) {
     await fsPromises.access(logPath);
     await fsPromises.appendFile(logPath, entry, 'utf8');
   } catch {
-    // LOG.md doesn't exist, create it
     const topicName = path.basename(topicPath);
     const header = `# ${formatSlug(topicName)} — Log\n${entry}`;
     await fsPromises.writeFile(logPath, header, 'utf8');
@@ -92,165 +162,124 @@ async function appendLog(topicPath, message) {
 }
 
 /**
- * Format a folder name into a display slug.
- * "workspace-index" → "Workspace-Index"
+ * Watch a topic folder for PAGE.md changes.
  */
-function formatSlug(name) {
-  return name.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-');
-}
+function watchTopicFolder(wikiRoot, collectionId, topicName) {
+  const key = `${collectionId}/${topicName}`;
+  if (knownTopics.has(key)) return;
+  knownTopics.set(key, true);
 
-/**
- * Handle on_create — new topic folder detected.
- */
-async function onCreate(wikiPath, topicName) {
-  console.log(`[WikiHooks] on_create: ${topicName}`);
-
-  const topicPath = path.join(wikiPath, topicName);
-
-  // Rebuild index (adds the new topic)
-  await rebuildIndex(wikiPath);
-
-  // Log creation
-  await appendLog(topicPath, 'Created');
-
-  // TODO: create ticket for kimi-wiki to evaluate edges against all existing topics
-  console.log(`[WikiHooks] on_create complete: ${topicName}`);
-}
-
-/**
- * Handle on_edit — existing PAGE.md modified.
- */
-async function onEdit(wikiPath, topicName) {
-  console.log(`[WikiHooks] on_edit: ${topicName}`);
-
-  const topicPath = path.join(wikiPath, topicName);
-
-  // Rebuild index (updates last_updated)
-  await rebuildIndex(wikiPath);
-
-  // Log edit
-  await appendLog(topicPath, 'Updated');
-
-  console.log(`[WikiHooks] on_edit complete: ${topicName}`);
-}
-
-/** Track watchers for cleanup */
-const topicWatcherMap = new Map();
-
-/**
- * Watch a new topic folder for PAGE.md creation.
- * Once PAGE.md appears, fire on_create and convert to an edit watcher.
- */
-function watchNewFolder(wikiPath, folderName) {
-  if (topicWatcherMap.has(folderName)) return;
-
-  const folderPath = path.join(wikiPath, folderName);
+  const folderPath = path.join(wikiRoot, collectionId, topicName);
   try {
     const tw = fs.watch(folderPath, (event, filename) => {
       if (filename !== 'PAGE.md') return;
 
-      const key = `${folderName}/PAGE.md`;
-      if (pending.has(key)) clearTimeout(pending.get(key));
+      const debounceKey = `${key}/PAGE.md`;
+      if (pending.has(debounceKey)) clearTimeout(pending.get(debounceKey));
 
-      pending.set(key, setTimeout(async () => {
-        pending.delete(key);
-
-        if (!knownTopics.has(folderName)) {
-          // First time PAGE.md appeared — on_create
-          const pagePath = path.join(folderPath, 'PAGE.md');
-          try {
-            await fsPromises.access(pagePath);
-            knownTopics.add(folderName);
-            await onCreate(wikiPath, folderName);
-          } catch {}
-        } else {
-          // Already known — on_edit
-          await onEdit(wikiPath, folderName);
-        }
+      pending.set(debounceKey, setTimeout(async () => {
+        pending.delete(debounceKey);
+        console.log(`[WikiHooks] on_edit: ${key}`);
+        await rebuildTopicsIndex(wikiRoot);
+        await appendLog(folderPath, 'Updated');
       }, DEBOUNCE_MS));
     });
-    topicWatcherMap.set(folderName, tw);
+    watchers.push(tw);
   } catch (err) {
-    console.error(`[WikiHooks] Failed to watch new folder ${folderName}:`, err.message);
+    console.error(`[WikiHooks] Failed to watch ${key}:`, err.message);
   }
 }
 
 /**
- * Process a root-level filesystem event — detects new topic folders.
+ * Watch a collection folder for new topic folders.
  */
-function handleRootEvent(wikiPath, filename) {
-  if (!filename) return;
+function watchCollection(wikiRoot, collectionId) {
+  const collectionPath = path.join(wikiRoot, collectionId);
 
-  const fullPath = path.join(wikiPath, filename);
+  try {
+    const tw = fs.watch(collectionPath, (event, filename) => {
+      if (!filename) return;
 
-  const key = `root:${filename}`;
-  if (pending.has(key)) clearTimeout(pending.get(key));
+      const debounceKey = `collection:${collectionId}:${filename}`;
+      if (pending.has(debounceKey)) clearTimeout(pending.get(debounceKey));
 
-  pending.set(key, setTimeout(async () => {
-    pending.delete(key);
+      pending.set(debounceKey, setTimeout(async () => {
+        pending.delete(debounceKey);
 
-    try {
-      const stat = await fsPromises.stat(fullPath).catch(() => null);
-      if (stat && stat.isDirectory() && !topicWatcherMap.has(filename)) {
-        console.log(`[WikiHooks] New folder detected: ${filename}`);
-        watchNewFolder(wikiPath, filename);
+        const fullPath = path.join(collectionPath, filename);
+        const stat = await fsPromises.stat(fullPath).catch(() => null);
+        if (!stat || !stat.isDirectory()) return;
 
-        // Check if PAGE.md already exists (folder + file created together)
-        const pagePath = path.join(fullPath, 'PAGE.md');
+        const key = `${collectionId}/${filename}`;
+        if (knownTopics.has(key)) return;
+
+        // Check if PAGE.md exists
         try {
-          await fsPromises.access(pagePath);
-          if (!knownTopics.has(filename)) {
-            knownTopics.add(filename);
-            await onCreate(wikiPath, filename);
-          }
+          await fsPromises.access(path.join(fullPath, 'PAGE.md'));
+          console.log(`[WikiHooks] on_create: ${key}`);
+          watchTopicFolder(wikiRoot, collectionId, filename);
+          await rebuildTopicsIndex(wikiRoot);
+          await appendLog(fullPath, 'Created');
         } catch {}
-      }
-    } catch (err) {
-      console.error(`[WikiHooks] Error handling root event ${filename}:`, err.message);
-    }
-  }, DEBOUNCE_MS));
+      }, DEBOUNCE_MS));
+    });
+    watchers.push(tw);
+  } catch (err) {
+    console.error(`[WikiHooks] Failed to watch collection ${collectionId}:`, err.message);
+  }
 }
 
 /**
- * Start watching the wiki directory for changes.
- * Sets up watchers on the wiki root (for new folders) and
- * on each topic folder (for PAGE.md edits).
+ * Start watching the wiki tree for changes.
+ * Scans all collections, sets up watchers on each collection and topic folder,
+ * and builds the initial topics.json.
  */
-function start(wikiPath) {
-  if (!fs.existsSync(wikiPath)) {
-    console.error(`[WikiHooks] Wiki path not found: ${wikiPath}`);
+function start(wikiRoot) {
+  if (!fs.existsSync(wikiRoot)) {
+    console.error(`[WikiHooks] Wiki root not found: ${wikiRoot}`);
     return null;
   }
 
-  // Snapshot known topics
-  const entries = fs.readdirSync(wikiPath, { withFileTypes: true });
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      const pagePath = path.join(wikiPath, entry.name, 'PAGE.md');
+  // Discover collections synchronously for startup
+  let collections;
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(wikiRoot, 'index.json'), 'utf8'));
+    collections = raw.children || [];
+  } catch {
+    collections = fs.readdirSync(wikiRoot, { withFileTypes: true })
+      .filter(e => e.isDirectory())
+      .map(e => e.name);
+  }
+
+  // Scan each collection for existing topics and set up watchers
+  for (const collectionId of collections) {
+    const collectionPath = path.join(wikiRoot, collectionId);
+    if (!fs.existsSync(collectionPath)) continue;
+
+    const entries = fs.readdirSync(collectionPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const pagePath = path.join(collectionPath, entry.name, 'PAGE.md');
       if (fs.existsSync(pagePath)) {
-        knownTopics.add(entry.name);
+        watchTopicFolder(wikiRoot, collectionId, entry.name);
       }
     }
+
+    watchCollection(wikiRoot, collectionId);
   }
 
-  console.log(`[WikiHooks] Watching ${wikiPath} — ${knownTopics.size} known topics`);
-
-  // Watch root for new folders
-  watcher = fs.watch(wikiPath, (event, filename) => {
-    handleRootEvent(wikiPath, filename);
+  // Build initial topics.json
+  rebuildTopicsIndex(wikiRoot).catch(err => {
+    console.error('[WikiHooks] Failed to build initial topics.json:', err);
   });
 
-  // Watch each known topic folder for PAGE.md edits
-  for (const topicName of knownTopics) {
-    watchNewFolder(wikiPath, topicName);
-  }
+  console.log(`[WikiHooks] Watching ${wikiRoot} — ${knownTopics.size} topics across ${collections.length} collections`);
 
-  // Return cleanup function
   return {
     close() {
-      if (watcher) { watcher.close(); watcher = null; }
-      for (const [name, tw] of topicWatcherMap) { tw.close(); }
-      topicWatcherMap.clear();
+      for (const tw of watchers) { tw.close(); }
+      watchers.length = 0;
+      knownTopics.clear();
       pending.clear();
       console.log('[WikiHooks] Stopped watching');
     }
@@ -259,8 +288,8 @@ function start(wikiPath) {
 
 /**
  * Register a callback to be called after every index rebuild.
- * @param {Function} fn - Receives the indexPath as argument
+ * @param {Function} fn - Receives the topicsPath as argument
  */
 function setOnIndexRebuilt(fn) { onIndexRebuilt = fn; }
 
-module.exports = { start, rebuildIndex, onCreate, onEdit, setOnIndexRebuilt };
+module.exports = { start, rebuildTopicsIndex, setOnIndexRebuilt };

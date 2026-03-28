@@ -24,9 +24,9 @@ export function WikiExplorer() {
   const onIndex = useCallback((content: string) => {
     try {
       const index = JSON.parse(content);
-      useWikiStore.getState().setIndex(index.topics || {});
+      useWikiStore.getState().setIndex(index.topics || {}, index.collections || []);
     } catch {
-      useWikiStore.getState().setError('Failed to parse index.json');
+      useWikiStore.getState().setError('Failed to parse topics.json');
     }
   }, []);
 
@@ -45,6 +45,7 @@ export function WikiExplorer() {
 
   const { request } = useWorkspaceData({
     workspace: 'wiki',
+    indexPath: 'topics.json',
     onIndex,
     onFileContent,
     onError,

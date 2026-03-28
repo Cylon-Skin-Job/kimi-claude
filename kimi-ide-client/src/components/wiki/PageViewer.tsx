@@ -49,14 +49,28 @@ export function PageViewer() {
     const href = anchor.getAttribute('href') || '';
     // Check if this is a wiki-internal link (no protocol, matches a known slug)
     if (!href.includes('://') && !href.startsWith('#') && !href.startsWith('/')) {
-      const slug = href.replace(/\.md$/, '');
+      // Normalize: "../topic-name/PAGE.md" → "topic-name", "topic-name" → "topic-name"
+      let slug = href
+        .replace(/\/PAGE\.md$/i, '')  // strip /PAGE.md
+        .replace(/\.md$/i, '')         // strip .md
+        .replace(/^\.\.\//g, '');      // strip leading ../
+
+      // If slug doesn't contain a collection prefix, try resolving within current topic's collection
+      if (!slug.includes('/') && activeTopic) {
+        const currentCollection = activeTopic.split('/')[0];
+        const fullId = `${currentCollection}/${slug}`;
+        if (knownSlugs.current.has(fullId)) {
+          slug = fullId;
+        }
+      }
+
       if (knownSlugs.current.has(slug) || knownSlugs.current.has(slug.toLowerCase())) {
         e.preventDefault();
         e.stopPropagation();
         navigateToTopic(slug);
       }
     }
-  }, [navigateToTopic]);
+  }, [navigateToTopic, activeTopic]);
 
   // Load log when switching to log tab
   const handleTabClick = (tab: 'page' | 'log' | 'runs') => {

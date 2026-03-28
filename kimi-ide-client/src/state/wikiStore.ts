@@ -1,13 +1,26 @@
 /**
  * @module wikiStore
  * @role State management for the wiki-viewer workspace
- * @reads index.json, {topic}/PAGE.md, {topic}/LOG.md
+ * @reads topics.json, {collection}/{topic}/PAGE.md, {collection}/{topic}/LOG.md
  */
 
 import { create } from 'zustand';
 
+export interface CollectionMeta {
+  id: string;
+  label: string;
+  rank: number;
+  sort: string;
+  frozen: boolean;
+}
+
 export interface TopicMeta {
   slug: string;
+  collection: string;
+  collectionLabel: string;
+  collectionRank: number;
+  rank: number;
+  frozen: boolean;
   edges_out: string[];
   edges_in: string[];
 }
@@ -15,6 +28,7 @@ export interface TopicMeta {
 export interface WikiState {
   // Index
   topics: Record<string, TopicMeta>;
+  collections: CollectionMeta[];
   indexLoaded: boolean;
 
   // Navigation
@@ -38,7 +52,7 @@ export interface WikiState {
   error: string | null;
 
   // Actions
-  setIndex: (topics: Record<string, TopicMeta>) => void;
+  setIndex: (topics: Record<string, TopicMeta>, collections: CollectionMeta[]) => void;
   setActiveTopic: (topicId: string) => void;
   navigateToTopic: (slug: string) => void;
   goBack: () => void;
@@ -68,6 +82,7 @@ function findTopicBySlug(topics: Record<string, TopicMeta>, slug: string): strin
 
 export const useWikiStore = create<WikiState>((set, get) => ({
   topics: {},
+  collections: [],
   indexLoaded: false,
   activeTopic: null,
   navigationHistory: [],
@@ -80,7 +95,7 @@ export const useWikiStore = create<WikiState>((set, get) => ({
   logContent: '',
   error: null,
 
-  setIndex: (topics) => set({ topics, indexLoaded: true }),
+  setIndex: (topics, collections) => set({ topics, collections, indexLoaded: true }),
 
   setActiveTopic: (topicId) => {
     const { topics } = get();
@@ -161,6 +176,7 @@ export const useWikiStore = create<WikiState>((set, get) => ({
 
   reset: () => set({
     topics: {},
+    collections: [],
     indexLoaded: false,
     activeTopic: null,
     navigationHistory: [],
