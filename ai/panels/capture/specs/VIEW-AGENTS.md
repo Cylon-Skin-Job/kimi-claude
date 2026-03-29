@@ -225,17 +225,28 @@ The runner is fully implemented across 4 modules:
    └── syncPush() completion to GitLab
 ```
 
-### Run Folder Structure (frozen at creation)
+### Run Folder Structure
 
 ```
-runs/{YYYY-MM-DDTHH-MM-SS}/
-  ticket.md          ← frozen copy of triggering ticket
-  PROMPT_NN.md       ← frozen copy of workflow prompt
-  LESSONS.md         ← frozen copy of workflow lessons
-  manifest.json      ← status: pending -> running -> completed/stopped
-  run-index.json     ← step-by-step progress tracker
-  steps/             ← evidence cards (future)
+runs/
+  ledger.json                              ← ALL runs for this agent
+  {Workflow Name}/
+    ledger.json                            ← runs for this workflow only
+    {YYYY-MM-DDTHH-MM-SS}/
+      SESSION.md                           ← duped from workflow, created_at stamped
+      ticket.md                            ← frozen copy of triggering ticket
+      PROMPT.md                            ← frozen copy of workflow prompt
+      LESSONS.md                           ← frozen copy of workflow lessons
+      manifest.json                        ← status: pending -> running -> completed/stopped
+      evidence/
+        00-validate.md                     ← certificate cards (proof of work)
+        01-gather.md
+        02-propose.md
 ```
+
+**SESSION.md** gets `created_at` stamped at run start. Next run can check its own folder for when it was born. Nightly audit checks `ledger.json` entries against `last_checked`.
+
+**Ledger files** track all runs with timestamp, ticket, outcome, duration. `last_checked` field lets nightly audits diff "what's new since last audit." Scripts do the diffing, agents see clean results.
 
 ### Run Snapshot via Event Bus (planned)
 

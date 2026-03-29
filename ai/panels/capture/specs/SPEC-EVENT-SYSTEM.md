@@ -504,6 +504,180 @@ Actions can produce events, and events can trigger actions. To prevent infinite 
 
 ---
 
+## System Event Log
+
+The event bus fires events in-memory. The system event log **persists** them to disk so nightly audits and background agents can query "what happened since X."
+
+### Location
+
+`ai/system/event-log.json` — append-only, rotated nightly.
+
+```json
+{
+  "events": [
+    {
+      "id": "evt-20260328-001",
+      "type": "agent:run_completed",
+      "timestamp": "2026-03-28T14:35:42Z",
+      "data": { "runId": "...", "agentId": "wiki-manager", "ticketId": "KIMI-0042", "outcome": "success" }
+    },
+    {
+      "id": "evt-20260328-002",
+      "type": "ticket:closed",
+      "timestamp": "2026-03-28T14:35:43Z",
+      "data": { "ticketId": "KIMI-0042" }
+    }
+  ]
+}
+```
+
+### How It's Written
+
+The event bus has a built-in listener that appends every event to the log:
+
+```javascript
+on('*', (event) => {
+  appendToEventLog(event);
+});
+```
+
+Not every event needs logging. Filter by domain — log `agent:*`, `ticket:*`, `chat:turn_end`, file changes. Skip high-frequency noise like `chat:content` (individual token streams).
+
+### How Agents Use It
+
+Agents never read the event log directly. **Triggers + scripts do the diffing.** The agent just sees a clean list of what's new.
+
+```
+TRIGGERS.md fires (cron at 2am)
+    ↓
+Script: compare last_checked in workflow ledger vs event log
+    ↓
+Script returns: array of new events since last check
+    ↓
+Agent receives: "5 new events: 2 file changes, 1 run, 2 tickets"
+    ↓
+Agent reasons about it (summarize, flag issues, propagate to ticket)
+    ↓
+Script updates last_checked
+```
+
+The agent never queries the DB. The agent never parses the event log. The script does the index comparison. The agent does the thinking.
+
+### Rotation
+
+Nightly audit agent archives the event log after processing:
+- Rename `event-log.json` → `event-log-2026-03-28.json`
+- Start fresh `event-log.json`
+- Old logs can be archived to SQLite if they grow large
+
+---
+
+## Run Ledger System
+
+Every agent run is tracked in layered ledgers for audit trail and nightly analysis.
+
+### Ledger Cascade
+
+```
+agents/{agentName}/
+  runs/
+    ledger.json                          ← ALL runs for this agent
+    {Workflow Name}/
+      ledger.json                        ← runs for this workflow only
+      {timestamp}/
+        SESSION.md                       ← duped from workflow, created_at stamped
+        ticket.md                        ← frozen ticket
+        PROMPT.md                        ← frozen prompt
+        LESSONS.md                       ← frozen lessons
+        manifest.json                    ← status machine
+        evidence/
+          00-validate.md                 ← certificate cards (proof of work)
+          01-gather.md
+          02-propose.md
+```
+
+### Agent Ledger (`runs/ledger.json`)
+
+All runs across all workflows:
+
+```json
+{
+  "last_checked": "2026-03-28T02:00:00Z",
+  "runs": [
+    {
+      "run_id": "2026-03-28T14-32-15",
+      "workflow": "Wiki Update",
+      "ticket_id": "KIMI-0042",
+      "status": "completed",
+      "outcome": "success",
+      "started": "2026-03-28T14:32:16Z",
+      "completed": "2026-03-28T14:35:42Z",
+      "evidence_count": 4
+    }
+  ]
+}
+```
+
+### Workflow Ledger (`runs/{Workflow Name}/ledger.json`)
+
+Same shape, filtered to one workflow. `last_checked` is per-workflow so nightly audits can track "what's new for this workflow since last audit."
+
+### SESSION.md in Run Folder
+
+When a run starts, SESSION.md is duped from the workflow and stamped with `created_at`:
+
+```yaml
+---
+thread-model: single-persistent
+system-context: ["PROMPT.md", "MEMORY.md"]
+created_at: 2026-03-28T14:32:15Z
+cli: kimi
+profile: default
+---
+```
+
+The next run can check its own `created_at` to know when it was born. The nightly audit checks `ledger.json` entries against `last_checked`.
+
+### Nightly Audit Pattern
+
+```yaml
+# In agent's TRIGGERS.md
+---
+name: nightly-audit
+type: cron
+schedule: "daily 02:00"
+script: ai/system/skills/audit-diff.js
+function: getNewEvents
+prompt: PROMPT_AUDIT.md
+message: |
+  Nightly audit. New events since last check:
+  {{result.summary}}
+
+  Details:
+  {{result.events}}
+---
+```
+
+The `audit-diff.js` script:
+1. Reads `runs/ledger.json` → gets `last_checked`
+2. Reads `ai/system/event-log.json` → filters events since `last_checked`
+3. Returns structured summary to the agent
+4. Updates `last_checked` after the agent processes it
+
+The agent receives a clean list. It decides: summarize, flag anomalies, propagate findings to open tickets as comments (which sync to GitLab). **Scripts do plumbing. Agents do thinking.**
+
+### Propagating to Tickets
+
+The agent can include ticket updates in its output. The runner parses these signals:
+
+```
+TICKET_COMMENT: KIMI-0042 "Nightly audit: 3 wiki pages updated, all sources verified."
+```
+
+The runner creates the comment locally, sync pushes it to GitLab. Collaborators see audit results right on the ticket.
+
+---
+
 ## Design Principles
 
 1. **Build on what exists.** The watcher, filter-loader, trigger-parser, cron-scheduler, and actions are the foundation. Extend, don't replace.
