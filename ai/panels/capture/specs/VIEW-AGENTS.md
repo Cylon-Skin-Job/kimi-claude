@@ -222,7 +222,7 @@ The runner is fully implemented across 4 modules:
 3. syncPull() (catch new blocks)
 4. Re-check eligibility
 5. executeRun(projectRoot, agentFolder, ticket)
-   ├── createRunFolder() — freezes ticket.md, PROMPT_NN.md, LESSONS.md
+   ├── createRunFolder() — freezes ticket.md, WORKFLOW.md, LESSONS.md
    ├── Writes manifest.json (status: pending)
    ├── Writes run-index.json (empty steps)
    ├── buildContext() — AGENTS.md + PROMPT body as system, ticket as user
@@ -246,7 +246,7 @@ runs/
     {YYYY-MM-DDTHH-MM-SS}/
       SESSION.md                           ← duped from workflow, created_at stamped
       ticket.md                            ← frozen copy of triggering ticket
-      PROMPT.md                            ← frozen copy of workflow prompt
+      WORKFLOW.md                          ← frozen copy of workflow instructions
       LESSONS.md                           ← frozen copy of workflow lessons
       manifest.json                        ← status: pending -> running -> completed/stopped
       evidence/
@@ -283,7 +283,7 @@ pending -> running -> completed (exit code 0)
   "agent_id": "wiki-manager",
   "bot_name": "kimi-wiki",
   "ticket_id": "KIMI-0042",
-  "prompt": "PROMPT_01.md",
+  "prompt": "WORKFLOW.md",
   "status": "completed",
   "created": "2026-03-28T14:32:15.000Z",
   "started": "2026-03-28T14:32:16.000Z",

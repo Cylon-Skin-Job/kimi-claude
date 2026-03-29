@@ -56,7 +56,7 @@ events: [modify, create, delete]
 match: "kimi-ide-server/lib/**/*.js"
 exclude: ["ai/panels/capture/**"]
 condition: "fileStats.tokens > 500"
-prompt: PROMPT_01.md
+prompt: WORKFLOW.md
 script: ai/scripts/check-sources.js
 function: checkSources
 message: |
@@ -643,7 +643,7 @@ agents/{agentName}/
       {timestamp}/
         SESSION.md                       ← duped from workflow, created_at stamped
         ticket.md                        ← frozen ticket
-        PROMPT.md                        ← frozen prompt
+        WORKFLOW.md                      ← frozen workflow instructions
         LESSONS.md                       ← frozen lessons
         manifest.json                    ← status machine
         evidence/
