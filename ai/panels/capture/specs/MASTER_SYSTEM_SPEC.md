@@ -14,6 +14,7 @@ sub-specs:
   - VIEW-CHAT.md
   - SPEC-COLLABORATION.md
   - SPEC-EVENT-SYSTEM.md
+  - SPEC-SKILLS.md
   - CLIs.md
   - VIEW-TABLE.md
   - ROADMAP.md
