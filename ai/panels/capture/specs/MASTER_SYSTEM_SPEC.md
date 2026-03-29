@@ -15,6 +15,7 @@ sub-specs:
   - SPEC-COLLABORATION.md
   - SPEC-EVENT-SYSTEM.md
   - CLIs.md
+  - ROADMAP.md
 ---
 
 # Open Robin — Master System Spec
