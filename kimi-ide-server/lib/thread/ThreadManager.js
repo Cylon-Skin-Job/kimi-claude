@@ -7,7 +7,7 @@
 
 const path = require('path');
 const { ThreadIndex } = require('./ThreadIndex');
-const { ChatFile } = require('./ChatFile');
+const { ChatFile, getUsername } = require('./ChatFile');
 const { HistoryFile } = require('./HistoryFile');
 
 // Default configuration
@@ -20,7 +20,8 @@ class ThreadManager {
   /**
    * @param {string} panelId - Panel identifier (e.g., 'explorer', 'agent:bot-name')
    * @param {object} [config]
-   * @param {string} [config.panelPath] - Filesystem path for ChatFile (still uses UUID dirs)
+   * @param {string} [config.panelPath] - Filesystem path for legacy ChatFile fallback
+   * @param {string} [config.projectRoot] - Project root for per-user views path
    * @param {number} [config.maxActiveSessions]
    * @param {number} [config.idleTimeoutMinutes]
    */
@@ -28,6 +29,7 @@ class ThreadManager {
     this.panelId = panelId;
     this.panelPath = config.panelPath || null;
     this.threadsDir = this.panelPath ? path.join(this.panelPath, 'threads') : null;
+    this.projectRoot = config.projectRoot || null;
     this.config = { ...DEFAULT_CONFIG, ...config };
 
     /** @type {ThreadIndex} */
@@ -38,6 +40,54 @@ class ThreadManager {
 
     /** @type {Map<string, NodeJS.Timeout>} */
     this.timeouts = new Map();
+  }
+
+  /**
+   * Build the per-user views directory for chat markdown.
+   * Returns null if projectRoot is not set (falls back to legacy UUID dirs).
+   * @returns {string|null}
+   */
+  _getViewsDir() {
+    if (!this.projectRoot) return null;
+    // Map panelId to workspace: 'explorer' → 'explorer', 'agent:foo' → 'agents'
+    const workspace = this.panelId.startsWith('agent:') ? 'agents' : this.panelId;
+    return path.join(this.projectRoot, 'ai', 'views', workspace, 'chat', 'threads', getUsername());
+  }
+
+  /**
+   * Ensure the threads/index.json exists in the views directory.
+   * @private
+   */
+  async _ensureThreadsIndex() {
+    if (!this.projectRoot) return;
+    const workspace = this.panelId.startsWith('agent:') ? 'agents' : this.panelId;
+    const threadsDir = path.join(this.projectRoot, 'ai', 'views', workspace, 'chat', 'threads');
+    const indexPath = path.join(threadsDir, 'index.json');
+    const fs = require('fs').promises;
+    try {
+      await fs.access(indexPath);
+    } catch {
+      await fs.mkdir(threadsDir, { recursive: true });
+      await fs.writeFile(indexPath, JSON.stringify({ sort: 'last-active', order: 'desc' }, null, 2));
+    }
+  }
+
+  /**
+   * Create a ChatFile for the given thread.
+   * Uses per-user views path if projectRoot is set, otherwise legacy UUID dir.
+   * @param {string} threadId
+   * @param {string} threadName
+   * @returns {ChatFile}
+   */
+  _createChatFile(threadId, threadName) {
+    const viewsDir = this._getViewsDir();
+    if (viewsDir) {
+      return new ChatFile({ viewsDir, threadName });
+    }
+    if (this.threadsDir) {
+      return new ChatFile(path.join(this.threadsDir, threadId));
+    }
+    return new ChatFile({ threadDir: null });
   }
 
   /**
@@ -69,10 +119,10 @@ class ThreadManager {
     // Create index entry (SQLite)
     const entry = await this.index.create(threadId, name);
 
-    // Create CHAT.md in thread folder (still uses UUID dirs)
-    if (this.threadsDir) {
-      const threadPath = path.join(this.threadsDir, threadId);
-      const chatFile = new ChatFile(threadPath);
+    // Create chat markdown file
+    await this._ensureThreadsIndex();
+    const chatFile = this._createChatFile(threadId, name);
+    if (chatFile.filePath) {
       await chatFile.write(name, []);
     }
 
@@ -103,12 +153,19 @@ class ThreadManager {
    * @param {string} newName
    */
   async renameThread(threadId, newName) {
+    const oldEntry = await this.index.get(threadId);
+    if (!oldEntry) return null;
+
     const entry = await this.index.rename(threadId, newName);
     if (!entry) return null;
 
-    // Update CHAT.md title
-    if (this.threadsDir) {
-      const chatFile = new ChatFile(path.join(this.threadsDir, threadId));
+    // Update chat markdown: rename file + rewrite title
+    const chatFile = this._createChatFile(threadId, oldEntry.name);
+    if (chatFile.filePath) {
+      if (chatFile.viewsDir) {
+        // Views mode: rename the file, then rewrite with new title
+        await chatFile.renameFile(newName);
+      }
       const parsed = await chatFile.read();
       if (parsed) {
         await chatFile.write(newName, parsed.messages);
@@ -126,18 +183,33 @@ class ThreadManager {
     // Kill active session if any
     await this.closeSession(threadId);
 
+    // Get entry before deleting (need name for file path)
+    const entry = await this.index.get(threadId);
+
     // Remove from index (CASCADE deletes exchanges)
     const deleted = await this.index.delete(threadId);
     if (!deleted) return false;
 
-    // Delete thread folder (CHAT.md)
+    // Delete chat markdown file
+    const fsPromises = require('fs').promises;
+    if (entry) {
+      const chatFile = this._createChatFile(threadId, entry.name);
+      if (chatFile.filePath) {
+        try {
+          await fsPromises.rm(chatFile.filePath, { force: true });
+        } catch (err) {
+          console.error(`Failed to delete chat file for ${threadId}:`, err);
+        }
+      }
+    }
+
+    // Clean up legacy UUID directory if it exists
     if (this.threadsDir) {
       const threadPath = path.join(this.threadsDir, threadId);
-      const fs = require('fs').promises;
       try {
-        await fs.rm(threadPath, { recursive: true, force: true });
-      } catch (err) {
-        console.error(`Failed to delete thread folder ${threadId}:`, err);
+        await fsPromises.rm(threadPath, { recursive: true, force: true });
+      } catch {
+        // Ignore — may not exist
       }
     }
 
@@ -153,9 +225,9 @@ class ThreadManager {
     const entry = await this.index.get(threadId);
     if (!entry) throw new Error(`Thread not found: ${threadId}`);
 
-    // Append to CHAT.md
-    if (this.threadsDir) {
-      const chatFile = new ChatFile(path.join(this.threadsDir, threadId));
+    // Append to chat markdown
+    const chatFile = this._createChatFile(threadId, entry.name);
+    if (chatFile.filePath) {
       await chatFile.appendMessage(entry.name, message);
     }
 
@@ -174,8 +246,9 @@ class ThreadManager {
    * @returns {Promise<import('./types').ParsedChat|null>}
    */
   async getHistory(threadId) {
-    if (!this.threadsDir) return null;
-    const chatFile = new ChatFile(path.join(this.threadsDir, threadId));
+    const entry = await this.index.get(threadId);
+    if (!entry) return null;
+    const chatFile = this._createChatFile(threadId, entry.name);
     return chatFile.read();
   }
 

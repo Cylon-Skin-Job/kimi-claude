@@ -1,62 +1,99 @@
 /**
- * ChatFile - Parser and writer for CHAT.md files
- * 
- * Format:
- * ```
- * # Thread Title (from threads.json name)
- * 
- * User
- * Message content here
- * 
- * Assistant
- * Response content here
- * 
- * **TOOL CALL(S)**
- * 
- * Assistant
- * Follow-up after tool calls
- * ```
+ * ChatFile - Parser and writer for thread markdown files
+ *
+ * Writes human-readable chat transcripts to per-user folders:
+ *   ai/views/{workspace}/chat/threads/{username}/thread-name.md
+ *
+ * Falls back to legacy path ({threadDir}/CHAT.md) when viewsDir is not set.
  */
 
 const fs = require('fs').promises;
 const path = require('path');
+const { execSync } = require('child_process');
 
 const TOOL_CALL_MARKER = '**TOOL CALL(S)**';
 
+/**
+ * Get the current git username, cached per process.
+ * @returns {string}
+ */
+let _cachedUsername = null;
+function getUsername() {
+  if (_cachedUsername) return _cachedUsername;
+  try {
+    _cachedUsername = execSync('git config user.name', { encoding: 'utf8' }).trim();
+  } catch {
+    _cachedUsername = 'local';
+  }
+  return _cachedUsername;
+}
+
+/**
+ * Convert a thread name to a safe filename.
+ * @param {string} name
+ * @returns {string}
+ */
+function threadNameToFilename(name) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80) + '.md';
+}
+
 class ChatFile {
   /**
-   * @param {string} threadDir - Path to thread directory
+   * @param {object} opts
+   * @param {string} [opts.threadDir] - Legacy: directory containing CHAT.md
+   * @param {string} [opts.viewsDir] - New: ai/views/{workspace}/chat/threads/{username}
+   * @param {string} [opts.threadName] - Thread name (used for filename in views mode)
    */
-  constructor(threadDir) {
-    this.threadDir = threadDir;
-    this.filePath = path.join(threadDir, 'CHAT.md');
+  constructor(opts) {
+    if (typeof opts === 'string') {
+      // Legacy: constructor(threadDir)
+      this.threadDir = opts;
+      this.filePath = path.join(opts, 'CHAT.md');
+      this.viewsDir = null;
+      this.threadName = null;
+    } else {
+      this.viewsDir = opts.viewsDir || null;
+      this.threadName = opts.threadName || null;
+      this.threadDir = opts.threadDir || null;
+
+      if (this.viewsDir && this.threadName) {
+        this.filePath = path.join(this.viewsDir, threadNameToFilename(this.threadName));
+      } else if (this.threadDir) {
+        this.filePath = path.join(this.threadDir, 'CHAT.md');
+      } else {
+        this.filePath = null;
+      }
+    }
   }
 
   /**
-   * Ensure the thread directory exists
+   * Ensure the parent directory exists
    */
   async ensureDir() {
-    await fs.mkdir(this.threadDir, { recursive: true });
+    if (!this.filePath) return;
+    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
   }
 
   /**
    * Parse CHAT.md content
    * @param {string} content - File content
-   * @returns {import('./types').ParsedChat}
+   * @returns {{title: string, messages: Array}}
    */
   parse(content) {
     const lines = content.split('\n');
-    
-    // First line is the title (starts with #)
+
     let title = 'New Chat';
     let startIdx = 0;
-    
+
     if (lines[0]?.startsWith('# ')) {
       title = lines[0].slice(2).trim();
       startIdx = 1;
     }
 
-    /** @type {import('./types').ChatMessage[]} */
     const messages = [];
     let currentRole = null;
     let currentContent = [];
@@ -76,8 +113,7 @@ class ChatFile {
 
     for (let i = startIdx; i < lines.length; i++) {
       const line = lines[i];
-      
-      // Check for role markers
+
       if (line === 'User') {
         flushMessage();
         currentRole = 'user';
@@ -85,23 +121,20 @@ class ChatFile {
         flushMessage();
         currentRole = 'assistant';
       } else if (line === TOOL_CALL_MARKER) {
-        // Mark current assistant message as having tool calls
         currentHasToolCalls = true;
       } else if (currentRole) {
         currentContent.push(line);
       }
     }
 
-    // Flush final message
     flushMessage();
-
     return { title, messages };
   }
 
   /**
-   * Serialize messages to CHAT.md format
+   * Serialize messages to markdown format
    * @param {string} title - Thread title
-   * @param {import('./types').ChatMessage[]} messages
+   * @param {Array} messages
    * @returns {string}
    */
   serialize(title, messages) {
@@ -112,7 +145,7 @@ class ChatFile {
       lines.push('');
       lines.push(msg.content);
       lines.push('');
-      
+
       if (msg.hasToolCalls) {
         lines.push(TOOL_CALL_MARKER);
         lines.push('');
@@ -123,25 +156,24 @@ class ChatFile {
   }
 
   /**
-   * Read and parse the CHAT.md file
-   * @returns {Promise<import('./types').ParsedChat|null>}
+   * Read and parse the chat file
+   * @returns {Promise<{title: string, messages: Array}|null>}
    */
   async read() {
+    if (!this.filePath) return null;
     try {
       const content = await fs.readFile(this.filePath, 'utf-8');
       return this.parse(content);
     } catch (err) {
-      if (err.code === 'ENOENT') {
-        return null;
-      }
+      if (err.code === 'ENOENT') return null;
       throw err;
     }
   }
 
   /**
-   * Write messages to CHAT.md
-   * @param {string} title - Thread title
-   * @param {import('./types').ChatMessage[]} messages
+   * Write messages to file
+   * @param {string} title
+   * @param {Array} messages
    */
   async write(title, messages) {
     await this.ensureDir();
@@ -151,28 +183,28 @@ class ChatFile {
 
   /**
    * Append a single message to the file
-   * @param {string} title - Current thread title (for rewriting)
-   * @param {import('./types').ChatMessage} message - Message to append
+   * @param {string} title - Current thread title
+   * @param {object} message
    */
   async appendMessage(title, message) {
     await this.ensureDir();
-    
-    // Read existing or start fresh
+
     let messages = [];
     const existing = await this.read();
     if (existing) {
       messages = existing.messages;
     }
-    
+
     messages.push(message);
     await this.write(title, messages);
   }
 
   /**
-   * Check if CHAT.md exists
+   * Check if the file exists
    * @returns {Promise<boolean>}
    */
   async exists() {
+    if (!this.filePath) return false;
     try {
       await fs.access(this.filePath);
       return true;
@@ -182,13 +214,36 @@ class ChatFile {
   }
 
   /**
-   * Get message count from file
+   * Get message count
    * @returns {Promise<number>}
    */
   async countMessages() {
     const parsed = await this.read();
     return parsed?.messages.length || 0;
   }
+
+  /**
+   * Rename the file on disk (for thread renames in views mode).
+   * @param {string} newName - New thread name
+   * @returns {Promise<string|null>} New file path, or null if not in views mode
+   */
+  async renameFile(newName) {
+    if (!this.viewsDir || !this.filePath) return null;
+
+    const newPath = path.join(this.viewsDir, threadNameToFilename(newName));
+    if (newPath === this.filePath) return this.filePath;
+
+    try {
+      await fs.rename(this.filePath, newPath);
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+      // Old file doesn't exist — nothing to rename
+    }
+
+    this.filePath = newPath;
+    this.threadName = newName;
+    return newPath;
+  }
 }
 
-module.exports = { ChatFile, TOOL_CALL_MARKER };
+module.exports = { ChatFile, TOOL_CALL_MARKER, getUsername, threadNameToFilename };

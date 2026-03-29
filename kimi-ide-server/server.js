@@ -551,6 +551,7 @@ wss.on('connection', (ws) => {
   // Must match frontend panel ID ('explorer')
   ThreadWebSocketHandler.setPanel(ws, 'explorer', {
     panelPath: path.join(AI_PANELS_PATH, 'explorer'),
+    projectRoot: getDefaultProjectRoot(),
   });
 
   // Send thread list on connect (async but don't block)
@@ -958,6 +959,7 @@ wss.on('connection', (ws) => {
         const containerKey = `agent:${agentPath}`;
         ThreadWebSocketHandler.setPanel(ws, containerKey, {
           panelPath: agentFolderPath,
+          projectRoot: getDefaultProjectRoot(),
         });
         const agentThreadManager = ThreadWebSocketHandler.getState(ws).threadManager;
         await agentThreadManager.init();
@@ -1067,6 +1069,7 @@ wss.on('connection', (ws) => {
           // Update thread panel
           ThreadWebSocketHandler.setPanel(ws, panel, {
             panelPath: path.join(AI_PANELS_PATH, panel),
+            projectRoot: getDefaultProjectRoot(),
           });
 
           // Send thread list for new panel
