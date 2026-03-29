@@ -118,9 +118,8 @@ Components are reusable across projects. They must be self-contained.
 Files:     feature-view.js, feature-controller.js, feature-service.js
            feature.styles.js, feature.template.js
 
-Events:    user.domain.action    (user.thread.created)
-           system.domain.action  (system.stream.completed)
-           state.changed         ({path, old, new})
+Events:    domain:action          (chat:turn_end, ticket:claimed, agent:run_completed)
+           Colon-separated.       Matches wire protocol convention (thread:create, thread:open).
 
 CSS vars:  --palette-name, --bg-name, --text-name
            --space-xs|sm|md|lg, --z-layer, --shadow-weight
