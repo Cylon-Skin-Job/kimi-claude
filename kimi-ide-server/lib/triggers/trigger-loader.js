@@ -11,6 +11,61 @@ const path = require('path');
 const { parseTriggerBlocks } = require('./trigger-parser');
 const { runScript } = require('./script-runner');
 const { buildFilter, evaluateCondition, applyTemplate } = require('../watcher/filter-loader');
+const { on } = require('../event-bus');
+
+/**
+ * Register an event bus listener for a TRIGGERS.md block.
+ * The listener evaluates conditions and executes the configured action.
+ *
+ * @sideeffect Registers a persistent listener on the event bus singleton.
+ */
+function registerBusListener(eventType, block, assignee, actionHandlers) {
+  on(eventType, (event) => {
+    // Workspace filter: skip events from other workspaces
+    if (block.workspace && event.workspace !== block.workspace) return;
+
+    // Condition check
+    if (block.condition && !evaluateCondition(block.condition, event)) return;
+
+    // Build template vars from event data
+    const vars = {
+      ...event,
+      assignee,
+      filePath: event.filePath || '',
+      basename: event.basename || '',
+    };
+
+    // Execute action
+    const action = block.action || 'create-ticket';
+    const handler = actionHandlers[action];
+    if (handler) {
+      const message = normalizeMessage(block.message);
+      const def = {
+        name: block.name || 'unnamed-trigger',
+        action,
+        prompt: block.prompt || null,
+        message: block.message,
+        target: block.target,
+        url: block.url,
+        body: block.body,
+        path: block.path,
+        content: block.content,
+        role: block.role,
+        _autoHold: true,
+        ticket: {
+          assignee,
+          title: message ? message.split('\n')[0].trim() : `Trigger: ${block.name}`,
+          body: message || `Event trigger fired: ${block.name}`,
+        },
+      };
+      handler(def, vars);
+    } else {
+      console.warn(`[TriggerLoader] Unknown action: ${action}`);
+    }
+  });
+
+  console.log(`[TriggerLoader] Bus listener: ${block.name} on ${eventType} → ${assignee}`);
+}
 
 /**
  * Scan agent folders for TRIGGERS.md and build filters + cron triggers.
@@ -20,6 +75,7 @@ const { buildFilter, evaluateCondition, applyTemplate } = require('../watcher/fi
  * @param {Object} registry - Parsed registry.json { agents: { botName: { folder } } }
  * @param {Object} actionHandlers - Action handlers from createActionHandlers()
  * @returns {{ filters: Array, cronTriggers: Array<{ trigger: Object, assignee: string }> }}
+ * @sideeffect Registers event bus listeners for chat/ticket/agent/system triggers.
  */
 function loadTriggers(projectRoot, agentsBasePath, registry, actionHandlers) {
   const filters = [];
@@ -44,6 +100,12 @@ function loadTriggers(projectRoot, agentsBasePath, registry, actionHandlers) {
     for (const block of blocks) {
       if (block.type === 'cron') {
         cronTriggers.push({ trigger: block, assignee: botName });
+      } else if (['chat', 'ticket', 'agent', 'system'].includes(block.type)) {
+        if (!block.event) {
+          console.warn(`[TriggerLoader] ${block.name || 'unnamed'}: type "${block.type}" requires an "event" field, skipping`);
+          continue;
+        }
+        registerBusListener(`${block.type}:${block.event}`, block, botName, actionHandlers);
       } else {
         // Default: file-change trigger → watcher filter
         const filter = buildTriggerFilter(block, botName, projectRoot, actionHandlers);

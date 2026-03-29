@@ -12,6 +12,7 @@ const { createRunFolder } = require('./run-folder');
 const { parsePrompt, buildContext } = require('./prompt-builder');
 const { spawnSession, initializeWire, sendPrompt, sendContinue, killSession } = require('./wire-session');
 const { createHeartbeatMonitor } = require('./heartbeat');
+const { emit } = require('../event-bus');
 
 // Active runs: runId -> { proc, runPath, agentId, lastActivity, stalls }
 const activeRuns = new Map();
@@ -78,6 +79,13 @@ function attachOutputMonitor(proc, runId) {
       });
       activeRuns.delete(runId);
       console.log(`[Runner] Run ${runId} finished (status: ${status})`);
+
+      if (code === 0) {
+        emit('agent:run_completed', { runId, agentId: manifest?.agent_id, ticketId: manifest?.ticket_id, status: 'completed', outcome: 'success' });
+        emit('ticket:closed', { ticketId: manifest?.ticket_id, outcome: manifest?.outcome || 'success' });
+      } else {
+        emit('agent:run_failed', { runId, agentId: manifest?.agent_id, ticketId: manifest?.ticket_id, status: 'stopped', error });
+      }
 
       // Append one-liner to agent's HISTORY.md
       try {
@@ -211,6 +219,7 @@ async function executeRun(projectRoot, agentFolder, ticket) {
   sendPrompt(proc, systemContext, userMessage);
 
   console.log(`[Runner] Run ${runId} started for agent ${manifest.agent_id}`);
+  emit('agent:run_started', { runId, agentId: manifest.agent_id, ticketId: ticket.frontmatter?.id, botName: manifest?.bot_name });
   return { runId, runPath, status: 'running' };
 }
 
@@ -245,6 +254,7 @@ function checkHeartbeats(projectRoot, options = {}) {
       killSession(run.proc);
       activeRuns.delete(runId);
       console.log(`[Runner] Killed stalled run ${runId}`);
+      emit('agent:run_stalled', { runId, agentId: run.agentId, stallCount: options.maxStalls || 3 });
     },
   });
 

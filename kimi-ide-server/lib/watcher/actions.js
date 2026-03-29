@@ -5,6 +5,8 @@
  * where vars contains the template variables from the event context.
  */
 
+const fs = require('fs');
+const path = require('path');
 const { applyTemplate } = require('./filter-loader');
 
 /**
@@ -45,7 +47,9 @@ function createActionHandlers(deps = {}) {
     'log'(def, vars) {
       const message = def.message
         ? applyTemplate(def.message, vars)
-        : `[${vars.event}] ${vars.filePath} (${vars.parentStats.files} files in ${vars.parentDir})`;
+        : vars.parentStats
+          ? `[${vars.event}] ${vars.filePath} (${vars.parentStats.files} files in ${vars.parentDir})`
+          : `[${vars.type || vars.event || 'event'}] ${JSON.stringify(vars).slice(0, 200)}`;
       console.log(`[Action:log:${def.name}] ${message}`);
     },
 
@@ -64,6 +68,68 @@ function createActionHandlers(deps = {}) {
         delta: vars.delta,
       };
       console.log(`[Action:notify] ${JSON.stringify(payload)}`);
+    },
+
+    /**
+     * Send a system message to an active chat session via WebSocket.
+     * Phase 2: active sessions only. Session spawning comes in Phase 4.
+     */
+    'send-message'(def, vars) {
+      const target = def.target || vars.workspace;
+      const message = applyTemplate(def.message || '', vars);
+      const role = def.role || 'system';
+
+      if (!deps.sendChatMessage) {
+        console.warn(`[Action:send-message] No sendChatMessage function provided`);
+        return;
+      }
+
+      deps.sendChatMessage(target, message, role);
+      console.log(`[Action:send-message] → ${target}: ${message.slice(0, 80)}`);
+    },
+
+    /**
+     * HTTP POST to an external URL. Fire-and-forget.
+     */
+    'webhook-post'(def, vars) {
+      const url = applyTemplate(def.url || '', vars);
+      const body = def.body ? applyTemplate(def.body, vars) : JSON.stringify(vars);
+
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      }).then(res => {
+        console.log(`[Action:webhook-post] ${url} → ${res.status}`);
+      }).catch(err => {
+        console.error(`[Action:webhook-post] ${url} failed: ${err.message}`);
+      });
+    },
+
+    /**
+     * Write template-expanded content to a file path.
+     * Path must be within the project root.
+     */
+    'drop-file'(def, vars) {
+      const filePath = applyTemplate(def.path || '', vars);
+      const content = applyTemplate(def.content || '', vars);
+      const projectRoot = deps.projectRoot;
+
+      if (!filePath) {
+        console.warn(`[Action:drop-file] No path specified, skipping`);
+        return;
+      }
+
+      if (projectRoot && !path.resolve(filePath).startsWith(path.resolve(projectRoot))) {
+        console.warn(`[Action:drop-file] Path outside project root, skipping: ${filePath}`);
+        return;
+      }
+
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+      fs.writeFileSync(filePath, content, 'utf8');
+      console.log(`[Action:drop-file] ${filePath}`);
     },
   };
 }

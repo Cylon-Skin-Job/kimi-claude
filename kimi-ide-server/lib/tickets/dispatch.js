@@ -16,6 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const { loadTicket, loadAllTickets } = require('./loader');
+const { emit } = require('../event-bus');
 
 // Debounce map — prevent double-fires from fs.watch
 const pending = new Map();
@@ -52,6 +53,7 @@ function claimTicket(issuesDir, ticket) {
   } catch {}
 
   console.log(`[Dispatch] Claimed ${ticket.frontmatter.id}`);
+  emit('ticket:claimed', { ticketId: ticket.frontmatter.id, assignee: ticket.frontmatter.assignee, state: 'claimed' });
   return true;
 }
 
@@ -77,6 +79,7 @@ function releaseClaim(issuesDir, ticket) {
   } catch {}
 
   console.log(`[Dispatch] Released claim on ${ticket.frontmatter.id}`);
+  emit('ticket:released', { ticketId: ticket.frontmatter.id, state: 'open' });
 }
 
 function loadRegistry(projectRoot) {
@@ -146,6 +149,7 @@ function dispatch(ticket, registry) {
   console.log(`  Ticket:   ${ticket.frontmatter.id}`);
   console.log(`  Agent:    ${agent.folder}`);
   console.log(`─────────────────────────────────────────────\n`);
+  emit('ticket:dispatched', { ticketId: ticket.frontmatter.id, assignee, agentFolder: agent.folder });
 
   executeRun(projectRoot, agent.folder, ticket).catch(err => {
     console.error(`[Runner] Failed to execute run for ${ticket.frontmatter.id}:`, err);
