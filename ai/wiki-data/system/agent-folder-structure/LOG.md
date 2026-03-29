@@ -21,3 +21,9 @@ Source: task from user
 Changed: Added DECISIONS.md to standard agent files. Added Edit Permissions section (locked vs self-editable). Added Capture Gate section (approval mechanism for locked files). Added Archive System section (dated snapshots before edits). Updated folder structure diagram with archive/ tree and edit permission annotations. Updated agent creation and cloning checklists to include DECISIONS.md.
 Run: —
 By: Claude (IDE)
+
+## 2026-03-29 — Rename workflow PROMPT.md → WORKFLOW.md
+Source: user design decision
+Changed: Renamed workflow PROMPT.md to WORKFLOW.md throughout. File name now determines edit permission — PROMPT.md is always locked (identity), WORKFLOW.md is always agent-editable (operational). Added "File Name = Permission" section to Edit Permissions. Updated folder structure diagram, WORKFLOW.md anatomy header, run folder frozen copies, registry references, and agent creation/cloning checklists.
+Run: —
+By: Claude (IDE)

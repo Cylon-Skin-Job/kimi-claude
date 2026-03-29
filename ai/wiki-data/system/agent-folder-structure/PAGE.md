@@ -71,7 +71,7 @@ To create a new agent based on an existing one:
 
 1. Copy the agent folder from one group to another (e.g., `System/wiki-manager/` → `Research Tools/my-wiki-agent/`)
 2. Edit PROMPT.md to define the new agent's role and scope
-3. Rename the `bot_name` in workflow PROMPT.md frontmatter to a unique name
+3. Rename the `bot_name` in WORKFLOW.md frontmatter to a unique name
 4. Add the new bot name to `registry.json`
 5. Clear LESSONS.md, HISTORY.md, MEMORY.md, DECISIONS.md (those belong to the original)
 6. The new agent is immediately functional with the cloned workflows as a starting point
@@ -106,7 +106,7 @@ Every agent folder contains:
 │       └── 2026-03-29.md
 ├── workflows/         ← workflow definitions
 │   ├── {Workflow Name}/
-│   │   └── PROMPT.md  ← orchestrator instructions with YAML frontmatter
+│   │   └── WORKFLOW.md  ← orchestrator instructions with YAML frontmatter — agent can edit
 │   └── ...
 ├── runs/              ← execution history (one folder per ticket)
 │   └── {timestamp}/
@@ -260,7 +260,23 @@ Not all agent files have the same edit rules. Some files define the agent's iden
 | SESSION.md | Permissions, CLI config, secrets. Changes must go through the capture gate. |
 | TRIGGERS.md | Event triggers. Changes must go through the capture gate. |
 
-This split lets agents get smarter (learn lessons, record decisions, cache user preferences) without being able to change who they are or what they're allowed to do.
+**Agent CAN edit (operational):**
+
+| File | Where | What it holds |
+|------|-------|---------------|
+| WORKFLOW.md | `workflows/*/` | Task instructions for a specific workflow |
+
+### File Name = Permission
+
+The file name determines editability, not the path:
+
+- **PROMPT.md** — always locked, anywhere it appears. Agent identity.
+- **SESSION.md** — always locked, anywhere it appears. Permissions and receipts.
+- **WORKFLOW.md** — always agent-editable. Operational task instructions. The agent can refine how it does a specific task without going through the capture gate.
+
+This eliminates path-based permission rules. If you see PROMPT.md, it's locked. If you see WORKFLOW.md, the agent owns it.
+
+This split lets agents get smarter (learn lessons, record decisions, refine workflows) without being able to change who they are or what they're allowed to do.
 
 ---
 
@@ -316,7 +332,7 @@ archive/
 
 ---
 
-## Workflow PROMPT.md Anatomy
+## WORKFLOW.md Anatomy
 
 ```yaml
 ---
@@ -372,7 +388,7 @@ Every workflow execution creates a run folder in `{agent-id}/runs/{timestamp}/`.
 ```
 runs/{timestamp}/
 ├── ticket.md          ← frozen copy of the triggering ticket
-├── prompt.md          ← frozen copy of the workflow PROMPT.md
+├── workflow.md        ← frozen copy of the WORKFLOW.md
 ├── lessons.md         ← frozen copy of LESSONS.md at run time
 ├── manifest.json      ← status, timing, model, outcome
 ├── run-index.json     ← step-by-step progress tracker
@@ -383,7 +399,7 @@ runs/{timestamp}/
 └── ...
 ```
 
-**Why frozen copies:** If PROMPT.md or workflow prompts evolve over time, past runs retain the exact version that was active. This enables reproducibility and process auditing — compare how instructions were followed across runs.
+**Why frozen copies:** If PROMPT.md or WORKFLOW.md evolve over time, past runs retain the exact version that was active. This enables reproducibility and process auditing — compare how instructions were followed across runs.
 
 **manifest.json status:** `pending` → `in_progress` → `completed` | `stopped` | `error`
 
@@ -410,7 +426,7 @@ runs/{timestamp}/
 }
 ```
 
-The `bot_name` in a workflow's YAML frontmatter must match a key in this registry. That's the dispatch key — when a ticket is assigned to `my-scraper`, the runner looks up `Research Tools/paper-scraper` and runs the matching workflow.
+The `bot_name` in a WORKFLOW.md's YAML frontmatter must match a key in this registry. That's the dispatch key — when a ticket is assigned to `my-scraper`, the runner looks up `Research Tools/paper-scraper` and runs the matching workflow.
 
 ---
 
@@ -425,7 +441,7 @@ The `bot_name` in a workflow's YAML frontmatter must match a key in this registr
 5. Write SESSION.md (thread model, timeout, context loading)
 6. Write TRIGGERS.md (what events activate it)
 7. Create empty MEMORY.md, LESSONS.md, DECISIONS.md, HISTORY.md
-8. Create `workflows/` with at least one workflow PROMPT.md
+8. Create `workflows/` with at least one WORKFLOW.md
 9. Create empty `runs/` directory
 10. Add entry to `registry.json` with bot name → group/folder mapping
 11. Add the agent ID to the group's `index.json` children array
@@ -437,7 +453,7 @@ The `bot_name` in a workflow's YAML frontmatter must match a key in this registr
 1. Copy an existing agent folder to a new group (or the same group with a new name)
 2. Update `index.json` with a new ID and label
 3. Update PROMPT.md for the new role
-4. Change `bot_name` in all workflow PROMPT.md files to a unique name
+4. Change `bot_name` in all WORKFLOW.md files to a unique name
 5. Add the new bot name to `registry.json`
 6. Clear LESSONS.md, HISTORY.md, MEMORY.md
 7. Add the agent ID to the group's `index.json` children array

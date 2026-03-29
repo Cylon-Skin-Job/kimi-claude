@@ -98,10 +98,25 @@ Example:
 |------|---------------|------|
 | PROMPT.md | No | Capture gate (human paste) |
 | SESSION.md | No | Capture gate (human paste) |
+| TRIGGERS.md | No | Capture gate |
 | MEMORY.md | Yes | Direct edit |
 | LESSONS.md | Yes | Direct append |
 | DECISIONS.md | Yes | Direct edit |
-| TRIGGERS.md | No | Capture gate |
+| WORKFLOW.md (in workflows/) | Yes | Direct edit |
+
+### File Name = Permission
+
+The file name determines editability, not the path:
+
+- **PROMPT.md** — always locked. Agent identity.
+- **SESSION.md** — always locked. Permissions and receipts.
+- **TRIGGERS.md** — always locked. Event triggers.
+- **WORKFLOW.md** — always agent-editable. Operational task instructions in `workflows/*/`. The agent can refine how it does a specific task without going through the capture gate.
+- **MEMORY.md** — always agent-editable. Rolling cache.
+- **LESSONS.md** — always agent-editable. Discovered truths.
+- **DECISIONS.md** — always agent-editable. The why layer.
+
+This eliminates path-based permission rules. The file name *is* the permission. No ambiguity.
 
 ## The Capture Gate
 
