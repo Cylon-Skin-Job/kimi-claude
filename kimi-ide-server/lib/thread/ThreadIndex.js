@@ -1,143 +1,99 @@
 /**
- * ThreadIndex - Manages the threads.json index file
- * 
- * Responsibilities:
- * - CRUD operations on thread metadata
- * - MRU (Most Recently Used) ordering
- * - Persistence to threads.json
+ * ThreadIndex - Thread metadata CRUD against SQLite
+ *
+ * One job: read/write thread metadata in the threads table.
+ * MRU ordering via updated_at DESC (replaces JS object insertion-order trick).
  */
 
-const fs = require('fs').promises;
-const path = require('path');
-
-// Default empty index
-const DEFAULT_INDEX = {
-  version: '1.0',
-  threads: {}
-};
+const { getDb } = require('../db');
 
 class ThreadIndex {
   /**
-   * @param {string} threadsDir - Path to threads directory
+   * @param {string} panelId - Panel identifier for scoped queries
    */
-  constructor(threadsDir) {
-    this.threadsDir = threadsDir;
-    this.indexPath = path.join(threadsDir, 'threads.json');
-    /** @type {import('./types').ThreadIndex|null} */
-    this.cache = null;
-    this.cacheValid = false;
+  constructor(panelId) {
+    this.panelId = panelId;
   }
 
   /**
-   * Initialize the index file if it doesn't exist
+   * No-op — kept for caller compatibility. Migrations handle schema.
    */
-  async init() {
-    try {
-      await fs.access(this.indexPath);
-    } catch {
-      // File doesn't exist, create it
-      await fs.mkdir(this.threadsDir, { recursive: true });
-      await this._save(DEFAULT_INDEX);
-    }
-    this.cacheValid = false;
-  }
-
-  /**
-   * Load the index from disk
-   * @returns {Promise<import('./types').ThreadIndex>}
-   */
-  async load() {
-    if (this.cacheValid && this.cache) {
-      return this.cache;
-    }
-
-    try {
-      const data = await fs.readFile(this.indexPath, 'utf-8');
-      const index = JSON.parse(data);
-      this.cache = index;
-      this.cacheValid = true;
-      return index;
-    } catch (err) {
-      if (err.code === 'ENOENT') {
-        await this.init();
-        return DEFAULT_INDEX;
-      }
-      throw new Error(`Failed to load threads.json: ${err.message}`);
-    }
-  }
-
-  /**
-   * Save the index to disk
-   * @param {import('./types').ThreadIndex} index
-   */
-  async _save(index) {
-    await fs.writeFile(this.indexPath, JSON.stringify(index, null, 2));
-    this.cache = index;
-    this.cacheValid = true;
-  }
+  async init() {}
 
   /**
    * Get all threads ordered by MRU (most recent first)
-   * @returns {Promise<Array<{threadId: string, entry: import('./types').ThreadEntry}>>}
+   * @returns {Promise<Array<{threadId: string, entry: object}>>}
    */
   async list() {
-    const index = await this.load();
-    // Object.keys preserves insertion order in JavaScript
-    return Object.keys(index.threads).map(threadId => ({
-      threadId,
-      entry: index.threads[threadId]
+    const db = getDb();
+    const rows = await db('threads')
+      .where('panel_id', this.panelId)
+      .orderBy('updated_at', 'desc');
+
+    return rows.map((row) => ({
+      threadId: row.thread_id,
+      entry: this._toEntry(row),
     }));
   }
 
   /**
    * Get a single thread by ID
    * @param {string} threadId
-   * @returns {Promise<import('./types').ThreadEntry|null>}
+   * @returns {Promise<object|null>}
    */
   async get(threadId) {
-    const index = await this.load();
-    return index.threads[threadId] || null;
+    const db = getDb();
+    const row = await db('threads').where('thread_id', threadId).first();
+    return row ? this._toEntry(row) : null;
   }
 
   /**
    * Create a new thread entry
-   * @param {string} threadId - Thread ID (Kimi session ID)
-   * @param {string} [name='New Chat'] - Initial name
-   * @returns {Promise<import('./types').ThreadEntry>}
+   * @param {string} threadId
+   * @param {string} [name='New Chat']
+   * @returns {Promise<object>}
    */
   async create(threadId, name = 'New Chat') {
-    const index = await this.load();
-    
-    const entry = {
-      name,
-      createdAt: new Date().toISOString(),
-      messageCount: 0,
-      status: 'suspended' // Will be set to active when session starts
-    };
+    const db = getDb();
+    const now = Date.now();
+    const createdAt = new Date().toISOString();
 
-    // Insert at front (MRU order)
-    const newThreads = { [threadId]: entry, ...index.threads };
-    await this._save({ ...index, threads: newThreads });
-    
-    return entry;
+    await db('threads').insert({
+      thread_id: threadId,
+      panel_id: this.panelId,
+      name,
+      created_at: createdAt,
+      message_count: 0,
+      status: 'suspended',
+      updated_at: now,
+    });
+
+    return { name, createdAt, messageCount: 0, status: 'suspended' };
   }
 
   /**
    * Update a thread entry
    * @param {string} threadId
-   * @param {Partial<import('./types').ThreadEntry>} updates
-   * @returns {Promise<import('./types').ThreadEntry|null>}
+   * @param {object} updates - camelCase fields
+   * @returns {Promise<object|null>}
    */
   async update(threadId, updates) {
-    const index = await this.load();
-    const entry = index.threads[threadId];
-    if (!entry) return null;
+    const db = getDb();
+    const dbUpdates = {};
 
-    const updated = { ...entry, ...updates };
-    const newThreads = { ...index.threads, [threadId]: updated };
-    await this._save({ ...index, threads: newThreads });
-    
-    return updated;
+    if (updates.name !== undefined) dbUpdates.name = updates.name;
+    if (updates.status !== undefined) dbUpdates.status = updates.status;
+    if (updates.messageCount !== undefined) dbUpdates.message_count = updates.messageCount;
+    if (updates.resumedAt !== undefined) dbUpdates.resumed_at = updates.resumedAt;
+    if (updates.date !== undefined) dbUpdates.date = updates.date;
+    if (updates.updatedAt !== undefined) dbUpdates.updated_at = updates.updatedAt;
+
+    if (Object.keys(dbUpdates).length === 0) return this.get(threadId);
+
+    const count = await db('threads').where('thread_id', threadId).update(dbUpdates);
+    if (count === 0) return null;
+
+    return this.get(threadId);
   }
 
   /**
@@ -150,25 +106,15 @@ class ThreadIndex {
   }
 
   /**
-   * Mark thread as active and move to front (MRU)
+   * Mark thread as active and bump MRU
    * @param {string} threadId
    */
   async activate(threadId) {
-    const index = await this.load();
-    const entry = index.threads[threadId];
-    if (!entry) return null;
-
-    // Remove from current position and add to front
-    const { [threadId]: _, ...rest } = index.threads;
-    const updated = { ...entry, status: 'active' };
-    const newThreads = { [threadId]: updated, ...rest };
-    
-    await this._save({ ...index, threads: newThreads });
-    return updated;
+    return this.update(threadId, { status: 'active', updatedAt: Date.now() });
   }
 
   /**
-   * Set the date field on a thread (used by daily-rolling strategy)
+   * Set the date field (daily-rolling strategy)
    * @param {string} threadId
    * @param {string} dateString - YYYY-MM-DD
    */
@@ -189,9 +135,12 @@ class ThreadIndex {
    * @param {string} threadId
    */
   async incrementMessageCount(threadId) {
-    const entry = await this.get(threadId);
-    if (!entry) return null;
-    return this.update(threadId, { messageCount: entry.messageCount + 1 });
+    const db = getDb();
+    const count = await db('threads')
+      .where('thread_id', threadId)
+      .increment('message_count', 1);
+    if (count === 0) return null;
+    return this.get(threadId);
   }
 
   /**
@@ -203,73 +152,47 @@ class ThreadIndex {
   }
 
   /**
-   * Delete a thread entry
+   * Delete a thread (CASCADE deletes exchanges)
    * @param {string} threadId
-   * @returns {Promise<boolean>} - True if deleted, false if not found
+   * @returns {Promise<boolean>}
    */
   async delete(threadId) {
-    const index = await this.load();
-    if (!(threadId in index.threads)) {
-      return false;
-    }
-
-    const { [threadId]: _, ...rest } = index.threads;
-    await this._save({ ...index, threads: rest });
-    return true;
+    const db = getDb();
+    const count = await db('threads').where('thread_id', threadId).del();
+    return count > 0;
   }
 
   /**
-   * Move thread to front of MRU list (on activity)
+   * Bump MRU timestamp
    * @param {string} threadId
    */
   async touch(threadId) {
-    const index = await this.load();
-    const entry = index.threads[threadId];
-    if (!entry) return null;
-
-    // Re-insert to move to front
-    const { [threadId]: _, ...rest } = index.threads;
-    const newThreads = { [threadId]: entry, ...rest };
-    
-    await this._save({ ...index, threads: newThreads });
-    return entry;
+    return this.update(threadId, { updatedAt: Date.now() });
   }
 
   /**
-   * Rebuild index from filesystem (recovery)
-   * Scans threads/ for CHAT.md files and rebuilds threads.json
+   * Rebuild — no-op for SQLite (no filesystem index to reconstruct)
+   * @returns {Promise<number>}
    */
   async rebuild() {
-    const threads = {};
-    
-    try {
-      const entries = await fs.readdir(this.threadsDir, { withFileTypes: true });
-      
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const threadId = entry.name;
-          const chatPath = path.join(this.threadsDir, threadId, 'CHAT.md');
-          
-          try {
-            await fs.access(chatPath);
-            // CHAT.md exists, add to index with placeholder
-            threads[threadId] = {
-              name: 'New Chat', // Will be updated from CHAT.md title
-              createdAt: new Date().toISOString(),
-              messageCount: 0, // Will be counted from CHAT.md
-              status: 'suspended'
-            };
-          } catch {
-            // No CHAT.md, skip this folder
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Failed to rebuild index:', err);
-    }
+    const rows = await getDb()('threads').where('panel_id', this.panelId);
+    return rows.length;
+  }
 
-    await this._save({ version: '1.0', threads });
-    return Object.keys(threads).length;
+  /**
+   * Map a DB row (snake_case) to the ThreadEntry shape (camelCase)
+   * @private
+   */
+  _toEntry(row) {
+    const entry = {
+      name: row.name,
+      createdAt: row.created_at,
+      messageCount: row.message_count,
+      status: row.status,
+    };
+    if (row.resumed_at) entry.resumedAt = row.resumed_at;
+    if (row.date) entry.date = row.date;
+    return entry;
   }
 }
 

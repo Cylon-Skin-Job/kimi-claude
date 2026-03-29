@@ -18,20 +18,24 @@ const DEFAULT_CONFIG = {
 
 class ThreadManager {
   /**
-   * @param {string} panelPath - Path to panel directory (e.g., ai/panels/{id})
-   * @param {Partial<import('./types').ThreadManagerConfig>} [config]
+   * @param {string} panelId - Panel identifier (e.g., 'explorer', 'agent:bot-name')
+   * @param {object} [config]
+   * @param {string} [config.panelPath] - Filesystem path for ChatFile (still uses UUID dirs)
+   * @param {number} [config.maxActiveSessions]
+   * @param {number} [config.idleTimeoutMinutes]
    */
-  constructor(panelPath, config = {}) {
-    this.panelPath = panelPath;
-    this.threadsDir = path.join(panelPath, 'threads');
+  constructor(panelId, config = {}) {
+    this.panelId = panelId;
+    this.panelPath = config.panelPath || null;
+    this.threadsDir = this.panelPath ? path.join(this.panelPath, 'threads') : null;
     this.config = { ...DEFAULT_CONFIG, ...config };
-    
+
     /** @type {ThreadIndex} */
-    this.index = new ThreadIndex(this.threadsDir);
-    
+    this.index = new ThreadIndex(panelId);
+
     /** @type {Map<string, import('./types').ThreadSession>} */
     this.activeSessions = new Map();
-    
+
     /** @type {Map<string, NodeJS.Timeout>} */
     this.timeouts = new Map();
   }
@@ -61,20 +65,17 @@ class ThreadManager {
   async createThread(threadId, name = 'New Chat') {
     // Check for FIFO eviction
     await this._enforceSessionLimit();
-    
-    const threadPath = path.join(this.threadsDir, threadId);
-    
-    // Create thread folder and CHAT.md
-    const chatFile = new ChatFile(threadPath);
-    await chatFile.write(name, []);
-    
-    // Create history.json (rich storage)
-    const historyFile = new HistoryFile(threadPath);
-    await historyFile.create(threadId);
-    
-    // Create index entry
+
+    // Create index entry (SQLite)
     const entry = await this.index.create(threadId, name);
-    
+
+    // Create CHAT.md in thread folder (still uses UUID dirs)
+    if (this.threadsDir) {
+      const threadPath = path.join(this.threadsDir, threadId);
+      const chatFile = new ChatFile(threadPath);
+      await chatFile.write(name, []);
+    }
+
     return { threadId, entry };
   }
 
@@ -104,14 +105,16 @@ class ThreadManager {
   async renameThread(threadId, newName) {
     const entry = await this.index.rename(threadId, newName);
     if (!entry) return null;
-    
+
     // Update CHAT.md title
-    const chatFile = new ChatFile(path.join(this.threadsDir, threadId));
-    const parsed = await chatFile.read();
-    if (parsed) {
-      await chatFile.write(newName, parsed.messages);
+    if (this.threadsDir) {
+      const chatFile = new ChatFile(path.join(this.threadsDir, threadId));
+      const parsed = await chatFile.read();
+      if (parsed) {
+        await chatFile.write(newName, parsed.messages);
+      }
     }
-    
+
     return { threadId, entry };
   }
 
@@ -122,20 +125,22 @@ class ThreadManager {
   async deleteThread(threadId) {
     // Kill active session if any
     await this.closeSession(threadId);
-    
-    // Remove from index
+
+    // Remove from index (CASCADE deletes exchanges)
     const deleted = await this.index.delete(threadId);
     if (!deleted) return false;
-    
-    // Delete thread folder
-    const threadPath = path.join(this.threadsDir, threadId);
-    const fs = require('fs').promises;
-    try {
-      await fs.rm(threadPath, { recursive: true, force: true });
-    } catch (err) {
-      console.error(`Failed to delete thread folder ${threadId}:`, err);
+
+    // Delete thread folder (CHAT.md)
+    if (this.threadsDir) {
+      const threadPath = path.join(this.threadsDir, threadId);
+      const fs = require('fs').promises;
+      try {
+        await fs.rm(threadPath, { recursive: true, force: true });
+      } catch (err) {
+        console.error(`Failed to delete thread folder ${threadId}:`, err);
+      }
     }
-    
+
     return true;
   }
 
@@ -147,17 +152,19 @@ class ThreadManager {
   async addMessage(threadId, message) {
     const entry = await this.index.get(threadId);
     if (!entry) throw new Error(`Thread not found: ${threadId}`);
-    
+
     // Append to CHAT.md
-    const chatFile = new ChatFile(path.join(this.threadsDir, threadId));
-    await chatFile.appendMessage(entry.name, message);
-    
+    if (this.threadsDir) {
+      const chatFile = new ChatFile(path.join(this.threadsDir, threadId));
+      await chatFile.appendMessage(entry.name, message);
+    }
+
     // Update message count
     await this.index.incrementMessageCount(threadId);
-    
+
     // Move to front of MRU
     await this.index.touch(threadId);
-    
+
     return { threadId, messageCount: entry.messageCount + 1 };
   }
 
@@ -167,17 +174,18 @@ class ThreadManager {
    * @returns {Promise<import('./types').ParsedChat|null>}
    */
   async getHistory(threadId) {
+    if (!this.threadsDir) return null;
     const chatFile = new ChatFile(path.join(this.threadsDir, threadId));
     return chatFile.read();
   }
 
   /**
-   * Get rich thread history (history.json format)
+   * Get rich thread history (SQLite exchanges)
    * @param {string} threadId
-   * @returns {Promise<import('./HistoryFile').HistoryData|null>}
+   * @returns {Promise<object|null>}
    */
   async getRichHistory(threadId) {
-    const historyFile = new HistoryFile(path.join(this.threadsDir, threadId));
+    const historyFile = new HistoryFile(threadId);
     return historyFile.read();
   }
 
@@ -199,7 +207,7 @@ class ThreadManager {
     /** @type {import('./types').ThreadSession} */
     const session = {
       threadId,
-      panelId: path.basename(this.panelPath),
+      panelId: this.panelId,
       wireProcess,
       ws,
       lastActivity: Date.now(),

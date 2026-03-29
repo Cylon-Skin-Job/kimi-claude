@@ -20,21 +20,25 @@ const threadManagers = new Map();
 const wsState = new Map();
 
 /**
- * Get or create ThreadManager for a panel
+ * Get or create ThreadManager for a panel.
+ * If the manager already exists but panelPath changed, replace it.
  * @param {string} panelId
  * @param {object} [config] - Config including panelPath for ChatFile
  * @returns {ThreadManager}
  */
 function getThreadManager(panelId, config = {}) {
-  if (!threadManagers.has(panelId)) {
-    const manager = new ThreadManager(panelId, config);
-    threadManagers.set(panelId, manager);
-    // Initialize async (don't block)
-    manager.init().catch(err => {
-      console.error(`[ThreadManager] Failed to init ${panelId}:`, err);
-    });
+  const existing = threadManagers.get(panelId);
+  if (existing && existing.panelPath === (config.panelPath || null)) {
+    return existing;
   }
-  return threadManagers.get(panelId);
+
+  const manager = new ThreadManager(panelId, config);
+  threadManagers.set(panelId, manager);
+  // Initialize async (don't block)
+  manager.init().catch(err => {
+    console.error(`[ThreadManager] Failed to init ${panelId}:`, err);
+  });
+  return manager;
 }
 
 /**

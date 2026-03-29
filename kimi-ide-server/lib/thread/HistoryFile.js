@@ -1,190 +1,144 @@
 /**
- * HistoryFile - Writer for history.json (structured chat storage)
- * 
- * Format mirrors the UI flow for reconstruction and AI analysis.
- * Each exchange = one user request + assistant response with parts.
+ * HistoryFile - Exchange CRUD against SQLite
+ *
+ * One job: read/write exchange data in the exchanges table.
+ * The assistant column stores { parts: [...] } as JSON text.
+ * JSON.parse on read must return the exact shape the client expects.
  */
 
-const fs = require('fs').promises;
-const path = require('path');
+const { getDb } = require('../db');
 
-const HISTORY_FILENAME = 'history.json';
 const SCHEMA_VERSION = '1.0.0';
-
-/**
- * @typedef {Object} ToolCallPart
- * @property {'tool_call'} type
- * @property {string} toolCallId - Tool call ID for matching
- * @property {string} name - Tool name (e.g., "ReadFile", "StrReplaceFile")
- * @property {object} arguments - Tool arguments
- * @property {ToolResult} result - Tool execution result
- * @property {number} [duration_ms] - Execution time
- */
-
-/**
- * @typedef {Object} ToolResult
- * @property {string} [output] - Text output
- * @property {DisplayItem[]} [display] - Structured display data
- * @property {string} [error] - Error message if failed
- * @property {string[]} [files] - Paths to written/modified files
- */
-
-/**
- * @typedef {Object} DisplayItem
- * @property {'text'|'json'|'image'|'diff'|'file_tree'} type
- */
-
-/**
- * @typedef {Object} TextPart
- * @property {'text'} type
- * @property {string} content
- */
-
-/**
- * @typedef {Object} ThinkPart
- * @property {'think'} type
- * @property {string} content
- */
-
-/**
- * @typedef {Object} Exchange
- * @property {number} seq - Sequence number (1, 2, 3...)
- * @property {number} ts - Timestamp when exchange completed
- * @property {string} user - User message content
- * @property {object} assistant - Assistant response
- * @property {Array<TextPart|ThinkPart|ToolCallPart>} assistant.parts - Response parts in order
- * @property {MetadataItem[]} [metadata] - Optional enrichment data
- */
-
-/**
- * @typedef {Object} HistoryData
- * @property {string} version - Schema version
- * @property {string} threadId
- * @property {number} createdAt
- * @property {number} updatedAt
- * @property {Exchange[]} exchanges
- */
 
 class HistoryFile {
   /**
-   * @param {string} threadDir - Path to thread directory
-   */
-  constructor(threadDir) {
-    this.threadDir = threadDir;
-    this.filePath = path.join(threadDir, HISTORY_FILENAME);
-  }
-
-  /**
-   * Ensure the thread directory exists
-   */
-  async ensureDir() {
-    await fs.mkdir(this.threadDir, { recursive: true });
-  }
-
-  /**
-   * Create initial history.json for a new thread
    * @param {string} threadId
-   * @returns {Promise<HistoryData>}
+   */
+  constructor(threadId) {
+    this.threadId = threadId;
+  }
+
+  /**
+   * No-op — thread row already exists, exchanges start empty.
+   * Kept for caller compatibility.
+   * @param {string} threadId
+   * @returns {Promise<object>}
    */
   async create(threadId) {
-    await this.ensureDir();
-    
     const now = Date.now();
-    const data = {
+    return {
       version: SCHEMA_VERSION,
       threadId,
       createdAt: now,
       updatedAt: now,
-      exchanges: []
+      exchanges: [],
     };
-    
-    await this._write(data);
-    return data;
   }
 
   /**
-   * Read and parse history.json
-   * @returns {Promise<HistoryData|null>}
+   * Read all exchanges for this thread.
+   * Reconstructs the HistoryData shape that callers expect.
+   * @returns {Promise<object|null>}
    */
   async read() {
-    try {
-      const content = await fs.readFile(this.filePath, 'utf-8');
-      return JSON.parse(content);
-    } catch (err) {
-      if (err.code === 'ENOENT') {
-        return null;
-      }
-      throw err;
-    }
+    const db = getDb();
+    const rows = await db('exchanges')
+      .where('thread_id', this.threadId)
+      .orderBy('seq', 'asc');
+
+    if (rows.length === 0) return null;
+
+    return {
+      version: SCHEMA_VERSION,
+      threadId: this.threadId,
+      createdAt: rows[0].ts,
+      updatedAt: rows[rows.length - 1].ts,
+      exchanges: rows.map(this._toExchange),
+    };
   }
 
   /**
-   * Add a complete exchange to history
+   * Add a complete exchange.
    * @param {string} threadId
-   * @param {string} userInput - User message
-   * @param {Array<TextPart|ToolCallPart>} parts - Assistant response parts
-   * @returns {Promise<Exchange>}
+   * @param {string} userInput
+   * @param {Array} parts - Assistant response parts
+   * @returns {Promise<object>} Exchange object
    */
   async addExchange(threadId, userInput, parts) {
-    const data = await this.read() || await this.create(threadId);
-    
-    const exchange = {
-      seq: data.exchanges.length + 1,
-      ts: Date.now(),
+    const db = getDb();
+    const seq = (await this.countExchanges()) + 1;
+    const ts = Date.now();
+    const assistant = JSON.stringify({ parts: parts.map((p) => ({ ...p })) });
+
+    await db('exchanges').insert({
+      thread_id: threadId,
+      seq,
+      ts,
+      user_input: userInput,
+      assistant,
+      metadata: '[]',
+    });
+
+    return {
+      seq,
+      ts,
       user: userInput,
-      assistant: {
-        parts: parts.map(p => ({ ...p })) // Clone to avoid mutations
-      },
-      metadata: []
+      assistant: { parts: parts.map((p) => ({ ...p })) },
+      metadata: [],
     };
-    
-    data.exchanges.push(exchange);
-    data.updatedAt = exchange.ts;
-    
-    await this._write(data);
-    return exchange;
   }
 
   /**
-   * Check if history.json exists
+   * Check if any exchanges exist for this thread.
    * @returns {Promise<boolean>}
    */
   async exists() {
-    try {
-      await fs.access(this.filePath);
-      return true;
-    } catch {
-      return false;
-    }
+    const db = getDb();
+    const row = await db('exchanges')
+      .where('thread_id', this.threadId)
+      .first();
+    return !!row;
   }
 
   /**
-   * Get exchange count
+   * Get exchange count.
    * @returns {Promise<number>}
    */
   async countExchanges() {
-    const data = await this.read();
-    return data?.exchanges.length || 0;
+    const db = getDb();
+    const result = await db('exchanges')
+      .where('thread_id', this.threadId)
+      .count('* as count')
+      .first();
+    return result?.count || 0;
   }
 
   /**
-   * Get the last exchange (for continuation)
-   * @returns {Promise<Exchange|null>}
+   * Get the last exchange (for continuation).
+   * @returns {Promise<object|null>}
    */
   async getLastExchange() {
-    const data = await this.read();
-    if (!data || data.exchanges.length === 0) return null;
-    return data.exchanges[data.exchanges.length - 1];
+    const db = getDb();
+    const row = await db('exchanges')
+      .where('thread_id', this.threadId)
+      .orderBy('seq', 'desc')
+      .first();
+
+    return row ? this._toExchange(row) : null;
   }
 
   /**
-   * Write data to file (internal)
+   * Map a DB row to the Exchange shape the client expects.
    * @private
-   * @param {HistoryData} data
    */
-  async _write(data) {
-    const json = JSON.stringify(data, null, 2);
-    await fs.writeFile(this.filePath, json, 'utf-8');
+  _toExchange(row) {
+    return {
+      seq: row.seq,
+      ts: row.ts,
+      user: row.user_input,
+      assistant: JSON.parse(row.assistant),
+      metadata: JSON.parse(row.metadata || '[]'),
+    };
   }
 }
 

@@ -19,9 +19,13 @@ const fsPromises = require('fs').promises;
 // Thread management
 const { ThreadWebSocketHandler } = require('./lib/thread');
 const { HistoryFile } = require('./lib/thread/HistoryFile');
+const { initDb } = require('./lib/db');
 
 // Wiki hooks
 const wikiHooks = require('./lib/wiki/hooks');
+
+// Event bus for TRIGGERS.md automations
+const { emit } = require('./lib/event-bus');
 
 // Config system for persistence
 const config = require('./config');
@@ -539,14 +543,16 @@ wss.on('connection', (ws) => {
     activeToolId: null,
     hasToolCalls: false,
     currentThreadId: null,
-    assistantParts: []  // For history.json tracking
+    assistantParts: []  // For exchange tracking (SQLite)
   };
   sessions.set(ws, session);
   
   // Set up code panel for thread management
   // Must match frontend panel ID ('explorer')
-  ThreadWebSocketHandler.setPanel(ws, 'explorer', AI_PANELS_PATH);
-  
+  ThreadWebSocketHandler.setPanel(ws, 'explorer', {
+    panelPath: path.join(AI_PANELS_PATH, 'explorer'),
+  });
+
   // Send thread list on connect (async but don't block)
   ThreadWebSocketHandler.sendThreadList(ws).catch(err => {
     console.error('[WS] Failed to send thread list:', err);
@@ -629,6 +635,7 @@ wss.on('connection', (ws) => {
             turnId: session.currentTurn.id,
             userInput: payload?.user_input || ''
           }));
+          emit('chat:turn_begin', { workspace: 'explorer', threadId: session.currentThreadId, turnId: session.currentTurn.id, userInput: payload?.user_input || '' });
           break;
           
         case 'ContentPart':
@@ -651,6 +658,7 @@ wss.on('connection', (ws) => {
               text: payload.text,
               turnId: session.currentTurn.id
             }));
+            emit('chat:content', { workspace: 'explorer', threadId: session.currentThreadId, turnId: session.currentTurn.id, text: payload.text });
           } else if (payload?.type === 'think') {
             // Track thinking separately (not combined with text)
             const lastPart = session.assistantParts[session.assistantParts.length - 1];
@@ -667,6 +675,7 @@ wss.on('connection', (ws) => {
               text: payload.think || '',
               turnId: session.currentTurn?.id
             }));
+            emit('chat:thinking', { workspace: 'explorer', threadId: session.currentThreadId, turnId: session.currentTurn?.id, text: payload.think || '' });
           }
           break;
           
@@ -692,6 +701,7 @@ wss.on('connection', (ws) => {
             toolCallId: session.activeToolId,
             turnId: session.currentTurn?.id
           }));
+          emit('chat:tool_call', { workspace: 'explorer', threadId: session.currentThreadId, turnId: session.currentTurn?.id, toolName: payload?.function?.name || 'unknown', toolCallId: session.activeToolId });
           break;
           
         case 'ToolCallPart':
@@ -730,6 +740,7 @@ wss.on('connection', (ws) => {
             isError: payload?.return_value?.is_error || false,
             turnId: session.currentTurn?.id
           }));
+          emit('chat:tool_result', { workspace: 'explorer', threadId: session.currentThreadId, turnId: session.currentTurn?.id, toolCallId, toolName: payload?.function?.name, isError: payload?.return_value?.is_error || false });
           break;
         }
           
@@ -742,11 +753,10 @@ wss.on('connection', (ws) => {
               session.hasToolCalls
             );
             
-            // Save rich exchange to history.json
+            // Save rich exchange to SQLite
             const threadId = session.currentThreadId;
             if (threadId) {
-              const threadDir = path.join(AI_PANELS_PATH, 'explorer', 'threads', threadId);
-              const historyFile = new HistoryFile(threadDir);
+              const historyFile = new HistoryFile(threadId);
               historyFile.addExchange(
                 threadId,
                 session.currentTurn.userInput,
@@ -762,7 +772,8 @@ wss.on('connection', (ws) => {
               fullText: session.currentTurn.text,
               hasToolCalls: session.hasToolCalls
             }));
-            
+            emit('chat:turn_end', { workspace: 'explorer', threadId: session.currentThreadId, turnId: session.currentTurn.id, fullText: session.currentTurn.text, hasToolCalls: session.hasToolCalls });
+
             // Reset turn tracking
             session.currentTurn = null;
             session.assistantParts = [];
@@ -943,19 +954,12 @@ wss.on('connection', (ws) => {
           return;
         }
 
-        // Get or create ThreadManager for this agent container
+        // Get or create ThreadManager for this agent (single instance, cached)
         const containerKey = `agent:${agentPath}`;
-        ThreadWebSocketHandler.setPanel(ws, containerKey, path.join(AI_PANELS_PATH, 'agents'));
-
-        // Override the panel path to point to the agent folder (not the container key)
-        const state = ThreadWebSocketHandler.getState(ws);
-        if (state?.threadManager) {
-          // ThreadManager was created with the wrong path — recreate with agent folder
-          // This is a workaround: setPanel joins aiPanelsPath + panelId
-        }
-        // Create ThreadManager directly for the agent folder
-        const { ThreadManager } = require('./lib/thread/ThreadManager');
-        const agentThreadManager = new ThreadManager(agentFolderPath);
+        ThreadWebSocketHandler.setPanel(ws, containerKey, {
+          panelPath: agentFolderPath,
+        });
+        const agentThreadManager = ThreadWebSocketHandler.getState(ws).threadManager;
         await agentThreadManager.init();
 
         // Get strategy and resolve thread
@@ -1061,7 +1065,9 @@ wss.on('connection', (ws) => {
           setSessionRoot(ws, panel, rootFolder || null);
 
           // Update thread panel
-          ThreadWebSocketHandler.setPanel(ws, panel, AI_PANELS_PATH);
+          ThreadWebSocketHandler.setPanel(ws, panel, {
+            panelPath: path.join(AI_PANELS_PATH, panel),
+          });
 
           // Send thread list for new panel
           await ThreadWebSocketHandler.sendThreadList(ws);
@@ -1209,69 +1215,109 @@ wss.on('connection', (ws) => {
 // ============================================================================
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
-  console.log(`[Server] Running on http://localhost:${PORT}`);
-  console.log(`[Server] Kimi path: ${process.env.KIMI_PATH || 'kimi'}`);
-  console.log(`[Server] Thread storage: ${AI_PANELS_PATH}`);
 
-  // Start wiki hooks — watches ai/wiki-data/ tree (collections with topics)
-  const wikiPath = path.join(getDefaultProjectRoot(), 'ai', 'wiki-data');
-  wikiHooks.start(wikiPath);
+// Initialize SQLite, then start the server
+initDb(getDefaultProjectRoot())
+  .then(() => {
+    console.log('[DB] robin.db initialized');
+    startServer();
+  })
+  .catch(err => {
+    console.error('[DB] Failed to initialize:', err);
+    process.exit(1);
+  });
 
-  // Start project-wide file watcher
-  const { createWatcher } = require('./lib/watcher');
-  const { loadFilters } = require('./lib/watcher/filter-loader');
-  const { createActionHandlers } = require('./lib/watcher/actions');
-  const { createTicket } = require(path.join(getDefaultProjectRoot(), 'ai', 'panels', 'issues', 'scripts', 'create-ticket'));
+function startServer() {
+  server.listen(PORT, () => {
+    console.log(`[Server] Running on http://localhost:${PORT}`);
+    console.log(`[Server] Kimi path: ${process.env.KIMI_PATH || 'kimi'}`);
+    console.log(`[Server] Thread storage: ${AI_PANELS_PATH}`);
 
-  // Create hold registry for auto-block timers
-  const { createHoldRegistry } = require('./lib/triggers/hold-registry');
-  const issuesDir = path.join(AI_PANELS_PATH, 'issues');
-  const holdRegistry = global.__holdRegistry = createHoldRegistry(issuesDir);
+    // Start wiki hooks — watches ai/wiki-data/ tree (collections with topics)
+    const wikiPath = path.join(getDefaultProjectRoot(), 'ai', 'wiki-data');
+    wikiHooks.start(wikiPath);
 
-  // Wrap createTicket to hook trigger-created tickets into the hold registry
-  const wrappedCreateTicket = function(ticketData) {
-    const result = createTicket(ticketData);
-    if (ticketData.autoHold && ticketData.triggerName && result?.id) {
-      holdRegistry.hold(ticketData.assignee, ticketData.triggerName, result.id);
-    }
-    return result;
-  };
+    // Start project-wide file watcher
+    const { createWatcher } = require('./lib/watcher');
+    const { loadFilters } = require('./lib/watcher/filter-loader');
+    const { createActionHandlers } = require('./lib/watcher/actions');
+    const { createTicket } = require(path.join(getDefaultProjectRoot(), 'ai', 'panels', 'issues', 'scripts', 'create-ticket'));
 
-  const projectWatcher = createWatcher(getDefaultProjectRoot());
+    // Create hold registry for auto-block timers
+    const { createHoldRegistry } = require('./lib/triggers/hold-registry');
+    const issuesDir = path.join(AI_PANELS_PATH, 'issues');
+    const holdRegistry = global.__holdRegistry = createHoldRegistry(issuesDir);
 
-  // Load declarative filters (.md) from filters/
-  const filterDir = path.join(__dirname, 'lib', 'watcher', 'filters');
-  const actionHandlers = createActionHandlers({ createTicket: wrappedCreateTicket });
-  const declFilters = loadFilters(filterDir, actionHandlers);
-  for (const f of declFilters) projectWatcher.addFilter(f);
-
-  // Load agent TRIGGERS.md files
-  const { loadTriggers } = require('./lib/triggers/trigger-loader');
-  const { createCronScheduler } = require('./lib/triggers/cron-scheduler');
-  const { evaluateCondition } = require('./lib/watcher/filter-loader');
-
-  const agentsBasePath = path.join(AI_PANELS_PATH, 'agents');
-  try {
-    const registry = JSON.parse(fs.readFileSync(path.join(agentsBasePath, 'registry.json'), 'utf8'));
-    const { filters: triggerFilters, cronTriggers } = loadTriggers(
-      getDefaultProjectRoot(), agentsBasePath, registry, actionHandlers
-    );
-
-    for (const f of triggerFilters) projectWatcher.addFilter(f);
-
-    if (cronTriggers.length > 0) {
-      const cronScheduler = createCronScheduler(wrappedCreateTicket, { evaluateCondition });
-      for (const { trigger, assignee } of cronTriggers) {
-        cronScheduler.register(trigger, assignee);
+    // Wrap createTicket to hook trigger-created tickets into the hold registry
+    const wrappedCreateTicket = function(ticketData) {
+      const result = createTicket(ticketData);
+      if (ticketData.autoHold && ticketData.triggerName && result?.id) {
+        holdRegistry.hold(ticketData.assignee, ticketData.triggerName, result.id);
       }
-      cronScheduler.start();
-    }
-  } catch (err) {
-    console.error(`[Server] Failed to load agent triggers: ${err.message}`);
-  }
+      return result;
+    };
 
-  // Start runner heartbeat monitor
-  const { checkHeartbeats } = require('./lib/runner');
-  checkHeartbeats(getDefaultProjectRoot());
+    const projectWatcher = createWatcher(getDefaultProjectRoot());
+
+    // Load declarative filters (.md) from filters/
+    const filterDir = path.join(__dirname, 'lib', 'watcher', 'filters');
+    const actionHandlers = createActionHandlers({
+      createTicket: wrappedCreateTicket,
+      projectRoot: getDefaultProjectRoot(),
+      sendChatMessage(target, message, role) {
+        for (const [ws, sess] of sessions) {
+          if (ws.readyState === 1) {
+            ws.send(JSON.stringify({
+              type: 'system_message',
+              content: message,
+              role: role || 'system',
+              target,
+            }));
+          }
+        }
+      },
+    });
+    const declFilters = loadFilters(filterDir, actionHandlers);
+    for (const f of declFilters) projectWatcher.addFilter(f);
+
+    // Load agent TRIGGERS.md files
+    const { loadTriggers } = require('./lib/triggers/trigger-loader');
+    const { createCronScheduler } = require('./lib/triggers/cron-scheduler');
+    const { evaluateCondition } = require('./lib/watcher/filter-loader');
+
+    const agentsBasePath = path.join(AI_PANELS_PATH, 'agents');
+    try {
+      const registry = JSON.parse(fs.readFileSync(path.join(agentsBasePath, 'registry.json'), 'utf8'));
+      const { filters: triggerFilters, cronTriggers } = loadTriggers(
+        getDefaultProjectRoot(), agentsBasePath, registry, actionHandlers
+      );
+
+      for (const f of triggerFilters) projectWatcher.addFilter(f);
+
+      if (cronTriggers.length > 0) {
+        const cronScheduler = createCronScheduler(wrappedCreateTicket, { evaluateCondition });
+        for (const { trigger, assignee } of cronTriggers) {
+          cronScheduler.register(trigger, assignee);
+        }
+        cronScheduler.start();
+      }
+    } catch (err) {
+      console.error(`[Server] Failed to load agent triggers: ${err.message}`);
+    }
+
+    // Start runner heartbeat monitor
+    const { checkHeartbeats } = require('./lib/runner');
+    checkHeartbeats(getDefaultProjectRoot());
+  });
+}
+
+// Clean shutdown — close DB connection
+const { closeDb } = require('./lib/db');
+process.on('SIGTERM', async () => {
+  await closeDb();
+  process.exit(0);
+});
+process.on('SIGINT', async () => {
+  await closeDb();
+  process.exit(0);
 });

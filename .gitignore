@@ -8,3 +8,6 @@ test-results/
 .gitlab_wikis.json
 kimi_wikis.json
 ai/workspaces/wiki/.wiki-repo/
+ai/system/*.db
+ai/system/*.db-journal
+ai/system/*.db-wal
