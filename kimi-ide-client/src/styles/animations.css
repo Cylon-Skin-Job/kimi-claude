@@ -42,10 +42,24 @@
   }
 }
 
-/* Blur sphere: 1.5s expand, then holds. Disposal triggered by class swap. */
+/*
+ * Blur sphere — three-phase animation:
+ *   1. Expand: 0.3 → 1.0 scale over 1.5s (with 500ms initial delay)
+ *   2. Breathe: pulse between 1.0 and 0.7 scale indefinitely (handles API latency)
+ *   3. Dispose: collapse from current state to 0.3 scale over 500ms
+ *
+ * The expand animation runs once, then the breathe loop takes over.
+ * Disposal is triggered by adding the .disposing class.
+ */
 @keyframes blur-sphere-expand {
   0%   { opacity: 0; transform: scale(0.3); }
   100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes blur-sphere-breathe {
+  0%   { opacity: 1;   transform: scale(1); }
+  50%  { opacity: 0.6; transform: scale(0.7); }
+  100% { opacity: 1;   transform: scale(1); }
 }
 
 @keyframes blur-sphere-dispose {
@@ -58,10 +72,14 @@
   display: inline-block;
   opacity: 0;
   transform: scale(0.3);
-  animation: blur-sphere-expand 1500ms ease-out 500ms forwards;
+  /* Expand first (1.5s + 500ms delay), then breathe loop takes over */
+  animation:
+    blur-sphere-expand 1500ms ease-out 500ms forwards,
+    blur-sphere-breathe 2000ms ease-in-out 2000ms infinite;
 }
 
 .blur-sphere.disposing {
+  /* Override both animations — collapse from wherever we are */
   animation: blur-sphere-dispose 500ms ease-in forwards;
 }
 

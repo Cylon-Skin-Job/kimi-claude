@@ -34,6 +34,7 @@ import { getRenderMode, getSegmentBehavior } from '../lib/segmentCatalog';
 import { getReveal } from '../lib/reveal';
 import { createChunkBuffer, SPEED_FAST, parseTextChunks } from '../lib/text';
 import { ToolCallBlock } from './ToolCallBlock';
+import { Orb } from './Orb';
 import {
   SHIMMER_TOTAL,
   POST_TYPING_PAUSE,
@@ -54,56 +55,24 @@ interface LiveSegmentRendererProps {
 export function LiveSegmentRenderer({ segments, onRevealComplete }: LiveSegmentRendererProps) {
   const [orbDone, setOrbDone] = useState(false);
   const [orbDisposing, setOrbDisposing] = useState(false);
-  const disposeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const doneRef = useRef<Set<number>>(new Set());
   const prevLenRef = useRef(0);
   const hasTokenRef = useRef(false);
 
-  // ── Phase 1: Orb ──
-  // Expands over 1s, holds indefinitely, disposes over 500ms when first token arrives.
+  // ── Phase 1: Watch for first token → trigger orb disposal ──
   useEffect(() => {
-    const t = (window as any).__TIMING;
-    const now = performance.now();
-    if (t) {
-      t.orbStartAt = now;
-      const sinceS = t.sendAt ? (now - t.sendAt).toFixed(1) : '?';
-      console.log(`[TIMING] ORB START at ${now.toFixed(1)}ms — ${sinceS}ms after send`);
-    }
-
-    return () => {
-      if (disposeTimerRef.current) clearTimeout(disposeTimerRef.current);
-    };
-  }, []);
-
-  // Watch for first token (segment content appears) → trigger disposal
-  useEffect(() => {
-    if (hasTokenRef.current || orbDone || orbDisposing) return;
+    if (hasTokenRef.current || orbDone) return;
 
     const hasContent = segments.length > 0 && segments[0].content.length > 0;
     if (hasContent) {
       hasTokenRef.current = true;
       setOrbDisposing(true);
-
-      const t = (window as any).__TIMING;
-      if (t) {
-        const now = performance.now();
-        const sinceSend = t.sendAt ? (now - t.sendAt).toFixed(1) : '?';
-        console.log(`[TIMING] ORB DISPOSE START at ${now.toFixed(1)}ms — ${sinceSend}ms after send`);
-      }
-
-      disposeTimerRef.current = setTimeout(() => {
-        const orbEnd = performance.now();
-        const t = (window as any).__TIMING;
-        if (t) {
-          t.orbEndAt = orbEnd;
-          const sinceSend = t.sendAt ? (orbEnd - t.sendAt).toFixed(1) : '?';
-          const sinceFirst = t.firstTokenAt ? (orbEnd - t.firstTokenAt).toFixed(1) : '?';
-          console.log(`[TIMING] ORB END at ${orbEnd.toFixed(1)}ms — ${sinceSend}ms after send — ${sinceFirst}ms after first token`);
-        }
-        setOrbDone(true);
-      }, 500);
     }
-  }, [segments, orbDone, orbDisposing]);
+  }, [segments, orbDone]);
+
+  const handleOrbDone = useCallback(() => {
+    setOrbDone(true);
+  }, []);
 
   // ── Phase 2: Segment completion tracking ──
   const onSegmentDone = useCallback((index: number) => {
@@ -124,19 +93,7 @@ export function LiveSegmentRenderer({ segments, onRevealComplete }: LiveSegmentR
 
   // Phase 1: Orb is running. Nothing else renders.
   if (!orbDone) {
-    return (
-      <div style={{ padding: '4px 0' }}>
-        <span
-          className={`material-symbols-outlined blur-sphere${orbDisposing ? ' disposing' : ''}`}
-          style={{
-            fontSize: '16px',
-            color: 'var(--theme-primary)',
-          }}
-        >
-          lens_blur
-        </span>
-      </div>
-    );
+    return <Orb disposing={orbDisposing} onDone={handleOrbDone} />;
   }
 
   // Phase 2: Orb is done. Render segments.
