@@ -73,7 +73,7 @@ To create a new agent based on an existing one:
 2. Edit PROMPT.md to define the new agent's role and scope
 3. Rename the `bot_name` in workflow PROMPT.md frontmatter to a unique name
 4. Add the new bot name to `registry.json`
-5. Clear LESSONS.md, HISTORY.md, MEMORY.md (those belong to the original)
+5. Clear LESSONS.md, HISTORY.md, MEMORY.md, DECISIONS.md (those belong to the original)
 6. The new agent is immediately functional with the cloned workflows as a starting point
 
 ---
@@ -85,13 +85,25 @@ Every agent folder contains:
 ```
 {agent-id}/
 ├── index.json         ← agent identity (universal index schema)
-├── PROMPT.md        ← who the agent is (loaded at session start)
-├── SESSION.md         ← session configuration (thread model, timeout, context loading)
-├── TRIGGERS.md        ← what events activate this agent
-├── MEMORY.md          ← user preferences discovered through conversation
-├── LESSONS.md         ← process learnings accumulated across runs
+├── PROMPT.md          ← who the agent is — LOCKED, agent cannot edit
+├── SESSION.md         ← session config (permissions, CLI, secrets) — LOCKED, agent cannot edit
+├── MEMORY.md          ← rolling cache of user intent/shaping — agent can edit
+├── LESSONS.md         ← gotchas, solved problems — agent can edit (append)
+├── DECISIONS.md       ← behavioral/architectural decisions with dates — agent can edit
+├── TRIGGERS.md        ← event triggers — LOCKED, agent cannot edit
 ├── HISTORY.md         ← activity log (recent events, daily summaries)
 ├── styles.css         ← UI styling for the agent tile
+├── archive/           ← version history (dated snapshots before edits)
+│   ├── prompt/
+│   │   └── 2026-03-29.md
+│   ├── session/
+│   │   └── 2026-03-29.md
+│   ├── memory/
+│   │   └── 2026-03-29.md
+│   ├── lessons/
+│   │   └── 2026-03-29.md
+│   └── decisions/
+│       └── 2026-03-29.md
 ├── workflows/         ← workflow definitions
 │   ├── {Workflow Name}/
 │   │   └── PROMPT.md  ← orchestrator instructions with YAML frontmatter
@@ -178,13 +190,13 @@ Defines when this agent wakes up. Each trigger maps an event to a workflow promp
 - **Ticket title template:** {how the auto-created ticket is named}
 ```
 
-### MEMORY.md — User Preferences
+### MEMORY.md — Rolling Cache (Agent-Editable)
 
-Populated through conversation. When the user tells the agent something about how they want things done, it goes here. Read at session start alongside PROMPT.md.
+User's intent and shaping for this agent. The agent updates this as it learns user preferences during conversations. Overwritten as understanding evolves. Read at session start alongside PROMPT.md.
 
-Starts empty. Grows over time.
+Starts empty. Grows over time. Low stakes — it's a cache, not a contract.
 
-### LESSONS.md — Institutional Memory
+### LESSONS.md — Discovered Truths (Agent-Editable, Append)
 
 Append-only log of things the agent learned across runs. After each run, if the orchestrator encountered something unexpected — a mistake caught, a pattern discovered, a gotcha — it appends an entry.
 
@@ -202,6 +214,18 @@ Append-only log of things the agent learned across runs. After each run, if the 
 
 [Token-threshold review ticket creation not yet implemented]
 
+### DECISIONS.md — The Why Layer (Agent-Editable)
+
+Architectural and behavioral decisions with reasoning. Dated. The agent records decisions as they're made. When a decision is reversed, the old version moves to archive, and the new decision takes its place.
+
+**Entry format:**
+```markdown
+## {date} — {decision title}
+**Decision:** {what was decided}
+**Why:** {reasoning}
+**Reversible:** {yes/no, and what reversal would require}
+```
+
 ### HISTORY.md — Activity Log
 
 What the agent has done recently. Daily summaries, event timestamps. The agent updates this after each run. Useful for the user to see recent activity at a glance.
@@ -213,6 +237,82 @@ Custom CSS for this agent's tile in the UI. Falls back to template if not presen
 ### workflows/ — The Work Definitions
 
 Each subfolder is a named workflow containing a `PROMPT.md` with YAML frontmatter and numbered orchestrator steps.
+
+---
+
+## Edit Permissions — Locked vs Self-Editable
+
+Not all agent files have the same edit rules. Some files define the agent's identity and permissions — those are locked. Others hold learned knowledge — those the agent can update itself.
+
+**Agent CAN edit (self-improvement):**
+
+| File | Mode | What it holds |
+|------|------|---------------|
+| MEMORY.md | Overwrite | Rolling cache of user intent and shaping |
+| LESSONS.md | Append | Gotchas and solutions discovered during work |
+| DECISIONS.md | Edit | Behavioral/architectural decisions with dates |
+
+**Agent CANNOT edit (locked, requires human approval):**
+
+| File | Why it's locked |
+|------|----------------|
+| PROMPT.md | Agent identity. Changes must go through the capture gate. |
+| SESSION.md | Permissions, CLI config, secrets. Changes must go through the capture gate. |
+| TRIGGERS.md | Event triggers. Changes must go through the capture gate. |
+
+This split lets agents get smarter (learn lessons, record decisions, cache user preferences) without being able to change who they are or what they're allowed to do.
+
+---
+
+## The Capture Gate — Approval Mechanism
+
+When an agent believes its PROMPT.md or SESSION.md should be updated, it cannot edit those files directly. Instead:
+
+1. Agent writes the suggested new version to `ai/views/capture-viewer/captures/` as a titled markdown file (e.g., `suggested-prompt-wiki-manager.md`)
+2. User sees it in capture tiles (thumbnail preview)
+3. User reads, evaluates
+4. If approved: right-click the capture tile, Cut, navigate to the agent settings folder, Paste
+5. On paste, the old file is cloned to `archive/{type}/{{date}}.md` before being replaced
+6. The archive preserves the full history of changes over time
+
+**Why this works:**
+- No new UI — uses the file explorer and capture tiles that already exist
+- Human in the loop — the agent can't promote its own changes
+- Auditable — every change is archived with date
+- Reversible — copy from archive to restore any prior version
+- Low friction — it's cut and paste, not a review board
+
+---
+
+## Archive System
+
+Every edit to a live agent config file clones the current version to `archive/{type}/{{date}}.md` before the new version lands.
+
+```
+archive/
+├── prompt/
+│   ├── 2026-03-20.md      ← first version
+│   ├── 2026-03-25.md      ← after first revision
+│   └── 2026-03-29.md      ← latest archived version
+├── session/
+│   └── 2026-03-29.md
+├── memory/
+│   └── 2026-03-29.md
+├── lessons/
+│   └── 2026-03-29.md
+└── decisions/
+    └── 2026-03-29.md
+```
+
+**What the archive provides:**
+- Chronological history of how the agent evolved
+- Ability to diff any two versions
+- Rollback by copying an archive file back to the live location
+- No database needed — just dated markdown files
+
+**Multiple edits per day:** If a same-day archive already exists, append a counter: `{{date}}-2.md`, `{{date}}-3.md`, etc.
+
+**An agent can read its own archive** to understand its evolution — how its knowledge grew, what decisions changed and why, how its identity was shaped over time.
 
 ---
 
@@ -324,7 +424,7 @@ The `bot_name` in a workflow's YAML frontmatter must match a key in this registr
 4. Write PROMPT.md (who it is, what it owns, read/write scope)
 5. Write SESSION.md (thread model, timeout, context loading)
 6. Write TRIGGERS.md (what events activate it)
-7. Create empty MEMORY.md, LESSONS.md, HISTORY.md
+7. Create empty MEMORY.md, LESSONS.md, DECISIONS.md, HISTORY.md
 8. Create `workflows/` with at least one workflow PROMPT.md
 9. Create empty `runs/` directory
 10. Add entry to `registry.json` with bot name → group/folder mapping

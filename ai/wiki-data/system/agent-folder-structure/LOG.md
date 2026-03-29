@@ -16,4 +16,8 @@ By: Claude (worktree agent)
 
 ## 2026-03-28 — Updated
 
-## 2026-03-29 — Updated
+## 2026-03-29 — Agent self-improvement system
+Source: task from user
+Changed: Added DECISIONS.md to standard agent files. Added Edit Permissions section (locked vs self-editable). Added Capture Gate section (approval mechanism for locked files). Added Archive System section (dated snapshots before edits). Updated folder structure diagram with archive/ tree and edit permission annotations. Updated agent creation and cloning checklists to include DECISIONS.md.
+Run: —
+By: Claude (IDE)
