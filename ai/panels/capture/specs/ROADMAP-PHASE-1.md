@@ -10,6 +10,41 @@ parent: ROADMAP.md
 
 Redirect wire protocol storage from JSON files to SQLite. Keep thread markdown in the repo. No migration of old files needed — this is pre-production.
 
+**Prerequisites:** None. Can start immediately.
+**Parallel with:** Phase 0 and Phase 2 (no dependencies between them).
+
+---
+
+## Context for This Session
+
+### Project Location
+`/Users/rccurtrightjr./projects/kimi-claude`
+
+### What This Phase Does
+1. Add Knex.js + better-sqlite3 as dependencies
+2. Create two databases: `ai/system/robin.db` (system) and `ai/system/project.db` (project data)
+3. Redirect HistoryFile.js from writing history.json files to writing SQLite exchanges table
+4. Redirect ThreadIndex.js from writing threads.json to writing SQLite threads table
+5. Modify ChatFile.js to write to per-user folders: `threads/{username}/thread-name.md`
+
+### Key Architecture Decisions (already made)
+- **Knex.js** for query building — same queries work against SQLite (local) and Postgres (Supabase future). Chosen over Drizzle (wants TypeScript, static schemas) and raw SQL (two dialects to maintain).
+- **Three database model:** robin.db (system, invisible to agents), project.db (project data, invisible to agents), apps/*.db (user-created, accessible via scripts with develop/production mode)
+- **DB location:** `ai/system/` — visible to user (Option B), managed by Robin, in .gitignore
+- **No migration needed** — pre-production. Old JSON files (history.json, threads.json) can be ignored. Stop writing them, start writing to SQLite.
+- **No virtual-markdown-over-DB** — Robin's panel renders system config inline. No phantom files on disk.
+- **The assistant parts JSON shape is sacred** — `{ parts: [...] }` with text/think/tool_call types must survive the SQLite JSON round-trip exactly. The client's `convertPartToSegment()` depends on this shape.
+
+### Key Files
+- `kimi-ide-server/lib/thread/HistoryFile.js` — exchange storage (redirect to SQLite)
+- `kimi-ide-server/lib/thread/ThreadIndex.js` — thread metadata (redirect to SQLite)
+- `kimi-ide-server/lib/thread/ThreadManager.js` — orchestrator (calls both, interface stays same)
+- `kimi-ide-server/lib/thread/ChatFile.js` — markdown writer (change output path to per-user)
+- `kimi-ide-server/lib/thread/ThreadWebSocketHandler.js` — sends exchanges on thread:open
+- `kimi-ide-server/server.js` — wire handler writes exchanges on TurnEnd (line ~749)
+- `kimi-ide-client/src/lib/ws-client.ts` — receives exchanges, calls convertExchangesToMessages()
+- `kimi-ide-server/package.json` — add knex + better-sqlite3
+
 ---
 
 ## Critical Data Flow (must preserve exactly)

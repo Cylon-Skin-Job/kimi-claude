@@ -103,29 +103,38 @@ Implementation phases for the Open Robin system. Each phase builds on the previo
 
 ---
 
-## Phase 3: Server-Side Enforcement
+## Phase 3: Server-Side Enforcement + Skills + Change Ledger
 
-**Goal:** The permission surface in SESSION.md actually gets enforced.
+**Goal:** Enforce permissions, build skills-as-scripts model, create audit trail.
 
 ### 3.1 Tool Enforcement
-- [ ] Parse tool permissions from SESSION.md in session-loader.js
-- [ ] Intercept tool calls in server.js before forwarding to wire
-- [ ] Check tool name against allowed/restricted/denied
-- [ ] For restricted tools, validate arguments against path patterns
-- [ ] Return error to wire if denied
+- [ ] Intercept tool calls in server.js — check against SESSION.md allowed/restricted/denied
+- [ ] Bounce denied/restricted calls as `tool_result` with `isError: true`
+- [ ] Agent sees restriction message, adjusts approach
 
-### 3.2 DB Access Enforcement
-- [ ] Parse DB access from SESSION.md
-- [ ] Wrap SQLite queries with permission checks
-- [ ] Agent DB queries go through a scoped accessor, not raw SQLite
+### 3.2 Skills as Node Scripts
+- [ ] `skills.json` manifest — any node script becomes a callable "tool"
+- [ ] Built-in skills: read-history, trace-change, search-threads, return-message
+- [ ] Skill registry loads on startup, handles tool_calls for registered skill names
 
-### 3.3 CLI Profile Resolution
-- [ ] Parse `profile` field from SESSION.md
-- [ ] Resolve profile name to spawn args (CLI binary, model flags, endpoint)
-- [ ] Wire spawn uses resolved args instead of hardcoded `kimi --wire --yolo`
+### 3.3 Message IDs in Thread Markdown
+- [ ] `<!-- msg:ex-N-role -->` HTML comments injected by ChatFile.js
+- [ ] Parseable by skill scripts for precise message references
 
-**Dependencies:** Phase 0.3 (SESSION.md expansion), Phase 1.1 (SQLite for DB enforcement).
-**Spec refs:** VIEW-AGENTS.md, CLIs.md
+### 3.4 Change Ledger
+- [ ] `ai/system/change-ledger.json` — every agent file change logged with thread + message ID
+- [ ] trace-change skill reads ledger to find why a file was changed
+
+### 3.5 User App Databases
+- [ ] `{project}/apps/*.db` — separate from system DBs
+- [ ] tools.json with develop/production mode toggle
+- [ ] Locked writes bounce in production mode
+
+### 3.6 CLI Profile Resolution
+- [ ] Profiles in robin.db → resolve SESSION.md `profile` field to spawn args
+
+**Dependencies:** Phase 0.3 (SESSION.md expansion), Phase 1 (SQLite).
+**Spec refs:** VIEW-AGENTS.md, CLIs.md, ROADMAP-PHASE-3.md
 
 ---
 

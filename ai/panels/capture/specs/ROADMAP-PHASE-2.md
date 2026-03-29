@@ -9,6 +9,42 @@ parent: ROADMAP.md
 
 Central event emitter that all modules fire into. Extend trigger-loader for new event types. Add new action types.
 
+**Prerequisites:** None. Can start immediately (builds on existing watcher/trigger infrastructure).
+**Parallel with:** Phase 0 and Phase 1 (no dependencies between them).
+
+---
+
+## Context for This Session
+
+### Project Location
+`/Users/rccurtrightjr./projects/kimi-claude`
+
+### What This Phase Does
+1. Create `lib/event-bus.js` — central pub/sub (~60 lines)
+2. Add emit() calls to server.js (6 chat events), dispatch.js (4 ticket events), runner/index.js (4 agent events)
+3. Extend trigger-loader.js to handle `type: chat`, `type: ticket`, `type: agent`, `type: system` blocks in TRIGGERS.md
+4. Add new action types: `send-message`, `webhook-post`, `drop-file`
+5. Loop prevention: chain depth limit + same-event suppression
+
+### Key Architecture Decisions (already made)
+- **Event bus is additive** — one emit() line after each existing ws.send() or console.log(). Does not replace direct module calls. The bus is for user-defined automations via TRIGGERS.md.
+- **Same TRIGGERS.md syntax** — new event types use the same YAML block format as existing file-change and cron triggers.
+- **Same action factory** — `createActionHandlers(deps)` in actions.js. New actions added alongside existing ones.
+- **send-message Phase 2 = active sessions only** — if the target chat has no active session, the message is queued. Session spawning for suspended chats comes in Phase 4.
+- **Crons are tickets** — repeating crons generate tickets via TRIGGERS.md. One-shot delayed tasks are tickets with `fires-at`. Cron-chat sends gray system messages.
+
+### Existing Infrastructure (already built)
+- `lib/watcher/index.js` — fs.watch, debounce, rename detection, pluggable filters
+- `lib/watcher/filter-loader.js` — YAML frontmatter parser, glob matching, condition evaluation, template vars
+- `lib/watcher/actions.js` — create-ticket, log, notify actions
+- `lib/triggers/trigger-parser.js` — parses multi-block TRIGGERS.md
+- `lib/triggers/trigger-loader.js` — scans agents, builds filters + cron jobs
+- `lib/triggers/cron-scheduler.js` — daily/cron syntax, condition eval, retry
+- `lib/triggers/hold-registry.js` — 9-min auto-block batching
+- `lib/triggers/script-runner.js` — executes referenced scripts
+- `lib/tickets/dispatch.js` — watches issues/, claiming, blocking, GitLab sync
+- `lib/runner/index.js` — run execution, heartbeat, completion handling
+
 ---
 
 ## 2.1 Create Event Bus

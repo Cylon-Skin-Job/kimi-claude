@@ -9,6 +9,36 @@ parent: ROADMAP.md
 
 Fix bugs, rename files, expand SESSION.md, populate triggers. No new features — just get the existing system clean and consistent.
 
+**Prerequisites:** None. Can start immediately.
+**Parallel with:** Phase 1 and Phase 2 (no dependencies between them).
+
+---
+
+## Context for This Session
+
+### Project Location
+`/Users/rccurtrightjr./projects/kimi-claude`
+
+### What This Phase Does
+1. Fix 3 known bugs (workspace loading, chat bubble double-render, parser stall)
+2. Rename IDENTITY.md → PROMPT.md across 10 files (17 references mapped below)
+3. Expand SESSION.md frontmatter to include tool permissions, DB access scoping, and CLI profile fields
+4. Write TRIGGERS.md content for code-manager and ops-manager agents
+
+### Key Architecture Decisions (already made)
+- **PROMPT.md** is the universal file name — agent root (identity), workflow folder (instructions), chat folder (chat persona). Same name, context determines meaning.
+- **SESSION.md** is the single permission surface — tools, DB access, CLI profile, session behavior. All in one file's YAML frontmatter.
+- **DB is invisible to agents** — agents never query SQLite directly. They use skills (node scripts) or read markdown files.
+- **Prompt-based trust** — SESSION.md tells the agent its boundaries in the system context. Server bounces restricted tool calls.
+
+### Key Files
+- `kimi-ide-server/lib/session/session-loader.js` — parses SESSION.md
+- `kimi-ide-client/src/state/agentStore.ts` — AGENT_CONFIG_FILES array
+- `kimi-ide-client/src/components/agents/AgentTiles.tsx` — FILE_ICONS map
+- `kimi-ide-client/src/components/agents/PromptCardView.tsx` — configNames filter
+- `ai/panels/agents/System/*/SESSION.md` — 3 agent session configs
+- `ai/panels/agents/System/*/IDENTITY.md` — 3 files to rename
+
 ---
 
 ## 0.1 Fix Known Bugs
