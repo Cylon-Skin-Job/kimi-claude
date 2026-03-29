@@ -1,0 +1,25 @@
+{
+  "version": "1.0",
+  "id": "zhipu",
+  "label": "Zhipu (GLM)",
+  "type": "page",
+  "rank": 10,
+  "icon": "smart_toy",
+  "created": "2026-03-28T00:00:00Z",
+  "updated": "2026-03-28T00:00:00Z",
+  "frozen": false,
+  "edges_out": ["Overview"],
+  "edges_in": ["Overview"],
+  "sources": ["https://openrouter.ai/api/v1/models"],
+  "settings": {},
+  "provider": {
+    "name": "Zhipu AI (GLM)",
+    "api_base": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "openai_compatible": true,
+    "pricing_url": "https://open.bigmodel.cn/pricing",
+    "coding_plan": null,
+    "cli": null,
+    "coding_models": ["glm-5", "glm-5-turbo", "glm-4.7"],
+    "compatible_clis": ["cursor", "cline"]
+  }
+}

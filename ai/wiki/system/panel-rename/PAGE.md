@@ -81,7 +81,7 @@ Also rename within the agents folder:
 | `ai/panels/wiki/PROMPT.md` | Path references |
 | `ai/panels/wiki/TOOLS.md` | Path references |
 | `ai/panels/wiki/WORKFLOW.md` | Path references |
-| `ai/panels/agents/System/wiki-manager/IDENTITY.md` | Path references |
+| `ai/panels/agents/System/wiki-manager/PROMPT.md` | Path references |
 | `ai/panels/agents/System/wiki-manager/TRIGGERS.md` | Path references |
 | `ai/panels/agents/System/wiki-manager/workflows/*/PROMPT.md` | Path references |
 | `ai/panels/agents/registry.json` | Folder paths (`System/wiki-manager` unchanged, but verify) |
@@ -167,7 +167,7 @@ This rename touches every layer. Recommended order to minimize broken state:
 2. `mv ai/panels/coding-agent ai/panels/explorer`
 3. `mv ai/panels/background-agents ai/panels/agents`
 4. Update all `index.json` files (IDs, labels, paths)
-5. Update all agent files (IDENTITY.md, TRIGGERS.md, workflow PROMPT.md files)
+5. Update all agent files (PROMPT.md, TRIGGERS.md, workflow PROMPT.md files)
 6. Update wiki agent files (PROMPT.md, TOOLS.md, WORKFLOW.md)
 7. Verify: `ls ai/panels/` shows the expected folders
 

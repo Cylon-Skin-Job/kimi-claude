@@ -1,0 +1,30 @@
+{
+  "version": "1.0",
+  "id": "mistral",
+  "label": "Mistral",
+  "type": "page",
+  "rank": 5,
+  "icon": "smart_toy",
+  "created": "2026-03-28T00:00:00Z",
+  "updated": "2026-03-28T00:00:00Z",
+  "frozen": false,
+  "edges_out": ["Overview"],
+  "edges_in": ["Overview"],
+  "sources": ["https://mistral.ai/technology", "https://openrouter.ai/api/v1/models"],
+  "settings": {},
+  "provider": {
+    "name": "Mistral",
+    "api_base": "https://api.mistral.ai/v1/chat/completions",
+    "codestral_endpoint": "https://codestral.mistral.ai/v1/",
+    "models_endpoint": "https://api.mistral.ai/v1/models",
+    "openai_compatible": true,
+    "pricing_url": "https://mistral.ai/technology",
+    "coding_plan": {
+      "name": "Codestral Free Tier",
+      "tiers": [{ "price": "Free", "usage": "Rate-limited", "notes": "Separate API key for codestral.mistral.ai" }]
+    },
+    "cli": null,
+    "coding_models": ["codestral-2508", "devstral-2512", "devstral-medium", "devstral-small"],
+    "compatible_clis": ["cursor", "windsurf", "cline", "continue", "aider"]
+  }
+}

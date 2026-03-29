@@ -6,6 +6,9 @@
  *   - session-invalidation: when to start a fresh session (memory-mtime, none)
  *   - idle-timeout: how long before wire is killed
  *   - system-context: ordered list of files to load into the wire system field
+ *   - cli, profile, model, endpoint: CLI profile fields
+ *   - tools: { allowed, restricted, denied } — tool permission scoping
+ *   - db: { read, write, denied } — database access scoping
  */
 
 const fs = require('fs');
@@ -15,8 +18,11 @@ const { parseFrontmatter } = require('../watcher/filter-loader');
 /**
  * Parse SESSION.md from a folder.
  *
+ * Returns all recognized fields with sensible defaults for any that are missing.
+ * Backward compatible — old SESSION.md files (without cli/tools/db) still parse correctly.
+ *
  * @param {string} folderPath - Absolute path to the folder containing SESSION.md
- * @returns {{ threadModel: string, sessionInvalidation: string, idleTimeout: string, systemContext: string[] } | null}
+ * @returns {Object|null} Parsed session config, or null on read failure
  */
 function parseSessionConfig(folderPath) {
   const sessionPath = path.join(folderPath, 'SESSION.md');
@@ -25,11 +31,40 @@ function parseSessionConfig(folderPath) {
     const content = fs.readFileSync(sessionPath, 'utf8');
     const { frontmatter } = parseFrontmatter(content);
 
+    // Tool permissions — normalize to arrays, restricted to object of arrays
+    const rawTools = frontmatter.tools || {};
+    const tools = {
+      allowed: ensureArray(rawTools.allowed),
+      restricted: normalizeRestricted(rawTools.restricted),
+      denied: ensureArray(rawTools.denied),
+    };
+
+    // DB access — normalize to arrays
+    const rawDb = frontmatter.db || {};
+    const db = {
+      read: ensureArray(rawDb.read),
+      write: ensureArray(rawDb.write),
+      denied: ensureArray(rawDb.denied),
+    };
+
     return {
+      // Thread management (original fields)
       threadModel: frontmatter['thread-model'] || 'multi-thread',
       sessionInvalidation: frontmatter['session-invalidation'] || 'none',
       idleTimeout: frontmatter['idle-timeout'] || '9m',
       systemContext: frontmatter['system-context'] || [],
+
+      // CLI profile
+      cli: frontmatter.cli || 'kimi',
+      profile: frontmatter.profile || 'default',
+      model: frontmatter.model || null,
+      endpoint: frontmatter.endpoint || null,
+
+      // Tool permissions
+      tools,
+
+      // DB access
+      db,
     };
   } catch (err) {
     console.error(`[SessionLoader] Failed to read ${sessionPath}: ${err.message}`);
@@ -38,12 +73,33 @@ function parseSessionConfig(folderPath) {
 }
 
 /**
+ * Ensure a value is an array. Strings become single-element arrays, nullish becomes [].
+ */
+function ensureArray(val) {
+  if (Array.isArray(val)) return val;
+  if (val == null) return [];
+  return [val];
+}
+
+/**
+ * Normalize restricted tools object: { tool_name: string|array } → { tool_name: string[] }
+ */
+function normalizeRestricted(val) {
+  if (!val || typeof val !== 'object') return {};
+  const result = {};
+  for (const [k, v] of Object.entries(val)) {
+    result[k] = ensureArray(v);
+  }
+  return result;
+}
+
+/**
  * Build system context string from a list of files.
  *
  * Reads each file relative to folderPath, concatenates with separator.
  *
  * @param {string} folderPath - Absolute path to the agent folder
- * @param {string[]} fileList - Array of filenames (e.g., ['IDENTITY.md', 'MEMORY.md'])
+ * @param {string[]} fileList - Array of filenames (e.g., ['PROMPT.md', 'MEMORY.md'])
  * @returns {string} Concatenated content
  */
 function buildSystemContext(folderPath, fileList) {

@@ -61,7 +61,8 @@ export function useFileTreeListener() {
     return () => ws.removeEventListener('message', handleMessage);
   }, [ws]);
 
-  // Load root tree when first connecting or reconnecting
+  // Load root tree when first connecting or reconnecting.
+  // Reset lastWsRef on cleanup so strict-mode remount re-sends the request.
   useEffect(() => {
     if (!ws || currentPanel !== 'explorer') return;
     if (ws === lastWsRef.current) return;
@@ -69,5 +70,9 @@ export function useFileTreeListener() {
 
     lastWsRef.current = ws;
     _loadRootTree();
+
+    return () => {
+      lastWsRef.current = null;
+    };
   }, [ws, currentPanel]);
 }

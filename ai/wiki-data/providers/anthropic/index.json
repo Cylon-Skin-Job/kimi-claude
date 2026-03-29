@@ -1,0 +1,33 @@
+{
+  "version": "1.0",
+  "id": "anthropic",
+  "label": "Anthropic",
+  "type": "page",
+  "rank": 2,
+  "icon": "smart_toy",
+  "created": "2026-03-28T00:00:00Z",
+  "updated": "2026-03-28T00:00:00Z",
+  "frozen": false,
+  "edges_out": ["Overview"],
+  "edges_in": ["Overview"],
+  "sources": ["https://www.anthropic.com/pricing", "https://openrouter.ai/api/v1/models"],
+  "settings": {},
+  "provider": {
+    "name": "Anthropic",
+    "api_base": "https://api.anthropic.com/v1/messages",
+    "models_endpoint": "https://api.anthropic.com/v1/models",
+    "openai_compatible": false,
+    "openai_via": "https://openrouter.ai/api/v1/chat/completions",
+    "pricing_url": "https://www.anthropic.com/pricing",
+    "coding_plan": {
+      "name": "Claude Max",
+      "tiers": [
+        { "price": "$100/mo", "usage": "5x Pro" },
+        { "price": "$200/mo", "usage": "20x Pro", "window": "5-hour rolling" }
+      ]
+    },
+    "cli": "claude-code",
+    "coding_models": ["claude-opus-4-6", "claude-sonnet-4-6", "claude-sonnet-4-5", "claude-haiku-4-5"],
+    "compatible_clis": ["claude-code", "cursor", "windsurf", "cline", "continue", "aider"]
+  }
+}

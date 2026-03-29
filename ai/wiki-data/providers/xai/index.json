@@ -1,0 +1,29 @@
+{
+  "version": "1.0",
+  "id": "xai",
+  "label": "xAI",
+  "type": "page",
+  "rank": 8,
+  "icon": "smart_toy",
+  "created": "2026-03-28T00:00:00Z",
+  "updated": "2026-03-28T00:00:00Z",
+  "frozen": false,
+  "edges_out": ["Overview"],
+  "edges_in": ["Overview"],
+  "sources": ["https://x.ai/api", "https://openrouter.ai/api/v1/models"],
+  "settings": {},
+  "provider": {
+    "name": "xAI",
+    "api_base": "https://api.x.ai/v1/chat/completions",
+    "models_endpoint": "https://api.x.ai/v1/models",
+    "openai_compatible": true,
+    "pricing_url": "https://x.ai/api",
+    "coding_plan": {
+      "name": "Developer Credit",
+      "tiers": [{ "price": "$25/mo free credit", "usage": "API access" }]
+    },
+    "cli": null,
+    "coding_models": ["grok-code-fast-1", "grok-4.20-beta", "grok-4.1-fast", "grok-4"],
+    "compatible_clis": ["cursor", "cline", "aider"]
+  }
+}

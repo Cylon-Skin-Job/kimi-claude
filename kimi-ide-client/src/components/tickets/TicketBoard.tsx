@@ -146,7 +146,8 @@ export function TicketBoard() {
     onError,
   });
 
-  // Open daily session on connect/reconnect
+  // Open daily session on connect/reconnect.
+  // Reset ref on cleanup so strict-mode remount re-sends.
   useEffect(() => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     if (ws === lastDailyWsRef.current) return;
@@ -155,6 +156,9 @@ export function TicketBoard() {
       type: 'thread:open-daily',
       panel: 'issues',
     }));
+    return () => {
+      lastDailyWsRef.current = null;
+    };
   }, [ws]);
 
   const tickets = useTicketStore((s) => s.tickets);

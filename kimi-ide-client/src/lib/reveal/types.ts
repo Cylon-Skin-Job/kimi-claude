@@ -22,6 +22,14 @@ export interface ChunkParser {
    * @param prevLength - Length of content on the previous call (0 on first call)
    */
   feed(content: string, prevLength: number): ParsedChunk[];
+
+  /**
+   * Flush any held-back partial content as a chunk.
+   * Called by the orchestrator when content has been buffered too long
+   * without a boundary (e.g., slow-streaming thinking content without \n).
+   * Returns the partial chunk if any, otherwise an empty array.
+   */
+  flush?(content: string): ParsedChunk[];
 }
 
 /**

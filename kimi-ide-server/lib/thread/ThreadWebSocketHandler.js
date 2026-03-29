@@ -22,13 +22,12 @@ const wsState = new Map();
 /**
  * Get or create ThreadManager for a panel
  * @param {string} panelId
- * @param {string} aiPanelsPath
+ * @param {object} [config] - Config including panelPath for ChatFile
  * @returns {ThreadManager}
  */
-function getThreadManager(panelId, aiPanelsPath) {
+function getThreadManager(panelId, config = {}) {
   if (!threadManagers.has(panelId)) {
-    const panelPath = path.join(aiPanelsPath, panelId);
-    const manager = new ThreadManager(panelPath);
+    const manager = new ThreadManager(panelId, config);
     threadManagers.set(panelId, manager);
     // Initialize async (don't block)
     manager.init().catch(err => {
@@ -42,9 +41,9 @@ function getThreadManager(panelId, aiPanelsPath) {
  * Set panel for a WebSocket connection
  * @param {import('ws').WebSocket} ws
  * @param {string} panelId
- * @param {string} aiPanelsPath
+ * @param {object} [config] - Config including panelPath for ChatFile
  */
-function setPanel(ws, panelId, aiPanelsPath) {
+function setPanel(ws, panelId, config = {}) {
   const existing = wsState.get(ws);
 
   // Close current thread if switching panels
@@ -52,13 +51,12 @@ function setPanel(ws, panelId, aiPanelsPath) {
     closeCurrentThread(ws);
   }
 
-  const manager = getThreadManager(panelId, aiPanelsPath);
+  const manager = getThreadManager(panelId, config);
 
   wsState.set(ws, {
     panelId,
     threadId: null,
     threadManager: manager,
-    aiPanelsPath
   });
 }
 
@@ -176,6 +174,7 @@ async function handleThreadCreate(ws, msg) {
     ws.send(JSON.stringify({
       type: 'thread:created',
       threadId: createdId,
+      panel: state.panelId,
       thread: entry
     }));
     
@@ -234,16 +233,17 @@ async function handleThreadOpen(ws, msg) {
   ws.send(JSON.stringify({
     type: 'thread:opened',
     threadId,
+    panel: state.panelId,
     thread: thread.entry,
     history: history?.messages || [],  // Legacy format
     exchanges: richHistory?.exchanges || []  // Rich format with tool calls
   }));
-  
+
   // Update MRU order
   await threadManager.index.touch(threadId);
   await sendThreadList(ws);
-  
-  console.log(`[ThreadWS] Opened thread ${threadId}`);
+
+  console.log(`[ThreadWS] Opened thread ${threadId} (panel: ${state.panelId})`);
 }
 
 /**
@@ -265,6 +265,13 @@ async function handleThreadOpenDaily(ws, msg) {
   }
 
   const { threadManager } = state;
+  // Preserve the requesting panel so thread:opened is routed correctly.
+  // If the message includes a panel (e.g., 'issues'), temporarily override
+  // the wsState panelId so handleThreadOpen includes the right panel.
+  const originalPanelId = state.panelId;
+  if (msg.panel) {
+    state.panelId = msg.panel;
+  }
 
   // Today's date in local time as the thread ID
   const now = new Date();
@@ -285,6 +292,7 @@ async function handleThreadOpenDaily(ws, msg) {
       ws.send(JSON.stringify({
         type: 'thread:created',
         threadId: todayId,
+        panel: state.panelId,
         thread: { name: todayId, createdAt: now.toISOString(), messageCount: 0, status: 'active' }
       }));
 
@@ -293,6 +301,11 @@ async function handleThreadOpenDaily(ws, msg) {
       console.error('[ThreadWS] Daily create failed:', err);
       ws.send(JSON.stringify({ type: 'error', message: err.message }));
     }
+  }
+
+  // Restore original panel context
+  if (msg.panel) {
+    state.panelId = originalPanelId;
   }
 }
 

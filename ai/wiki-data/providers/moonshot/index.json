@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "id": "moonshot",
+  "label": "Moonshot",
+  "type": "page",
+  "rank": 9,
+  "icon": "smart_toy",
+  "created": "2026-03-28T00:00:00Z",
+  "updated": "2026-03-28T00:00:00Z",
+  "frozen": false,
+  "edges_out": ["Overview"],
+  "edges_in": ["Overview"],
+  "sources": ["https://openrouter.ai/api/v1/models"],
+  "settings": {},
+  "provider": {
+    "name": "Moonshot AI",
+    "api_base": "https://api.moonshot.cn/v1/chat/completions",
+    "models_endpoint": "https://api.moonshot.cn/v1/models",
+    "openai_compatible": true,
+    "pricing_url": "https://platform.moonshot.cn/docs/pricing",
+    "coding_plan": null,
+    "cli": "kimi-cli",
+    "coding_models": ["kimi-k2.5", "kimi-k2", "kimi-k2-thinking"],
+    "compatible_clis": ["kimi-cli"]
+  }
+}

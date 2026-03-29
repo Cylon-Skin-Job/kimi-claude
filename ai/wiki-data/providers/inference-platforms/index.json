@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "id": "inference-platforms",
+  "label": "Inference Platforms",
+  "type": "page",
+  "rank": 12,
+  "icon": "dns",
+  "created": "2026-03-28T00:00:00Z",
+  "updated": "2026-03-28T00:00:00Z",
+  "frozen": false,
+  "edges_out": ["Overview", "Qwen"],
+  "edges_in": ["Overview", "Qwen"],
+  "sources": [],
+  "settings": {}
+}

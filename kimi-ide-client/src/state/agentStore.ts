@@ -21,7 +21,7 @@ export interface Agent {
 
 /** Known agent config files in display order */
 export const AGENT_CONFIG_FILES = [
-  'IDENTITY.md',
+  'PROMPT.md',
   'MEMORY.md',
   'LESSONS.md',
   'SESSION.md',

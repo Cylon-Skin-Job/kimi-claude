@@ -21,6 +21,7 @@ const SPEED_FAST = 1;  // ms per char
 const SPEED_SLOW = 6;  // ms per char
 const BATCH_SIZE_FAST = 5;  // chars per tick at fast speed
 const POLL_INTERVAL = 30;   // ms to wait when buffer is empty
+const FLUSH_TIMEOUT = 150;  // ms before flushing partial content from parser
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -58,6 +59,7 @@ export async function orchestrateReveal(
   let bufferCursor = 0;   // next chunk to render
   let charCursor = 0;     // characters rendered so far
   let lastFedLength = 0;  // content length last fed to parser
+  let stallStart = 0;     // timestamp when buffer became empty with pending content
 
   while (!cancelRef.current) {
     // ── Step 1: Feed new content to parser ──
@@ -72,6 +74,7 @@ export async function orchestrateReveal(
 
     // ── Step 2: Is there a chunk ready to render? ──
     if (bufferCursor < buffer.length) {
+      stallStart = 0; // reset stall timer when we have chunks
       const chunk = buffer[bufferCursor];
       const nextChunkReady = bufferCursor + 1 < buffer.length;
       const speed = nextChunkReady ? SPEED_FAST : SPEED_SLOW;
@@ -123,6 +126,26 @@ export async function orchestrateReveal(
 
         // Done
         break;
+      }
+
+      // ── Step 4b: Flush stalled partial content ──
+      // If the parser is holding back content (e.g., no \n yet) and
+      // we've been waiting longer than FLUSH_TIMEOUT, force-flush it.
+      const hasUnrenderedContent = charCursor < contentRef.current.length;
+      if (hasUnrenderedContent && parser.flush) {
+        if (stallStart === 0) {
+          stallStart = Date.now();
+        } else if (Date.now() - stallStart >= FLUSH_TIMEOUT) {
+          const flushed = parser.flush(contentRef.current);
+          for (const chunk of flushed) {
+            buffer.push(chunk);
+          }
+          stallStart = 0;
+          // Skip the sleep — go straight to rendering the flushed chunk
+          continue;
+        }
+      } else {
+        stallStart = 0;
       }
 
       // Not complete yet — wait for more tokens

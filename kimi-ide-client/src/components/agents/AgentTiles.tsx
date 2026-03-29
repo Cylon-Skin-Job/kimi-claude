@@ -65,7 +65,7 @@ function AgentCard({ agent }: { agent: Agent }) {
 
 /** Icon map for sidebar card files */
 const FILE_ICONS: Record<string, string> = {
-  'IDENTITY.md': 'badge',
+  'PROMPT.md': 'badge',
   'MEMORY.md': 'psychology',
   'LESSONS.md': 'school',
   'SESSION.md': 'settings',

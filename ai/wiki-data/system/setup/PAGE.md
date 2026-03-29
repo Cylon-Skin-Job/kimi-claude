@@ -37,7 +37,7 @@ No wizard. No prompts. The app copies files and starts. The user sees a working 
 | `issues/` | index.json, tickets.json, sync.json, scripts/ |
 | `terminal/` | index.json |
 | `wiki/` | index.json, api.json, PROMPT.md, TOOLS.md, WORKFLOW.md |
-| `background-agents/` | index.json, agents.json, registry.json, System/ agents with IDENTITY.md, SESSION.md, styles.css, workflows/, TRIGGERS.md |
+| `background-agents/` | index.json, agents.json, registry.json, System/ agents with PROMPT.md, SESSION.md, styles.css, workflows/, TRIGGERS.md |
 
 **Wiki** (from `ai/templates/wiki/`):
 
@@ -50,7 +50,7 @@ No wizard. No prompts. The app copies files and starts. The user sees a working 
 ### After Setup
 
 The copied files are now the project's own. They can be modified freely:
-- Agents evolve their IDENTITY.md and LESSONS.md
+- Agents evolve their PROMPT.md and LESSONS.md
 - Workspace configs get customized
 - Project wiki pages are created by agents and users
 - System wiki pages remain frozen until the next app update
@@ -140,7 +140,7 @@ ai/templates/
 │       ├── registry.json
 │       └── System/
 │           ├── wiki-manager/
-│           │   ├── IDENTITY.md
+│           │   ├── PROMPT.md
 │           │   ├── SESSION.md
 │           │   ├── TRIGGERS.md
 │           │   ├── styles.css

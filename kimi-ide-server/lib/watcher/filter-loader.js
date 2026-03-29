@@ -18,52 +18,45 @@ function parseFrontmatter(content) {
   if (!match) return { frontmatter: {}, body: content };
 
   const fm = {};
-  let currentKey = null;
-  let currentIndent = 0;
-  let nestedObj = null;
-  let nestedKey = null;
+  // Stack-based nesting: each entry is { key, obj, indent }
+  let stack = [];
 
   for (const line of match[1].split('\n')) {
-    // Nested object value (indented key: value under a parent)
-    if (nestedKey && line.match(/^\s+\S/)) {
-      const nested = line.trim();
-      const colonIdx = nested.indexOf(':');
-      if (colonIdx !== -1) {
-        const k = nested.slice(0, colonIdx).trim();
-        const v = nested.slice(colonIdx + 1).trim();
-        if (!nestedObj) nestedObj = {};
-        nestedObj[k] = parseValue(v);
-      }
-      continue;
-    }
-
-    // Flush nested object
-    if (nestedKey && nestedObj) {
-      fm[nestedKey] = nestedObj;
-      nestedKey = null;
-      nestedObj = null;
-    }
+    // Skip blank lines and comments
+    if (!line.trim() || line.trim().startsWith('#')) continue;
 
     const colonIdx = line.indexOf(':');
     if (colonIdx === -1) continue;
 
     const key = line.slice(0, colonIdx).trim();
     const raw = line.slice(colonIdx + 1).trim();
+    const indent = line.search(/\S/);
+
+    // Pop stack entries at same or deeper indent (we're back at a sibling/parent level)
+    while (stack.length > 0 && indent <= stack[stack.length - 1].indent) {
+      const popped = stack.pop();
+      const parent = stack.length > 0 ? stack[stack.length - 1].obj : fm;
+      parent[popped.key] = popped.obj;
+    }
 
     if (raw === '' || raw === '|') {
-      // Start of nested object or multiline
-      nestedKey = key;
-      nestedObj = {};
+      // Start of nested object
+      stack.push({ key, obj: {}, indent });
       continue;
     }
 
-    fm[key] = parseValue(raw);
-    currentKey = key;
+    // Regular key: value — add to current nesting target
+    const target = stack.length > 0 ? stack[stack.length - 1].obj : fm;
+    target[key] = parseValue(raw);
   }
 
-  // Flush final nested
-  if (nestedKey && nestedObj && Object.keys(nestedObj).length > 0) {
-    fm[nestedKey] = nestedObj;
+  // Flush remaining stack
+  while (stack.length > 0) {
+    const popped = stack.pop();
+    const parent = stack.length > 0 ? stack[stack.length - 1].obj : fm;
+    if (Object.keys(popped.obj).length > 0) {
+      parent[popped.key] = popped.obj;
+    }
   }
 
   return { frontmatter: fm, body: match[2].trim() };

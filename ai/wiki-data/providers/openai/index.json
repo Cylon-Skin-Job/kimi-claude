@@ -1,0 +1,29 @@
+{
+  "version": "1.0",
+  "id": "openai",
+  "label": "OpenAI",
+  "type": "page",
+  "rank": 3,
+  "icon": "smart_toy",
+  "created": "2026-03-28T00:00:00Z",
+  "updated": "2026-03-28T00:00:00Z",
+  "frozen": false,
+  "edges_out": ["Overview"],
+  "edges_in": ["Overview"],
+  "sources": ["https://openai.com/api/pricing", "https://openrouter.ai/api/v1/models"],
+  "settings": {},
+  "provider": {
+    "name": "OpenAI",
+    "api_base": "https://api.openai.com/v1/chat/completions",
+    "models_endpoint": "https://api.openai.com/v1/models",
+    "openai_compatible": true,
+    "pricing_url": "https://openai.com/api/pricing",
+    "coding_plan": {
+      "name": "ChatGPT Pro",
+      "tiers": [{ "price": "$200/mo", "usage": "Unlimited o1-pro, GPT-4o, Codex" }]
+    },
+    "cli": "codex-cli",
+    "coding_models": ["gpt-5.4", "gpt-5.4-pro", "gpt-5.3-codex", "gpt-5.2-codex", "gpt-5.1-codex", "gpt-5.1-codex-mini", "gpt-5-codex", "gpt-4.1", "gpt-4.1-mini", "o4-mini", "o3"],
+    "compatible_clis": ["codex-cli", "cursor", "windsurf", "cline", "continue", "aider"]
+  }
+}

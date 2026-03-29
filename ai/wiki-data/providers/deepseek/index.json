@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "id": "deepseek",
+  "label": "DeepSeek",
+  "type": "page",
+  "rank": 7,
+  "icon": "smart_toy",
+  "created": "2026-03-28T00:00:00Z",
+  "updated": "2026-03-28T00:00:00Z",
+  "frozen": false,
+  "edges_out": ["Overview"],
+  "edges_in": ["Overview"],
+  "sources": ["https://platform.deepseek.com/api-docs/pricing", "https://openrouter.ai/api/v1/models"],
+  "settings": {},
+  "provider": {
+    "name": "DeepSeek",
+    "api_base": "https://api.deepseek.com/v1/chat/completions",
+    "models_endpoint": "https://api.deepseek.com/v1/models",
+    "openai_compatible": true,
+    "pricing_url": "https://platform.deepseek.com/api-docs/pricing",
+    "coding_plan": null,
+    "cli": null,
+    "coding_models": ["deepseek-v3.2", "deepseek-r1"],
+    "compatible_clis": ["cursor", "cline", "continue", "aider"]
+  }
+}

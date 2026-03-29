@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "id": "overview",
+  "label": "Provider Overview",
+  "type": "page",
+  "rank": 1,
+  "icon": "hub",
+  "created": "2026-03-28T00:00:00Z",
+  "updated": "2026-03-28T00:00:00Z",
+  "frozen": false,
+  "edges_out": ["Anthropic", "OpenAI", "Google", "Mistral", "Qwen", "DeepSeek", "xAI", "Moonshot", "Inference-Platforms", "OpenRouter"],
+  "edges_in": [],
+  "sources": ["https://openrouter.ai/api/v1/models"],
+  "settings": {}
+}

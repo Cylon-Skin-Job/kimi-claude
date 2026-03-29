@@ -106,6 +106,7 @@ export interface WebSocketMessage {
   toolDisplay?: unknown[];
   isError?: boolean;
   // Thread fields
+  panel?: string;
   threadId?: string;
   thread?: ThreadEntry;
   threads?: Thread[];

@@ -7,7 +7,8 @@
  *
  * Each complete line (ending in \n) becomes a chunk.
  * Incomplete trailing content (no \n yet) is held back
- * until the next \n arrives or the segment completes.
+ * until the next \n arrives, the segment completes, or
+ * flush() is called by the orchestrator after a timeout.
  *
  * No transformation — content is plain text, rendered as-is.
  */
@@ -38,6 +39,18 @@ export function createLineBreakParser(): ChunkParser {
       }
 
       return chunks;
+    },
+
+    /**
+     * Release any held-back partial content (no trailing \n).
+     * Called by the orchestrator when content has stalled too long.
+     */
+    flush(content: string): ParsedChunk[] {
+      if (scanCursor >= content.length) return [];
+      const partial = content.slice(scanCursor);
+      if (partial.length === 0) return [];
+      scanCursor = content.length;
+      return [{ text: partial }];
     },
   };
 }

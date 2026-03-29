@@ -70,7 +70,8 @@ export function usePanelData({
     return () => ws.removeEventListener('message', handleMessage);
   }, [ws, panel, indexPath, onIndex, onFileContent, onError]);
 
-  // Load index on first connect and after reconnect
+  // Load index on first connect and after reconnect.
+  // Reset lastWsRef on cleanup so strict-mode remount re-sends the request.
   useEffect(() => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     if (ws === lastWsRef.current) return;
@@ -80,6 +81,10 @@ export function usePanelData({
       panel,
       path: indexPath,
     }));
+
+    return () => {
+      lastWsRef.current = null;
+    };
   }, [ws, panel, indexPath]);
 
   // Request any file from this panel

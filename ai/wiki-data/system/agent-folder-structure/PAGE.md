@@ -70,7 +70,7 @@ New groups default to rank 10 (after System at rank 1, before any high-numbered 
 To create a new agent based on an existing one:
 
 1. Copy the agent folder from one group to another (e.g., `System/wiki-manager/` → `Research Tools/my-wiki-agent/`)
-2. Edit IDENTITY.md to define the new agent's role and scope
+2. Edit PROMPT.md to define the new agent's role and scope
 3. Rename the `bot_name` in workflow PROMPT.md frontmatter to a unique name
 4. Add the new bot name to `registry.json`
 5. Clear LESSONS.md, HISTORY.md, MEMORY.md (those belong to the original)
@@ -85,7 +85,7 @@ Every agent folder contains:
 ```
 {agent-id}/
 ├── index.json         ← agent identity (universal index schema)
-├── IDENTITY.md        ← who the agent is (loaded at session start)
+├── PROMPT.md        ← who the agent is (loaded at session start)
 ├── SESSION.md         ← session configuration (thread model, timeout, context loading)
 ├── TRIGGERS.md        ← what events activate this agent
 ├── MEMORY.md          ← user preferences discovered through conversation
@@ -135,7 +135,7 @@ Follows the [Universal Index](../universal-index/PAGE.md) schema. Declares the a
 }
 ```
 
-### IDENTITY.md — Who the Agent Is
+### PROMPT.md — Who the Agent Is
 
 Loaded at session start. The system prompt. Defines role, domain, scope, and standards.
 
@@ -180,7 +180,7 @@ Defines when this agent wakes up. Each trigger maps an event to a workflow promp
 
 ### MEMORY.md — User Preferences
 
-Populated through conversation. When the user tells the agent something about how they want things done, it goes here. Read at session start alongside IDENTITY.md.
+Populated through conversation. When the user tells the agent something about how they want things done, it goes here. Read at session start alongside PROMPT.md.
 
 Starts empty. Grows over time.
 
@@ -198,7 +198,7 @@ Append-only log of things the agent learned across runs. After each run, if the 
 1. Frozen copy drops into each run folder at start (so the run has the lessons that were known at that time)
 2. New lessons append to the live file after run completion
 3. When unreviewed content exceeds ~500 tokens, a review ticket is created for the human
-4. Human promotes valuable lessons into IDENTITY.md or workflow prompts, clears reviewed entries
+4. Human promotes valuable lessons into PROMPT.md or workflow prompts, clears reviewed entries
 
 [Token-threshold review ticket creation not yet implemented]
 
@@ -283,7 +283,7 @@ runs/{timestamp}/
 └── ...
 ```
 
-**Why frozen copies:** If IDENTITY.md or workflow prompts evolve over time, past runs retain the exact version that was active. This enables reproducibility and process auditing — compare how instructions were followed across runs.
+**Why frozen copies:** If PROMPT.md or workflow prompts evolve over time, past runs retain the exact version that was active. This enables reproducibility and process auditing — compare how instructions were followed across runs.
 
 **manifest.json status:** `pending` → `in_progress` → `completed` | `stopped` | `error`
 
@@ -321,7 +321,7 @@ The `bot_name` in a workflow's YAML frontmatter must match a key in this registr
 1. Choose or create a group folder (e.g., `Research Tools/`)
 2. Create the agent folder inside it: `Research Tools/{agent-id}/`
 3. Add `index.json` (type: "agent", with label, icon, rank)
-4. Write IDENTITY.md (who it is, what it owns, read/write scope)
+4. Write PROMPT.md (who it is, what it owns, read/write scope)
 5. Write SESSION.md (thread model, timeout, context loading)
 6. Write TRIGGERS.md (what events activate it)
 7. Create empty MEMORY.md, LESSONS.md, HISTORY.md
@@ -336,7 +336,7 @@ The `bot_name` in a workflow's YAML frontmatter must match a key in this registr
 
 1. Copy an existing agent folder to a new group (or the same group with a new name)
 2. Update `index.json` with a new ID and label
-3. Update IDENTITY.md for the new role
+3. Update PROMPT.md for the new role
 4. Change `bot_name` in all workflow PROMPT.md files to a unique name
 5. Add the new bot name to `registry.json`
 6. Clear LESSONS.md, HISTORY.md, MEMORY.md

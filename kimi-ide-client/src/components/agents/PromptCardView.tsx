@@ -117,7 +117,7 @@ function buildStep(raw: { number?: number; title: string; lines: string[] }): Wo
 function isWorkflowFile(fileName: string): boolean {
   // Workflow files are anything that isn't a known agent config file
   if (!fileName) return false;
-  const configNames = ['IDENTITY', 'MEMORY', 'LESSONS', 'SESSION', 'TRIGGERS', 'HISTORY'];
+  const configNames = ['PROMPT', 'MEMORY', 'LESSONS', 'SESSION', 'TRIGGERS', 'HISTORY'];
   const base = fileName.replace('.md', '');
   return !configNames.includes(base);
 }

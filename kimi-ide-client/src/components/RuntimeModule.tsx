@@ -25,6 +25,8 @@ export function RuntimeModule({ panel, config }: RuntimeModuleProps) {
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !ws || ws.readyState !== WebSocket.OPEN) return;
+    // mountedRef prevents double-load within the same mount cycle.
+    // Reset on cleanup so strict-mode remount can re-trigger the load.
     if (mountedRef.current) return;
 
     mountedRef.current = true;

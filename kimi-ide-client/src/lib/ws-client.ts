@@ -296,21 +296,28 @@ function handleMessage(msg: WebSocketMessage) {
       }
       break;
 
-    case 'thread:opened':
-      console.log('[WS] thread:opened:', msg.threadId?.slice(0, 8), 'exchanges:', msg.exchanges?.length, 'history:', msg.history?.length);
+    case 'thread:opened': {
+      // Use the panel from the message if available, otherwise fall back to currentPanel.
+      // This prevents cross-panel pollution (e.g., issues daily thread writing to explorer).
+      const targetPanel = msg.panel || panel;
+      console.log('[WS] thread:opened:', msg.threadId?.slice(0, 8), 'panel:', targetPanel, 'exchanges:', msg.exchanges?.length, 'history:', msg.history?.length);
       if (msg.threadId && msg.thread) {
-        store.setCurrentThreadId(msg.threadId);
-        store.clearPanel(panel);
+        // Only update current thread if this is the active panel
+        if (targetPanel === panel) {
+          store.setCurrentThreadId(msg.threadId);
+        }
+        store.clearPanel(targetPanel);
 
         if (msg.exchanges && msg.exchanges.length > 0) {
           console.log('[WS] Loading', msg.exchanges.length, 'exchanges (rich format)');
-          convertExchangesToMessages(panel, msg.exchanges);
+          convertExchangesToMessages(targetPanel, msg.exchanges);
         } else if (msg.history && msg.history.length > 0) {
           console.log('[WS] Loading', msg.history.length, 'messages (legacy format)');
-          convertHistoryToMessages(panel, msg.history);
+          convertHistoryToMessages(targetPanel, msg.history);
         }
       }
       break;
+    }
 
     case 'thread:renamed':
       if (msg.threadId && msg.name) {
