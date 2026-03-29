@@ -15,6 +15,7 @@ sub-specs:
   - SPEC-COLLABORATION.md
   - SPEC-EVENT-SYSTEM.md
   - CLIs.md
+  - VIEW-TABLE.md
   - ROADMAP.md
 ---
 
@@ -49,33 +50,75 @@ No plugin architecture. No content-type registry. No runtime-loaded submodules. 
 ```
 Robin (system layer — above everything)
   │
-  ├── Project A (upper-left menu to switch)
-  │     ├── Workspace: Code
-  │     │     └── View: file-explorer
-  │     ├── Workspace: Wiki
-  │     │     └── View: wiki
-  │     ├── Workspace: Issues
-  │     │     └── View: ticket-board
-  │     ├── Workspace: Capture
-  │     │     └── View: tile-grid
-  │     └── Workspace: Agents
-  │           └── View: agent-cards
+  ├── Project: kimi-claude (IDE/app development)
+  │     ├── Code         → file-explorer
+  │     ├── Wiki         → wiki
+  │     ├── Issues       → ticket-board
+  │     ├── Capture      → tile-grid
+  │     └── Agents       → agent-cards
   │
-  ├── Project B
-  │     └── (same pattern, different content)
+  ├── Project: home-office (bookkeeping/life management)
+  │     ├── Dashboard    → custom view
+  │     ├── Invoices     → tile-grid (reused) + invoices.db
+  │     ├── Customers    → table + customers.db
+  │     ├── Expenses     → table + expenses.db
+  │     ├── Wiki         → wiki (tax rules, vendor notes)
+  │     ├── Issues       → ticket-board / calendar
+  │     ├── Agents       → invoice-generator, expense-logger, tax-prep
+  │     ├── Files        → file-explorer (receipts, PDFs, symlinks)
+  │     └── Email        → symlinked view
   │
   └── System (Robin's domain)
-        ├── SQLite DB (chat history, system wiki, policies, archive)
-        ├── Templates
-        ├── System-level TRIGGERS.md
-        └── Resource policies
+        ├── robin.db (system config, Robin's chat, profiles)
+        ├── Templates (project scaffolds)
+        └── System-level TRIGGERS.md
 ```
+
+Every project is the same architecture — different content. A code IDE and a bookkeeping app are both just folders in `ai/views/` with workspaces, agents, triggers, and scripts. The views that ship with the app get reused across domains.
 
 ### Project Switching
 
-Upper-left menu hot-swaps between projects. The sidebar rebuilds with the new project's workspaces. The DB pointer shifts — everything downstream (workspaces, views, sessions) resolves from the new project root.
+Upper-left menu hot-swaps between projects. The sidebar rebuilds with the new project's workspaces. Background bots and crons are **project-scoped but run independently** — switching projects does not kill bots in the project you left.
 
-Background bots and crons are **project-scoped but run independently** of what you're looking at. Switching projects does not kill bots in the project you left.
+### Table Panel — Apps as Views
+
+Any workspace can have its own `.db` file right in the folder. The table panel view renders SQLite data as a scrollable, sortable, filterable table GUI. Scripts in the workspace's `scripts/` folder provide the business logic. `tools.json` lists them as callable skills for agents.
+
+```
+ai/views/customers/
+  index.json          ← { type: "table", icon: "people" }
+  customers.db        ← the data, right here
+  PROMPT.md           ← agent identity for this panel's chat
+  SESSION.md          ← permissions
+  tools.json          ← scripts → callable tools
+  scripts/
+    import-contacts.js
+    merge-duplicates.js
+  chat/
+    threads/...
+```
+
+This means any user can build any SaaS-equivalent locally: bookkeeping, CRM, inventory, project management. Robin helps scaffold it, agents automate it, triggers connect it to email/calendar/bank notifications. No monthly fees, no cloud dependency, data stays on your machine.
+
+### Per-View Databases
+
+Each workspace owns its data. No single monolithic project.db.
+
+```
+ai/system/robin.db           ← Robin's. System config. Invisible to agents.
+ai/system/project.db         ← Thread metadata, exchanges. Invisible to agents.
+ai/views/invoices/invoices.db    ← Workspace data. Accessible via scripts.
+ai/views/customers/customers.db  ← Workspace data. Accessible via scripts.
+ai/views/expenses/expenses.db    ← Workspace data. Accessible via scripts.
+```
+
+### Project Templates
+
+Robin scaffolds entire projects from templates:
+- "Blank" — empty ai/views/ with code, wiki, issues, agents
+- "Home Office" — bookkeeping, invoices, expenses, customers, trips
+- "Research" — capture, wiki, agents, files
+- User-created templates from existing projects
 
 ---
 
@@ -83,35 +126,34 @@ Background bots and crons are **project-scoped but run independently** of what y
 
 ### System Layer (not in repo)
 
-SQLite database owned by Robin. Contains:
-- Wire protocol structural data for all chats
-- Session state and resource tracking
-- System wiki (surfaces as tooltips, contextual help — no independent view)
-- Resource management policies
-- Robin's own chat history
-- Archive of old chat runs
+```
+ai/system/
+  robin.db           ← System config, system wiki, Robin's chat, profiles
+  project.db         ← Thread metadata, exchanges, ticket index
+```
 
-**Not user-editable unless compiling from source.**
+Invisible to agents. Managed by Robin. In `.gitignore`.
 
 ### Repo Layer (portable, shareable)
 
 Everything in the repo is collaboration-ready:
 ```
 ai/views/{workspace}/
-  threads/
-    {username}/
-      thread-slug-1.md
-      thread-slug-2.md
-    {collaborator}/
-      their-thread-1.md
-  agents/
+  *.db               ← workspace app data (if table panel)
+  scripts/           ← business logic
+  tools.json         ← skill manifest
+  chat/threads/
+    {username}/      ← your thread markdown
+    {collaborator}/  ← their thread markdown
   wiki/
-  tickets/
+  agents/
 ```
 
-The DB renders the live chat. Markdown is the **human-readable receipt** — a duplicate that lives in the repo under the user's name. Push the repo, collaborators pull, and their thread markdown appears in their user folder. No merge conflicts — your threads are yours, theirs are theirs.
+The DB renders the live chat. Markdown is the **human-readable receipt** — lives in the repo under the user's name. Push the repo, collaborators pull, and their thread markdown appears in their user folder. No merge conflicts.
 
-The repo becomes a knowledge artifact. Not just code — the conversations that produced the code travel with it.
+Per-view .db files are in the repo by default (they ARE the app data). Users can .gitignore them if the data is private.
+
+The repo becomes a knowledge artifact AND an application. Not just code — the conversations, the data, and the automations that power the app all travel together.
 
 See **SPEC-COLLABORATION.md** for full details.
 
@@ -202,14 +244,15 @@ Crons interact with the ticketing system and blocking tickets. Details in **VIEW
 | View | Workspace | Spec |
 |------|-----------|------|
 | Robin's System Panel | System (above projects) | VIEW-ROBIN.md |
-| Tile Grid | Capture | VIEW-CAPTURE.md |
-| File Explorer | Code | VIEW-FILE-EXPLORER.md |
+| Tile Grid | Capture, Invoices, etc. | VIEW-CAPTURE.md |
+| File Explorer | Code, Files | VIEW-FILE-EXPLORER.md |
 | Wiki | Wiki | VIEW-WIKI.md |
-| Ticket Board | Issues | VIEW-TICKETING.md |
+| Ticket Board / Calendar | Issues | VIEW-TICKETING.md |
 | Agent Cards | Agents/Bots | VIEW-AGENTS.md |
+| Table | Any data workspace | VIEW-TABLE.md |
 | Chat | Any (attached to workspaces) | VIEW-CHAT.md |
 
-No content-type registry. No plugin system. These are the views. If you want something else, build it.
+No content-type registry. No plugin system. These are the views. Views get reused across projects and domains — the tile grid that renders capture docs also renders invoices. The table view renders any SQLite database. If you want something truly custom, build it — AI generates code.
 
 ---
 

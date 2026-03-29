@@ -35,12 +35,13 @@ Enforce SESSION.md permissions server-side. Build the skills-as-scripts model. C
 - **Message IDs in markdown:** HTML comments in thread .md files for parseable references.
 - **User app databases** live in `{project}/apps/`, separate from system DBs, with develop/production mode toggle.
 
-### Three Database Model
+### Database Model
 
 ```
-ai/system/robin.db        ← INVISIBLE to agents. System config, Robin's chat.
-ai/system/project.db      ← INVISIBLE to agents. Threads, exchanges, tickets.
-{project}/apps/*.db        ← Accessible via scripts. Develop/production modes.
+ai/system/robin.db                     ← INVISIBLE to agents. System config, Robin's chat.
+ai/system/project.db                   ← INVISIBLE to agents. Threads, exchanges, tickets.
+ai/views/{workspace}/*.db              ← Per-view app databases. Accessible via scripts.
+                                         Develop/production mode in index.json.
 ```
 
 ---
@@ -418,49 +419,30 @@ fs.writeFileSync(LEDGER_PATH, JSON.stringify(ledger, null, 2));
 
 ---
 
-## 3.5 User App Databases
+## 3.5 Per-View App Databases (Table Panels)
 
-User-created applications get their own databases, separate from system/project DBs.
+Each table panel workspace has its own .db file right in the folder. No separate `apps/` directory.
 
 ### Structure
 
 ```
-{project}/apps/
-  bookkeeping/
-    bookkeeping.db          ← User app database (Knex managed)
-    tools.json              ← Skill manifest for this app
-    scripts/
-      create-invoice.js
-      query-customers.js
-      run-report.js
-    migrations/
-      001_initial.js        ← Knex migration (Robin generates these)
+ai/views/invoices/
+  index.json          ← { type: "table", db: "invoices.db", mode: "develop" }
+  invoices.db         ← SQLite database (Knex managed)
+  tools.json          ← scripts → callable agent tools
+  scripts/
+    create-invoice.js
+    query-invoices.js
+    send-invoice.js
+  migrations/
+    001_initial.js    ← Knex migration (Robin generates)
+  chat/
+    PROMPT.md
+    SESSION.md
+    threads/...
 ```
 
-### tools.json with Mode Toggle
-
-```json
-{
-  "name": "bookkeeping",
-  "db": "bookkeeping.db",
-  "mode": "develop",
-  "tools": [
-    {
-      "name": "create-invoice",
-      "script": "scripts/create-invoice.js",
-      "access": "write",
-      "locked_in_production": true
-    },
-    {
-      "name": "query-customers",
-      "script": "scripts/query-customers.js",
-      "access": "read"
-    }
-  ]
-}
-```
-
-### Mode Behavior
+### Mode Toggle (in index.json)
 
 | Mode | Read tools | Write tools (locked) | Write tools (unlocked) |
 |------|-----------|---------------------|----------------------|
@@ -468,12 +450,14 @@ User-created applications get their own databases, separate from system/project 
 | `production` | Allowed | Bounced with restriction | Allowed |
 
 ### Steps
-- [ ] Create `apps/` directory convention
-- [ ] Skill registry scans `apps/*/tools.json` alongside agent skills.json
-- [ ] Mode check: if `production` and tool is `locked_in_production`, bounce
-- [ ] Robin can create app scaffolds (db + tools.json + scripts/ + migrations/)
+- [ ] Skill registry scans `ai/views/*/tools.json` for per-workspace skills
+- [ ] Mode check from index.json: if `production` and tool is `locked_in_production`, bounce
+- [ ] Robin can scaffold table panel from template (db + tools.json + scripts/ + migrations/)
 - [ ] Robin can toggle mode ("lock it down" / "unlock for development")
+- [ ] Knex migration runner for per-workspace .db files
 - [ ] Test: develop mode → write tools work. Production mode → locked writes bounce.
+
+See **VIEW-TABLE.md** for full table panel spec.
 
 ---
 
