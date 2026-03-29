@@ -262,14 +262,14 @@ No content-type registry. No plugin system. These are the views. Views get reuse
 
 ```
 ai/agent-viewer/{folder}/{agentName}/
-  PROMPT.md          ← personality, role, scope (was IDENTITY.md)
+  PROMPT.md          ← personality, role, scope (was PROMPT.md)
   SESSION.md          ← harness config + CLI profile + tool permissions (absorbs TOOLS.md)
   MEMORY.md           ← persistent memory (grows through conversation)
   TRIGGERS.md         ← event-driven activation rules
   HISTORY.md          ← activity log
   workflows/
     {Workflow Name}/
-      PROMPT.md       ← orchestrator instructions
+      WORKFLOW.md     ← orchestrator instructions
       TRIGGERS.md     ← workflow-specific triggers
       LESSONS.md      ← workflow-scoped learnings (append-only)
   runs/               ← execution history (frozen snapshots)

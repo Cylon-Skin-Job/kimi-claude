@@ -37,7 +37,7 @@ ai/workspaces/background-agents/
 ├── registry.json           (3 bot names → 3 folders under System/)
 ├── System/                 (reserved — default agents that ship with the app)
 │   ├── wiki-manager/
-│   │   ├── IDENTITY.md     (stub — content in Phase 7)
+│   │   ├── PROMPT.md     (stub — content in Phase 7)
 │   │   ├── MEMORY.md       (empty — populated by user interaction)
 │   │   ├── HISTORY.md      (empty — populated by runner)
 │   │   ├── LESSONS.md      (merged from wiki-updater + wiki-auditor)
@@ -49,7 +49,7 @@ ai/workspaces/background-agents/
 │   │   ├── threads/
 │   │   └── runs/
 │   ├── code-manager/
-│   │   ├── IDENTITY.md
+│   │   ├── PROMPT.md
 │   │   ├── MEMORY.md
 │   │   ├── HISTORY.md
 │   │   ├── LESSONS.md      (merged from bug-fixer + code-reviewer + test-writer)
@@ -61,7 +61,7 @@ ai/workspaces/background-agents/
 │   │   ├── threads/
 │   │   └── runs/
 │   └── ops-manager/
-│       ├── IDENTITY.md
+│       ├── PROMPT.md
 │       ├── MEMORY.md
 │       ├── HISTORY.md
 │       ├── LESSONS.md      (merged from dependency-auditor + doc-generator)
@@ -87,7 +87,7 @@ Icon is set via CSS `::before` pseudo-element with Material Symbols `content` pr
 - Future: user-created folders sit alongside System/
 
 ### index.json → Deprecated
-Display metadata (icon, color, description) moves into each agent's `styles.css` and `IDENTITY.md`. The server-side cron label enrichment moves to... wherever schedule display needs it (Phase 4 handles triggers/cron).
+Display metadata (icon, color, description) moves into each agent's `styles.css` and `PROMPT.md`. The server-side cron label enrichment moves to... wherever schedule display needs it (Phase 4 handles triggers/cron).
 
 ## Steps
 
@@ -136,7 +136,7 @@ Example styles.css:
 ```
 
 ### 5. Create Empty Infrastructure Files
-- [ ] `IDENTITY.md` in each (header + stub, content in Phase 7)
+- [ ] `PROMPT.md` in each (header + stub, content in Phase 7)
 - [ ] `MEMORY.md` in each (empty — populated through user interaction)
 - [ ] `HISTORY.md` in each (with `## Recent` and `## Daily Summaries` sections)
 - [ ] `TRIGGERS.md` in each (header + stub, content in Phase 4)
@@ -153,7 +153,7 @@ Example styles.css:
 
 ### 8. Remove Old Structure
 - [ ] Remove `agents/` directory entirely (all 7 old folders)
-- [ ] Remove or archive `index.json` (deprecated — metadata now in styles.css + IDENTITY.md)
+- [ ] Remove or archive `index.json` (deprecated — metadata now in styles.css + PROMPT.md)
 
 ### 9. Update Server/Runner References
 - [ ] `prompt-builder.js` — default prompt filename: `PROMPT_01.md` instead of `prompt.md`

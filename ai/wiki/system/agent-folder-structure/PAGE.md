@@ -71,7 +71,7 @@ To create a new agent based on an existing one:
 
 1. Copy the agent folder from one group to another (e.g., `System/wiki-manager/` → `Research Tools/my-wiki-agent/`)
 2. Edit PROMPT.md to define the new agent's role and scope
-3. Rename the `bot_name` in workflow PROMPT.md frontmatter to a unique name
+3. Rename the `bot_name` in WORKFLOW.md frontmatter to a unique name
 4. Add the new bot name to `registry.json`
 5. Clear LESSONS.md, HISTORY.md, MEMORY.md (those belong to the original)
 6. The new agent is immediately functional with the cloned workflows as a starting point
@@ -94,7 +94,7 @@ Every agent folder contains:
 ├── styles.css         ← UI styling for the agent tile
 ├── workflows/         ← workflow definitions
 │   ├── {Workflow Name}/
-│   │   └── PROMPT.md  ← orchestrator instructions with YAML frontmatter
+│   │   └── WORKFLOW.md  ← orchestrator instructions with YAML frontmatter
 │   └── ...
 ├── runs/              ← execution history (one folder per ticket)
 │   └── {timestamp}/
@@ -174,7 +174,7 @@ Defines when this agent wakes up. Each trigger maps an event to a workflow promp
 ## {trigger-name}
 - **Event:** {what happens}
 - **Glob/Schedule:** {pattern or cron expression}
-- **Workflow:** {which PROMPT.md to run}
+- **Workflow:** {which WORKFLOW.md to run}
 - **Ticket title template:** {how the auto-created ticket is named}
 ```
 
@@ -198,7 +198,7 @@ Append-only log of things the agent learned across runs. After each run, if the 
 1. Frozen copy drops into each run folder at start (so the run has the lessons that were known at that time)
 2. New lessons append to the live file after run completion
 3. When unreviewed content exceeds ~500 tokens, a review ticket is created for the human
-4. Human promotes valuable lessons into PROMPT.md or workflow prompts, clears reviewed entries
+4. Human promotes valuable lessons into PROMPT.md or WORKFLOW.md prompts, clears reviewed entries
 
 [Token-threshold review ticket creation not yet implemented]
 
@@ -212,11 +212,11 @@ Custom CSS for this agent's tile in the UI. Falls back to template if not presen
 
 ### workflows/ — The Work Definitions
 
-Each subfolder is a named workflow containing a `PROMPT.md` with YAML frontmatter and numbered orchestrator steps.
+Each subfolder is a named workflow containing a `WORKFLOW.md` with YAML frontmatter and numbered orchestrator steps.
 
 ---
 
-## Workflow PROMPT.md Anatomy
+## WORKFLOW.md Anatomy
 
 ```yaml
 ---
@@ -272,7 +272,7 @@ Every workflow execution creates a run folder in `{agent-id}/runs/{timestamp}/`.
 ```
 runs/{timestamp}/
 ├── ticket.md          ← frozen copy of the triggering ticket
-├── prompt.md          ← frozen copy of the workflow PROMPT.md
+├── prompt.md          ← frozen copy of the WORKFLOW.md
 ├── lessons.md         ← frozen copy of LESSONS.md at run time
 ├── manifest.json      ← status, timing, model, outcome
 ├── run-index.json     ← step-by-step progress tracker
@@ -283,7 +283,7 @@ runs/{timestamp}/
 └── ...
 ```
 
-**Why frozen copies:** If PROMPT.md or workflow prompts evolve over time, past runs retain the exact version that was active. This enables reproducibility and process auditing — compare how instructions were followed across runs.
+**Why frozen copies:** If PROMPT.md or WORKFLOW.md files evolve over time, past runs retain the exact version that was active. This enables reproducibility and process auditing — compare how instructions were followed across runs.
 
 **manifest.json status:** `pending` → `in_progress` → `completed` | `stopped` | `error`
 
@@ -325,7 +325,7 @@ The `bot_name` in a workflow's YAML frontmatter must match a key in this registr
 5. Write SESSION.md (thread model, timeout, context loading)
 6. Write TRIGGERS.md (what events activate it)
 7. Create empty MEMORY.md, LESSONS.md, HISTORY.md
-8. Create `workflows/` with at least one workflow PROMPT.md
+8. Create `workflows/` with at least one WORKFLOW.md
 9. Create empty `runs/` directory
 10. Add entry to `registry.json` with bot name → group/folder mapping
 11. Add the agent ID to the group's `index.json` children array
@@ -337,7 +337,7 @@ The `bot_name` in a workflow's YAML frontmatter must match a key in this registr
 1. Copy an existing agent folder to a new group (or the same group with a new name)
 2. Update `index.json` with a new ID and label
 3. Update PROMPT.md for the new role
-4. Change `bot_name` in all workflow PROMPT.md files to a unique name
+4. Change `bot_name` in all WORKFLOW.md files to a unique name
 5. Add the new bot name to `registry.json`
 6. Clear LESSONS.md, HISTORY.md, MEMORY.md
 7. Add the agent ID to the group's `index.json` children array

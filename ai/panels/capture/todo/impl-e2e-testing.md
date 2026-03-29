@@ -22,7 +22,7 @@ Cannot begin until the chat renderer is fixed. Once ready:
 - [ ] Verify: ThreadManager created for agent container
 - [ ] Verify: daily-rolling strategy resolves today's thread (UUID folder, date field in threads.json)
 - [ ] Verify: wire spawned with `--session {threadId}`
-- [ ] Verify: first prompt includes `system` field with IDENTITY.md + MEMORY.md content
+- [ ] Verify: first prompt includes `system` field with PROMPT.md + MEMORY.md content
 - [ ] Verify: subsequent prompts omit `system` field
 - [ ] Verify: persona responds with awareness of its identity (knows it's the wiki manager)
 

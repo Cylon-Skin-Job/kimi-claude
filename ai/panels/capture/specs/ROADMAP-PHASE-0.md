@@ -21,7 +21,7 @@ Fix bugs, rename files, expand SESSION.md, populate triggers. No new features �
 
 ### What This Phase Does
 1. Fix 3 known bugs (workspace loading, chat bubble double-render, parser stall)
-2. Rename IDENTITY.md → PROMPT.md across 10 files (17 references mapped below)
+2. Rename PROMPT.md → PROMPT.md across 10 files (17 references mapped below)
 3. Expand SESSION.md frontmatter to include tool permissions, DB access scoping, and CLI profile fields
 4. Write TRIGGERS.md content for code-manager and ops-manager agents
 
@@ -37,7 +37,7 @@ Fix bugs, rename files, expand SESSION.md, populate triggers. No new features �
 - `kimi-ide-client/src/components/agents/AgentTiles.tsx` — FILE_ICONS map
 - `kimi-ide-client/src/components/agents/PromptCardView.tsx` — configNames filter
 - `ai/panels/agents/System/*/SESSION.md` — 3 agent session configs
-- `ai/panels/agents/System/*/IDENTITY.md` — 3 files to rename
+- `ai/panels/agents/System/*/PROMPT.md` — 3 files to rename
 
 ---
 
@@ -60,7 +60,7 @@ Tool segments using line-break parser won't emit a chunk until `\n` arrives. Slo
 
 ---
 
-## 0.2 Rename IDENTITY.md → PROMPT.md
+## 0.2 Rename PROMPT.md → PROMPT.md
 
 17 references across 10 files. Mechanical rename.
 
@@ -68,10 +68,10 @@ Tool segments using line-break parser won't emit a chunk until `\n` arrives. Slo
 
 | File | Line | Current | Change to |
 |------|------|---------|-----------|
-| `kimi-ide-server/lib/session/session-loader.js` | 46 | `['IDENTITY.md', 'MEMORY.md']` (JSDoc example) | `['PROMPT.md', 'MEMORY.md']` |
-| `kimi-ide-client/src/state/agentStore.ts` | 24 | `'IDENTITY.md',` | `'PROMPT.md',` |
+| `kimi-ide-server/lib/session/session-loader.js` | 46 | `['PROMPT.md', 'MEMORY.md']` (JSDoc example) | `['PROMPT.md', 'MEMORY.md']` |
+| `kimi-ide-client/src/state/agentStore.ts` | 24 | `'PROMPT.md',` | `'PROMPT.md',` |
 | `kimi-ide-client/src/components/agents/PromptCardView.tsx` | 120 | `'IDENTITY'` in configNames array | `'PROMPT'` |
-| `kimi-ide-client/src/components/agents/AgentTiles.tsx` | 68 | `'IDENTITY.md': 'badge',` | `'PROMPT.md': 'badge',` |
+| `kimi-ide-client/src/components/agents/AgentTiles.tsx` | 68 | `'PROMPT.md': 'badge',` | `'PROMPT.md': 'badge',` |
 
 ### Session Config Changes (3 files)
 
@@ -84,18 +84,18 @@ Tool segments using line-break parser won't emit a chunk until `\n` arrives. Slo
 ### File Renames (3 files)
 
 ```bash
-mv ai/panels/agents/System/code-manager/IDENTITY.md ai/panels/agents/System/code-manager/PROMPT.md
-mv ai/panels/agents/System/ops-manager/IDENTITY.md ai/panels/agents/System/ops-manager/PROMPT.md
-mv ai/panels/agents/System/wiki-manager/IDENTITY.md ai/panels/agents/System/wiki-manager/PROMPT.md
+mv ai/panels/agents/System/code-manager/PROMPT.md ai/panels/agents/System/code-manager/PROMPT.md
+mv ai/panels/agents/System/ops-manager/PROMPT.md ai/panels/agents/System/ops-manager/PROMPT.md
+mv ai/panels/agents/System/wiki-manager/PROMPT.md ai/panels/agents/System/wiki-manager/PROMPT.md
 ```
 
 ### Wiki Page Updates (10 references across 3 files)
 
 | File | Lines | Action |
 |------|-------|--------|
-| `ai/wiki-data/system/setup/PAGE.md` | 40, 53, 143 | Replace IDENTITY.md with PROMPT.md |
-| `ai/wiki-data/system/panel-rename/PAGE.md` | 84, 170 | Replace IDENTITY.md with PROMPT.md |
-| `ai/wiki-data/system/agent-folder-structure/PAGE.md` | 73, 88, 138, 183, 201, 286, 324, 339 | Replace IDENTITY.md with PROMPT.md, update section header "IDENTITY.md — Who the Agent Is" → "PROMPT.md — Who the Agent Is" |
+| `ai/wiki-data/system/setup/PAGE.md` | 40, 53, 143 | Replace PROMPT.md with PROMPT.md |
+| `ai/wiki-data/system/panel-rename/PAGE.md` | 84, 170 | Replace PROMPT.md with PROMPT.md |
+| `ai/wiki-data/system/agent-folder-structure/PAGE.md` | 73, 88, 138, 183, 201, 286, 324, 339 | Replace PROMPT.md with PROMPT.md, update section header "PROMPT.md — Who the Agent Is" → "PROMPT.md — Who the Agent Is" |
 
 ### Verification
 - [ ] `grep -r "IDENTITY" --include="*.js" --include="*.ts" --include="*.tsx" --include="*.md" ai/ kimi-ide-server/ kimi-ide-client/src/` returns zero matches (excluding .claude/worktrees/)
@@ -246,8 +246,8 @@ message: |
 ### Backward Compatibility of SESSION.md
 The parser must handle both old format (4 fields) and new format (4 + cli + tools + db). `parseSessionConfig()` should return defaults for any missing field. No breaking changes.
 
-### PROMPT.md Name Collision
-Agent root has PROMPT.md (identity) and each workflow has PROMPT.md (instructions). This is intentional — same file name, context determines meaning. The session-loader loads from the agent root. The runner loads from the workflow folder. No conflict because they're in different directories. But we should verify that no code does a recursive search for PROMPT.md that would match both.
+### PROMPT.md Name Collision — Resolved
+Agent root has PROMPT.md (identity) and each workflow now has WORKFLOW.md (instructions). The rename from workflow PROMPT.md to WORKFLOW.md eliminates the name collision entirely. PROMPT.md is only the agent identity file at the root level. WORKFLOW.md is the workflow instruction file inside `workflows/*/`. No ambiguity.
 
 ### Tool Permissions — Trust vs Enforcement
 Phase 0 parses the config. Phase 3 enforces it. In between, tool permissions are advisory — the agent could still call denied tools. This is acceptable for now since agents are internally controlled. Document this gap.
@@ -257,7 +257,7 @@ Phase 0 parses the config. Phase 3 enforces it. In between, tool permissions are
 ## Completion Criteria
 
 - [ ] All 3 known bugs fixed
-- [ ] Zero references to IDENTITY.md in main project tree
+- [ ] Zero references to PROMPT.md in main project tree
 - [ ] SESSION.md parses all new fields without breaking existing behavior
 - [ ] All 3 agents have populated TRIGGERS.md
 - [ ] Server starts cleanly, all workspaces load

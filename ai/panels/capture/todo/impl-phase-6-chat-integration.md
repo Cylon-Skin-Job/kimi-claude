@@ -8,7 +8,7 @@ depends-on: impl-phase-2, impl-phase-4, impl-phase-5
 
 # Phase 6: Chat Integration (Fronting Persona)
 
-Agent workspaces get chat capability. The fronting persona loads IDENTITY.md + MEMORY.md, manages blocks, introspects its own domain, and interacts with the user.
+Agent workspaces get chat capability. The fronting persona loads PROMPT.md + MEMORY.md, manages blocks, introspects its own domain, and interacts with the user.
 
 ## Current State
 
@@ -26,7 +26,7 @@ Each managed agent workspace (wiki-manager, code-manager, ops-manager) has:
 - `hasChat: true` in workspace.json
 - Single chat thread (no multi-thread UI, no thread list)
 - Session invalidation via MEMORY.md mtime
-- System context from IDENTITY.md + MEMORY.md (not generic AGENTS.md)
+- System context from PROMPT.md + MEMORY.md (not generic AGENTS.md)
 - Wake notifications from block expiry and run completion (Phase 5)
 
 ## Architecture Decision: SESSION.md + Container Scoping
@@ -64,7 +64,7 @@ See `capture/specs/scope-and-chat-architecture.md` for the full taxonomy.
 
 ### 3. System Context via Wire Protocol
 - [ ] On first prompt for an agent session, include `system` field:
-  - Read files listed in SESSION.md `system-context` (IDENTITY.md + MEMORY.md)
+  - Read files listed in SESSION.md `system-context` (PROMPT.md + MEMORY.md)
   - Concatenate into system context string
   - Send via wire: `{ system: systemContext, user_input: message }`
 - [ ] Subsequent prompts in same session: `{ user_input: message }` (no system field — CLI retains it)
@@ -85,7 +85,7 @@ See `capture/specs/scope-and-chat-architecture.md` for the full taxonomy.
 - [ ] If persona session is NOT active (tab closed), skip — persona catches up via HISTORY.md
 
 ### 6. Self-Awareness (Already Done)
-- [ ] IDENTITY.md already tells the persona about its own files
+- [ ] PROMPT.md already tells the persona about its own files
 - [ ] The CLI's file access tools let it read/edit its own configuration
 - [ ] No special API needed — loaded via system-context in SESSION.md
 
@@ -102,7 +102,7 @@ See `capture/specs/scope-and-chat-architecture.md` for the full taxonomy.
 
 ## Verification
 - [ ] Open agent tab → chat appears (single thread, no thread list)
-- [ ] Type a message → persona responds with awareness of IDENTITY.md
+- [ ] Type a message → persona responds with awareness of PROMPT.md
 - [ ] Close tab → reopen → session reattaches (same thread)
 - [ ] Edit MEMORY.md externally → reopen tab → fresh session (old thread archived)
 - [ ] Trigger fires → run completes → persona tab shows notification (if open)

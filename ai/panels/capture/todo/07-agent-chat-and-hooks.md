@@ -16,7 +16,7 @@ One managed workspace per domain. One fronting persona. Multiple numbered prompt
 │              Agent Managed Workspace                      │
 │            (e.g., agents/wiki-manager/)                   │
 │                                                           │
-│  IDENTITY.md  ← who you are (points to wiki for standards)│
+│  PROMPT.md  ← who you are (points to wiki for standards)│
 │  MEMORY.md    ← user relationship (preferences, persona)  │
 │  HISTORY.md   ← run activity log (recent + daily)         │
 │  LESSONS.md   ← process learnings (craft improvement)     │
@@ -26,7 +26,7 @@ One managed workspace per domain. One fronting persona. Multiple numbered prompt
 │  ┌───────────────────────────────────────────────┐       │
 │  │     Fronting Persona (block manager + expert)  │       │
 │  │                                               │       │
-│  │  Loads: IDENTITY.md + MEMORY.md               │       │
+│  │  Loads: PROMPT.md + MEMORY.md               │       │
 │  │  Reads: HISTORY.md, LESSONS.md, runs/          │       │
 │  │  Can introspect: own prompts, triggers, domain │       │
 │  │  Wakes on: block expiry, run completion        │       │
@@ -105,7 +105,7 @@ Everything the persona does is a trigger + prompt. Want it to detect drift from 
 ```
 User opens agent tab:
   MEMORY.md mtime > last message in current --session?
-    → Yes: archive thread to threads/, start fresh with IDENTITY.md + MEMORY.md
+    → Yes: archive thread to threads/, start fresh with PROMPT.md + MEMORY.md
     → No:  reattach to existing session
 ```
 
@@ -137,16 +137,16 @@ message: |
 
 ## Tasks
 
-### IDENTITY.md
+### PROMPT.md
 - [ ] Define format: persona, scope, lifecycle rules, pointer to wiki standards page
-- [ ] IDENTITY.md tells the agent: "The standard for your work is in the wiki. Your prompts execute that standard."
-- [ ] Write IDENTITY.md for wiki-manager, code-manager, ops-manager
+- [ ] PROMPT.md tells the agent: "The standard for your work is in the wiki. Your prompts execute that standard."
+- [ ] Write PROMPT.md for wiki-manager, code-manager, ops-manager
 
 ### MEMORY.md — User Relationship Persistence
 - [ ] Format: active instructions, user preferences, persona continuity notes
 - [ ] Updated by the fronting persona after user interactions
 - [ ] mtime serves as session invalidation signal
-- [ ] On session start: load IDENTITY.md + MEMORY.md as system context
+- [ ] On session start: load PROMPT.md + MEMORY.md as system context
 
 ### HISTORY.md — Activity Log
 - [ ] Format: "Recent" section (granular, since last audit) + "Daily Summaries" section (condensed)
@@ -186,7 +186,7 @@ message: |
 
 ### Wiki as Living Standard
 - [ ] Create Wiki-Editing-Standards page — how wiki updates should be done properly
-- [ ] IDENTITY.md references this page — the agent checks its work against the wiki
+- [ ] PROMPT.md references this page — the agent checks its work against the wiki
 - [ ] If prompts drift from wiki standards → user or agent adjusts prompts to realign
 - [ ] Future: agent pages for code standards, ops standards, etc.
 
@@ -242,7 +242,7 @@ message: |
 
 ## Design Decisions
 
-- **IDENTITY.md, not ASSISTANT.md**: No collision with CLI terminology. Says exactly what it is.
+- **PROMPT.md, not ASSISTANT.md**: No collision with CLI terminology. Says exactly what it is.
 - **Persona as block manager, not executor**: The persona never runs work. It controls *when* work runs by managing blocks. This keeps it lightweight and gives it intelligent scheduling power — it can see the pile, skip stale work, batch related tickets.
 - **Auto-block with debounce cron**: Moves debounce logic out of the trigger system and into a layer the persona controls. Triggers fire immediately and create tickets; the persona decides when to release them.
 - **Self-aware persona**: The persona can introspect its own configuration — prompts, triggers, lessons, runs. When the user points at a problem, the persona investigates using agentic tools rather than requiring the user to diagnose.

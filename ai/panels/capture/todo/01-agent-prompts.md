@@ -13,7 +13,7 @@ The entire pipeline (runner, dispatch, sync, watcher) is built. No agents have r
 
 ```
 agents/wiki-manager/
-├── IDENTITY.md         ← who you are (persona, scope, points to wiki for standards)
+├── PROMPT.md         ← who you are (persona, scope, points to wiki for standards)
 ├── MEMORY.md           ← what you remember about the user (relationship, preferences)
 ├── HISTORY.md          ← what happened (run summaries, condensed nightly)
 ├── LESSONS.md          ← what you've learned about your work (process improvements)
@@ -29,7 +29,7 @@ agents/wiki-manager/
 
 | File | Answers | Changes when | Session role |
 |------|---------|-------------|-------------|
-| IDENTITY.md | "Who are you?" | Rarely — persona/scope changes | System context for fronting chat |
+| PROMPT.md | "Who are you?" | Rarely — persona/scope changes | System context for fronting chat |
 | MEMORY.md | "What do you remember about me?" | User interaction (preferences, instructions) | Loaded on session start; mtime triggers new session |
 | HISTORY.md | "What have you done?" | Every run (one-liner appended); condensed nightly | Read on demand (progressive disclosure to runs/) |
 | LESSONS.md | "What have you learned about your work?" | Agent discovers better approach | Read by runner prompts; informs future execution |
@@ -43,9 +43,9 @@ agents/wiki-manager/
 - **Fronting persona is a block manager** — it never executes runs. It sets, removes, and bypasses blocks.
 - **Auto-block on new tickets** — each new ticket gets a block with a 9-min cron timeout. Same-type tickets pile up, resetting the cron each time (+9 min debounce).
 - **Persona wakes on two signals** — block expiry (cron) and run completion (notification). On wake, it checks state, decides: remove block, bypass stale tickets, or reset the cron.
-- **Persona is self-aware** — it can introspect its own IDENTITY.md, PROMPT_NN files, TRIGGERS.md, LESSONS.md, runs/. It uses agentic tools to investigate its own domain when the user asks questions.
+- **Persona is self-aware** — it can introspect its own PROMPT.md, PROMPT_NN files, TRIGGERS.md, LESSONS.md, runs/. It uses agentic tools to investigate its own domain when the user asks questions.
 - **Everything is a trigger + prompt** — no special cases. Self-reflection, drift detection, prompt editing, records maintenance — all expressed as trigger blocks pointing to prompt files.
-- **IDENTITY.md points to wiki** — the wiki holds the *standard* for how work should be done; prompts are the *execution* of that standard
+- **PROMPT.md points to wiki** — the wiki holds the *standard* for how work should be done; prompts are the *execution* of that standard
 
 ## Tasks
 
@@ -54,7 +54,7 @@ agents/wiki-manager/
 - [ ] Rename prompt.md → PROMPT_01.md (wiki updater)
 - [ ] Absorb wiki-auditor prompt.md → PROMPT_02.md (wiki auditor)
 - [ ] Write PROMPT_03.md — edge checker
-- [ ] Write IDENTITY.md — persona, scope, lifecycle, points to Wiki-Editing-Standards wiki page
+- [ ] Write PROMPT.md — persona, scope, lifecycle, points to Wiki-Editing-Standards wiki page
 - [ ] Write TRIGGERS.md — bind file-change and cron triggers to specific PROMPT files
 - [ ] Create MEMORY.md (empty — populated through user interaction)
 - [ ] Create HISTORY.md (empty — populated by runner after each run)
@@ -67,7 +67,7 @@ agents/wiki-manager/
 - [ ] Rename/write PROMPT_01.md — bug fixer
 - [ ] Rename/write PROMPT_02.md — code reviewer
 - [ ] Rename/write PROMPT_03.md — test writer
-- [ ] Write IDENTITY.md
+- [ ] Write PROMPT.md
 - [ ] Write TRIGGERS.md
 - [ ] Create MEMORY.md, HISTORY.md, threads/, runs/
 - [ ] Update registry.json: kimi-code → agents/code-manager
@@ -76,7 +76,7 @@ agents/wiki-manager/
 - [ ] Consolidate dependency-auditor, doc-generator into single folder
 - [ ] Rename/write PROMPT_01.md — dependency auditor
 - [ ] Rename/write PROMPT_02.md — doc generator
-- [ ] Write IDENTITY.md
+- [ ] Write PROMPT.md
 - [ ] Write TRIGGERS.md
 - [ ] Create MEMORY.md, HISTORY.md, threads/, runs/
 - [ ] Update registry.json
@@ -89,7 +89,7 @@ agents/wiki-manager/
 ### End-to-End Verification
 - [ ] Create a test ticket assigned to kimi-wiki with prompt: PROMPT_01.md
 - [ ] Verify: trigger fires → ticket created with prompt field → runner loads correct PROMPT → evidence in runs/ → one-liner appended to HISTORY.md → ticket closes
-- [ ] Verify: open wiki-manager tab → loads IDENTITY.md + MEMORY.md → ask "what happened?" → reads HISTORY.md → drills into runs/ if needed
+- [ ] Verify: open wiki-manager tab → loads PROMPT.md + MEMORY.md → ask "what happened?" → reads HISTORY.md → drills into runs/ if needed
 
 ## Why This Is First
 

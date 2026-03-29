@@ -21,8 +21,8 @@ Implementation phases for the Open Robin system. Each phase builds on the previo
 - [ ] Line-break parser stall on thinking content
 
 ### 0.2 File Renames
-- [ ] IDENTITY.md → PROMPT.md across codebase (~15 touch points: session-loader.js, agentStore.ts, AgentTiles.tsx, PromptCardView.tsx, 3 SESSION.md files, specs, wiki pages)
-- [ ] Rename actual IDENTITY.md files in code-manager, ops-manager, wiki-manager
+- [ ] PROMPT.md → PROMPT.md across codebase (~15 touch points: session-loader.js, agentStore.ts, AgentTiles.tsx, PromptCardView.tsx, 3 SESSION.md files, specs, wiki pages)
+- [ ] Rename actual PROMPT.md files in code-manager, ops-manager, wiki-manager
 
 ### 0.3 SESSION.md Expansion
 - [ ] Absorb TOOLS.md fields into SESSION.md frontmatter (tool permissions)

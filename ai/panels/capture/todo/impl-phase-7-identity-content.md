@@ -1,16 +1,16 @@
 ---
-title: "Phase 7: IDENTITY.md Content"
+title: "Phase 7: PROMPT.md Content"
 priority: medium
 status: not-started
 implements: 01-agent-prompts
 depends-on: none (can happen anytime)
 ---
 
-# Phase 7: IDENTITY.md Content
+# Phase 7: PROMPT.md Content
 
 Write the actual identity files for each agent. These define the fronting persona — who you are, what's your scope, where to find your standards.
 
-## IDENTITY.md Template
+## PROMPT.md Template
 
 ```markdown
 ---
@@ -82,9 +82,9 @@ When the user asks about your work, investigate before answering.
 - **Prompts:** dependency auditor, doc generator
 
 ## Steps
-- [ ] Write IDENTITY.md for wiki-manager (can reference existing Wiki-Editing-Standards page)
-- [ ] Write IDENTITY.md for code-manager
-- [ ] Write IDENTITY.md for ops-manager
+- [ ] Write PROMPT.md for wiki-manager (can reference existing Wiki-Editing-Standards page)
+- [ ] Write PROMPT.md for code-manager
+- [ ] Write PROMPT.md for ops-manager
 - [ ] Create Code-Standards wiki page (or defer)
 - [ ] Create Ops-Standards wiki page (or defer)
 

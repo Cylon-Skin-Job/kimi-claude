@@ -7,7 +7,7 @@ action: create-ticket
 ticket:
   assignee: kimi-code
   title: "Agent prompt {{event}}d: {{basename}}"
-  body: "The prompt file `{{filePath}}` was {{event}}d. {{parentStats.files}} files remain in {{parentDir}}. Review for consistency with IDENTITY.md."
+  body: "The prompt file `{{filePath}}` was {{event}}d. {{parentStats.files}} files remain in {{parentDir}}. Review for consistency with PROMPT.md."
 ---
 
 # Agent Prompt Change Watcher

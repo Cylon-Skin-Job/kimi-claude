@@ -106,10 +106,10 @@ function AgentDetail({ agent, request }: { agent: Agent; request: (path: string)
           useAgentStore.getState().setWorkflows(folders);
         }
         if (msg.type === 'file_content_response' && msg.panel === 'agents' && msg.success) {
-          // Key by workflow folder name if it's a PROMPT.md, otherwise by filename
+          // Key by workflow folder name if it's a WORKFLOW.md, otherwise by filename
           const parts = msg.path.split('/');
           const fileName = parts[parts.length - 1];
-          if (fileName === 'PROMPT.md' && parts.length >= 2) {
+          if (fileName === 'WORKFLOW.md' && parts.length >= 2) {
             // Key by workflow folder name
             const folderName = parts[parts.length - 2];
             setFileCache(prev => ({ ...prev, [folderName]: stripFrontmatter(msg.content) }));
@@ -138,7 +138,7 @@ function AgentDetail({ agent, request }: { agent: Agent; request: (path: string)
   useEffect(() => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     for (const wf of workflows) {
-      if (!fileCache[wf]) request(`System/${agent.id}/workflows/${wf}/PROMPT.md`);
+      if (!fileCache[wf]) request(`System/${agent.id}/workflows/${wf}/WORKFLOW.md`);
     }
   }, [workflows, ws, agent.id]);
 

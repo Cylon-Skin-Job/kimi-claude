@@ -83,7 +83,7 @@ This isolation is by design. The research (CoVe, Meta AI) shows that models that
 
 ### On FAIL
 
-The orchestrator retries the ATTEST phase with the validation feedback, up to the retry limit defined in the workflow PROMPT.md. The failed attestation is preserved as a retry file in the run folder. See [Workflow Design Guide](../workflow-design/PAGE.md).
+The orchestrator retries the ATTEST phase with the validation feedback, up to the retry limit defined in the WORKFLOW.md. The failed attestation is preserved as a retry file in the run folder. See [Workflow Design Guide](../workflow-design/PAGE.md).
 
 ### On PASS
 
@@ -186,7 +186,7 @@ See [Attestation Card](../attestation-card/PAGE.md) for the full template, card 
 
 When the validator catches a real problem — a hallucinated source, an unsupported claim — that's a lesson. The orchestrator appends it to the agent's LESSONS.md so future runs are informed.
 
-When the validator over-rejects and the human overrides, that's also a lesson. Over time, LESSONS.md becomes the feedback loop for improving validation accuracy. When enough lessons accumulate (~500 tokens), a review ticket is created for the human to promote the best ones into the workflow prompt. See [Agent Folder Structure](../agent-folder-structure/PAGE.md).
+When the validator over-rejects and the human overrides, that's also a lesson. Over time, LESSONS.md becomes the feedback loop for improving validation accuracy. When enough lessons accumulate (~500 tokens), a review ticket is created for the human to promote the best ones into the WORKFLOW.md. See [Agent Folder Structure](../agent-folder-structure/PAGE.md).
 
 ---
 

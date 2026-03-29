@@ -186,7 +186,7 @@ Defines when this agent wakes up. Each trigger maps an event to a workflow promp
 ## {trigger-name}
 - **Event:** {what happens}
 - **Glob/Schedule:** {pattern or cron expression}
-- **Workflow:** {which PROMPT.md to run}
+- **Workflow:** {which WORKFLOW.md to run}
 - **Ticket title template:** {how the auto-created ticket is named}
 ```
 
@@ -210,7 +210,7 @@ Append-only log of things the agent learned across runs. After each run, if the 
 1. Frozen copy drops into each run folder at start (so the run has the lessons that were known at that time)
 2. New lessons append to the live file after run completion
 3. When unreviewed content exceeds ~500 tokens, a review ticket is created for the human
-4. Human promotes valuable lessons into PROMPT.md or workflow prompts, clears reviewed entries
+4. Human promotes valuable lessons into PROMPT.md or WORKFLOW.md prompts, clears reviewed entries
 
 [Token-threshold review ticket creation not yet implemented]
 
@@ -236,7 +236,7 @@ Custom CSS for this agent's tile in the UI. Falls back to template if not presen
 
 ### workflows/ — The Work Definitions
 
-Each subfolder is a named workflow containing a `PROMPT.md` with YAML frontmatter and numbered orchestrator steps.
+Each subfolder is a named workflow containing a `WORKFLOW.md` with YAML frontmatter and numbered orchestrator steps.
 
 ---
 

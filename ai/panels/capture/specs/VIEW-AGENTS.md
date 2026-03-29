@@ -43,7 +43,7 @@ Click card -> Bot Detail:
 
 ```
 ai/agent-viewer/{folder}/{agentName}/
-  PROMPT.md           ← personality, role, scope, constraints (was IDENTITY.md)
+  PROMPT.md           ← personality, role, scope, constraints (was PROMPT.md)
   SESSION.md          ← harness config + CLI profile + tool permissions (absorbs TOOLS.md)
   MEMORY.md           ← persistent memory (user preferences, discovered through conversation)
   TRIGGERS.md         ← event-driven activation rules
@@ -51,7 +51,7 @@ ai/agent-viewer/{folder}/{agentName}/
   styles.css          ← UI styling for tile card
   workflows/
     {Workflow Name}/
-      PROMPT.md       ← orchestrator instructions with YAML frontmatter
+      WORKFLOW.md     ← orchestrator instructions with YAML frontmatter
       TRIGGERS.md     ← workflow-specific triggers
       LESSONS.md      ← workflow-scoped learnings (append-only)
   runs/               ← execution history (one folder per ticket)
@@ -64,7 +64,7 @@ ai/agent-viewer/{folder}/{agentName}/
 
 ## File Definitions
 
-### PROMPT.md (renamed from IDENTITY.md)
+### PROMPT.md (renamed from PROMPT.md)
 
 Who the agent is. Loaded at session start as system context. Should stay under 500 tokens.
 
@@ -77,12 +77,12 @@ Contains:
 - How it responds when the user talks to it directly
 
 **What's built:**
-- [x] 3 IDENTITY.md files exist (code-manager, ops-manager, wiki-manager) — rich content
+- [x] 3 PROMPT.md files exist (code-manager, ops-manager, wiki-manager) — rich content
 - [x] Loaded via SESSION.md `system-context` array by session-loader.js
 - [x] Displayed in UI with `badge` icon (AgentTiles.tsx)
 
 **What's needed:**
-- [ ] Rename IDENTITY.md -> PROMPT.md across codebase (~15 touch points)
+- [ ] Rename PROMPT.md -> PROMPT.md across codebase (~15 touch points)
 - [ ] Update session-loader.js docs, agentStore.ts, AgentTiles.tsx icon map, PromptCardView.tsx filter
 - [ ] Update all SESSION.md `system-context` arrays
 - [ ] Update specs and wiki pages
@@ -287,7 +287,7 @@ pending -> running -> completed (exit code 0)
 }
 ```
 
-`bot_name` in PROMPT.md frontmatter maps to registry key maps to GitLab assignee. That's the dispatch chain.
+`bot_name` in WORKFLOW.md frontmatter maps to registry key maps to GitLab assignee. That's the dispatch chain.
 
 ---
 
@@ -328,11 +328,11 @@ Robin dispatches agents via tickets but never runs them directly. She can:
 - [x] Session loader: SESSION.md parsing, system context injection
 - [x] Trigger system: parser, loader, cron scheduler, hold registry
 - [x] Agent detail UI: card layout, pill tabs, sidebar + content + chat
-- [x] Workflow folders with PROMPT.md + TRIGGERS.md + LESSONS.md
-- [x] 3 agents with IDENTITY.md, SESSION.md, MEMORY.md, TRIGGERS.md
+- [x] Workflow folders with WORKFLOW.md + TRIGGERS.md + LESSONS.md
+- [x] 3 agents with PROMPT.md, SESSION.md, MEMORY.md, TRIGGERS.md
 
 ### Needed
-- [ ] Rename IDENTITY.md -> PROMPT.md (~15 touch points)
+- [ ] Rename PROMPT.md -> PROMPT.md (~15 touch points)
 - [ ] Absorb TOOLS.md into SESSION.md (add tool permissions to frontmatter)
 - [ ] Implement server-side tool enforcement
 - [ ] Add CLI profile fields to SESSION.md
