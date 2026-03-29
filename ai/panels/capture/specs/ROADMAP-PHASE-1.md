@@ -1,32 +1,88 @@
 ---
 title: Phase 1 — SQLite Foundation
 created: 2026-03-28
+updated: 2026-03-28
 status: active
 parent: ROADMAP.md
 ---
 
 # Phase 1: SQLite Foundation
 
-Introduce SQLite as the machine layer. Redirect existing JSON writers to SQLite. Keep markdown writers in the repo. Same interfaces, different backend.
+Redirect wire protocol storage from JSON files to SQLite. Keep thread markdown in the repo. No migration of old files needed — this is pre-production.
+
+---
+
+## Critical Data Flow (must preserve exactly)
+
+```
+Wire event (ContentPart, ToolCall, ToolResult, TurnEnd)
+    ↓
+server.js accumulates session.assistantParts[] during turn
+    ↓  (text/think parts combined when consecutive)
+    ↓  (tool_call parts mutated in-place with arguments + result on ToolResult)
+    ↓
+TurnEnd fires → HistoryFile.addExchange(threadId, userInput, assistantParts)
+    ↓
+Currently: writes to threads/{uuid}/history.json
+Target:    INSERT INTO exchanges (thread_id, seq, ts, user_input, assistant)
+    ↓
+On thread:open → HistoryFile.read() → returns { exchanges: [...] }
+    ↓
+Server sends: { type: 'thread:opened', exchanges: [...] }
+    ↓
+Client: convertExchangesToMessages() → convertPartToSegment() per part
+    ↓
+InstantSegmentRenderer renders grouped segments (collapsed, no animation)
+```
+
+### The Contract
+
+The client expects `exchanges` as an array of:
+```typescript
+{
+  seq: number,
+  ts: number,
+  user: string,
+  assistant: {
+    parts: Array<
+      | { type: 'text', content: string }
+      | { type: 'think', content: string }
+      | { type: 'tool_call', toolCallId: string, name: string,
+          arguments: Record<string, unknown>,
+          result: { output?: string, display?: unknown[], error?: string, files?: string[] },
+          duration_ms?: number }
+    >
+  },
+  metadata?: unknown[]
+}
+```
+
+**This shape must come out of SQLite exactly as it comes out of history.json today.** The `assistant` column stores the parts object as JSON. On read, parse it back. The client conversion code (`convertExchangesToMessages`, `convertPartToSegment`) does not change.
+
+### Wire Resume
+
+Kimi CLI uses `--session {threadId}` to resume. The CLI manages its own session state independently. The history.json / SQLite data is for **our UI rendering**, not for the CLI's memory. Both coexist — CLI has its session, we have our exchange history.
 
 ---
 
 ## 1.1 SQLite Setup
 
-### Add Dependency
+### Dependency
+
+Use **Knex.js** as query builder for future Supabase/Postgres portability.
 
 ```bash
-cd kimi-ide-server && npm install better-sqlite3
+cd kimi-ide-server && npm install knex better-sqlite3
 ```
 
-`better-sqlite3` is synchronous, which matches the existing codebase pattern (ThreadIndex uses sync-style cached reads). No need for async wrappers.
+Knex wraps `better-sqlite3` and provides async interface + Postgres-compatible query syntax. Same queries work against both SQLite and Postgres when we add Supabase.
 
-### Create Database Module
+### Database Module
 
 New file: `kimi-ide-server/lib/db/index.js`
 
 ```javascript
-const Database = require('better-sqlite3');
+const knex = require('knex');
 const path = require('path');
 
 let db = null;
@@ -34,224 +90,337 @@ let db = null;
 function getDb(systemDir) {
   if (db) return db;
   const dbPath = path.join(systemDir, 'robin.db');
-  db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');  // Write-Ahead Logging for concurrent reads
-  db.pragma('foreign_keys = ON');
-  migrate(db);
+  db = knex({
+    client: 'better-sqlite3',
+    connection: { filename: dbPath },
+    useNullAsDefault: true,
+  });
   return db;
 }
 
-function migrate(db) {
-  // Create tables if not exist — see schema below
+async function migrate(db) {
+  // Create tables — see schema below
 }
 
-function close() {
-  if (db) { db.close(); db = null; }
+async function close() {
+  if (db) { await db.destroy(); db = null; }
 }
 
-module.exports = { getDb, close };
-```
-
-### Schema
-
-```sql
--- Thread metadata (replaces threads.json)
-CREATE TABLE IF NOT EXISTS threads (
-  thread_id    TEXT PRIMARY KEY,
-  panel_id     TEXT NOT NULL,
-  name         TEXT NOT NULL DEFAULT 'New Chat',
-  created_at   TEXT NOT NULL,
-  resumed_at   TEXT,
-  message_count INTEGER NOT NULL DEFAULT 0,
-  status       TEXT NOT NULL DEFAULT 'suspended',
-  date         TEXT,
-  updated_at   INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE INDEX IF NOT EXISTS idx_threads_panel ON threads(panel_id);
-CREATE INDEX IF NOT EXISTS idx_threads_date ON threads(date);
-CREATE INDEX IF NOT EXISTS idx_threads_updated ON threads(updated_at DESC);
-
--- Exchanges (replaces history.json)
-CREATE TABLE IF NOT EXISTS exchanges (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  thread_id    TEXT NOT NULL REFERENCES threads(thread_id) ON DELETE CASCADE,
-  seq          INTEGER NOT NULL,
-  ts           INTEGER NOT NULL,
-  user_input   TEXT NOT NULL,
-  assistant    TEXT NOT NULL,  -- JSON string of { parts: [...] }
-  metadata     TEXT DEFAULT '[]',
-  UNIQUE(thread_id, seq)
-);
-
-CREATE INDEX IF NOT EXISTS idx_exchanges_thread ON exchanges(thread_id, seq);
-
--- System config (for Robin's virtual markdown configs)
-CREATE TABLE IF NOT EXISTS system_config (
-  key          TEXT PRIMARY KEY,
-  value        TEXT NOT NULL,
-  updated_at   INTEGER NOT NULL DEFAULT 0
-);
-
--- System wiki (contextual content, tooltips, inline help)
-CREATE TABLE IF NOT EXISTS system_wiki (
-  slug         TEXT PRIMARY KEY,
-  title        TEXT NOT NULL,
-  content      TEXT NOT NULL,
-  context      TEXT,  -- where this surfaces (tab name, setting name, etc.)
-  updated_at   INTEGER NOT NULL DEFAULT 0
-);
+module.exports = { getDb, migrate, close };
 ```
 
 ### Database Location
 
-`/system/robin.db` — ships with the app, not in the repo. Created on first run if missing.
+`ai/system/robin.db` — Option B. Visible to user, managed by Robin. In `.gitignore`.
+
+### Schema
+
+Write as Knex migrations for portability (works with both SQLite and Postgres):
+
+```javascript
+// migrations/001_initial.js
+exports.up = function(knex) {
+  return knex.schema
+    .createTable('threads', table => {
+      table.text('thread_id').primary();
+      table.text('panel_id').notNullable();
+      table.text('name').notNullable().defaultTo('New Chat');
+      table.text('created_at').notNullable();
+      table.text('resumed_at');
+      table.integer('message_count').notNullable().defaultTo(0);
+      table.text('status').notNullable().defaultTo('suspended');
+      table.text('date');  // YYYY-MM-DD for daily-rolling
+      table.integer('updated_at').notNullable().defaultTo(0);  // ms timestamp for MRU
+      table.index(['panel_id']);
+      table.index(['date']);
+    })
+    .createTable('exchanges', table => {
+      table.increments('id').primary();
+      table.text('thread_id').notNullable()
+        .references('thread_id').inTable('threads').onDelete('CASCADE');
+      table.integer('seq').notNullable();
+      table.integer('ts').notNullable();
+      table.text('user_input').notNullable();
+      table.text('assistant').notNullable();  // JSON string: { parts: [...] }
+      table.text('metadata').defaultTo('[]');
+      table.unique(['thread_id', 'seq']);
+      table.index(['thread_id', 'seq']);
+    })
+    .createTable('system_config', table => {
+      table.text('key').primary();
+      table.text('value').notNullable();
+      table.integer('updated_at').notNullable().defaultTo(0);
+    })
+    .createTable('system_wiki', table => {
+      table.text('slug').primary();
+      table.text('title').notNullable();
+      table.text('content').notNullable();
+      table.text('context');  // where this surfaces
+      table.integer('updated_at').notNullable().defaultTo(0);
+    });
+};
+```
+
+**Postgres-compatible:** No SQLite-specific syntax. `table.increments()` maps to `SERIAL` in Postgres. `text` type works in both. Knex handles the differences.
 
 ### Steps
-- [ ] `npm install better-sqlite3`
-- [ ] Create `lib/db/index.js` with getDb(), migrate(), close()
-- [ ] Create schema with threads, exchanges, system_config, system_wiki tables
-- [ ] Add `db.close()` to server shutdown handler
-- [ ] Verify: server starts, creates robin.db, tables exist
+- [ ] `npm install knex better-sqlite3`
+- [ ] Create `lib/db/index.js` with Knex config
+- [ ] Create migration file with 4 tables
+- [ ] Run migration on server startup (`knex.migrate.latest()`)
+- [ ] Add `ai/system/robin.db` to `.gitignore`
+- [ ] Add `db.destroy()` to server shutdown handler
+- [ ] Verify: server starts, robin.db created in `ai/system/`, tables exist
 
 ---
 
-## 1.2 Redirect ThreadIndex.js → SQLite
+## 1.2 Redirect HistoryFile.js → SQLite
 
-ThreadIndex currently reads/writes `threads.json`. Replace the file backend with SQLite queries while keeping the exact same method signatures.
+Replace file reads/writes with Knex queries. **Same interface, same return shapes.**
+
+### Current Interface (preserve exactly)
+
+```
+constructor(threadDir)                              → sets up path
+async create(threadId)                              → HistoryData (empty exchanges)
+async read()                                        → HistoryData | null
+async addExchange(threadId, userInput, parts)        → Exchange
+async exists()                                       → boolean
+async countExchanges()                               → number
+async getLastExchange()                              → Exchange | null
+```
+
+### Method-by-Method Conversion
+
+**`addExchange(threadId, userInput, parts)`**
+
+Currently: read entire file → push to array → write entire file.
+SQLite: single INSERT.
+
+```javascript
+async addExchange(threadId, userInput, parts) {
+  const db = getDb();
+  const seq = await this.countExchanges() + 1;
+  const ts = Date.now();
+  const assistant = JSON.stringify({ parts: parts.map(p => ({ ...p })) });
+
+  await db('exchanges').insert({
+    thread_id: threadId,
+    seq,
+    ts,
+    user_input: userInput,
+    assistant,
+    metadata: '[]',
+  });
+
+  return { seq, ts, user: userInput, assistant: { parts }, metadata: [] };
+}
+```
+
+**`read()`**
+
+Currently: read JSON file, return parsed object.
+SQLite: SELECT all exchanges, reconstruct HistoryData shape.
+
+```javascript
+async read() {
+  const db = getDb();
+  const rows = await db('exchanges')
+    .where('thread_id', this.threadId)
+    .orderBy('seq', 'asc');
+
+  if (rows.length === 0) return null;
+
+  return {
+    version: '1.0.0',
+    threadId: this.threadId,
+    createdAt: rows[0].ts,
+    updatedAt: rows[rows.length - 1].ts,
+    exchanges: rows.map(row => ({
+      seq: row.seq,
+      ts: row.ts,
+      user: row.user_input,
+      assistant: JSON.parse(row.assistant),  // { parts: [...] }
+      metadata: JSON.parse(row.metadata || '[]'),
+    })),
+  };
+}
+```
+
+**Critical:** `JSON.parse(row.assistant)` must return `{ parts: [...] }` — the exact shape the client expects. The client does `exchange.assistant.parts.map(convertPartToSegment)`. If the JSON is malformed, the instant renderer breaks.
+
+**`getLastExchange()`**
+
+```javascript
+async getLastExchange() {
+  const db = getDb();
+  const row = await db('exchanges')
+    .where('thread_id', this.threadId)
+    .orderBy('seq', 'desc')
+    .first();
+
+  if (!row) return null;
+  return {
+    seq: row.seq, ts: row.ts,
+    user: row.user_input,
+    assistant: JSON.parse(row.assistant),
+    metadata: JSON.parse(row.metadata || '[]'),
+  };
+}
+```
+
+**`exists()` and `countExchanges()`**
+
+```javascript
+async exists() {
+  const db = getDb();
+  const row = await db('exchanges').where('thread_id', this.threadId).first();
+  return !!row;
+}
+
+async countExchanges() {
+  const db = getDb();
+  const result = await db('exchanges').where('thread_id', this.threadId).count('* as count').first();
+  return result?.count || 0;
+}
+```
+
+### Constructor Change
+
+Currently takes `threadDir` (path to thread folder). Needs to take `threadId` instead (or extract it from the path). The DB queries scope by `thread_id`.
+
+```javascript
+constructor(threadId) {
+  this.threadId = threadId;
+}
+```
+
+Callers in server.js and ThreadManager.js pass `threadId` instead of constructing a path.
+
+### Steps
+- [ ] Modify HistoryFile constructor: accept `threadId` instead of `threadDir`
+- [ ] Replace all fs operations with Knex queries
+- [ ] `read()` reconstructs exact HistoryData shape from rows
+- [ ] `addExchange()` does single INSERT, returns Exchange object
+- [ ] `JSON.parse(row.assistant)` returns `{ parts: [...] }` — verify with test
+- [ ] Update callers: server.js (line 749), ThreadManager.js (getRichHistory)
+- [ ] Delete history.json file writes (stop creating thread UUID directories for this purpose)
+- [ ] Verify: send a chat message → exchange appears in SQLite
+- [ ] Verify: open a thread → exchanges load from SQLite → client renders correctly
+- [ ] Verify: tool calls with arguments and results survive the JSON round-trip
+
+---
+
+## 1.3 Redirect ThreadIndex.js → SQLite
+
+Replace threads.json file with `threads` table queries.
 
 ### Current Interface (preserve exactly)
 
 ```
 async init()                          → void
-async load()                          → ThreadIndexFile
 async list()                          → Array<{threadId, entry}>  (MRU order)
 async get(threadId)                   → ThreadEntry | null
 async create(threadId, name?)         → ThreadEntry
 async update(threadId, updates)       → ThreadEntry | null
 async rename(threadId, newName)       → ThreadEntry | null
 async activate(threadId)              → ThreadEntry | null
-async setDate(threadId, dateString)   → ThreadEntry | null
 async suspend(threadId)               → ThreadEntry | null
 async incrementMessageCount(threadId) → ThreadEntry | null
 async markResumed(threadId)           → ThreadEntry | null
 async delete(threadId)                → boolean
 async touch(threadId)                 → ThreadEntry | null
+async setDate(threadId, dateString)   → ThreadEntry | null
 async rebuild()                       → number
 ```
 
-### Migration Strategy
+### Key Conversions
 
-**Option A: Replace in-place** — Rewrite ThreadIndex.js internals to use SQLite. Same file, same exports. ThreadManager doesn't change at all.
+**`list()` — MRU ordering**
 
-**Option B: Adapter pattern** — Create `ThreadIndexSqlite.js` with same interface. Swap the `require` in ThreadManager.
-
-Recommend **Option A** — less indirection, ThreadIndex is the only consumer of threads.json.
-
-### Key Changes
-
-| Method | Currently | SQLite |
-|--------|-----------|--------|
-| `load()` | Read JSON file, cache | `SELECT * FROM threads WHERE panel_id = ?` |
-| `list()` | Object.entries, insertion order = MRU | `SELECT * FROM threads WHERE panel_id = ? ORDER BY updated_at DESC` |
-| `create()` | Write to JSON object, save file | `INSERT INTO threads` |
-| `update()` | Modify object property, save file | `UPDATE threads SET ... WHERE thread_id = ?` |
-| `touch()` | Delete+reinsert for MRU ordering | `UPDATE threads SET updated_at = ? WHERE thread_id = ?` |
-| `activate()` | Set status, touch for MRU | `UPDATE threads SET status = 'active', updated_at = ?` |
-| `rebuild()` | Scan filesystem for CHAT.md | Scan filesystem, INSERT OR IGNORE into threads |
-
-### MRU Ordering
-
-Currently MRU is achieved by JS object insertion order (delete key, re-add = moves to end). In SQLite, use `updated_at DESC` ordering. `touch()` updates `updated_at` to `Date.now()`.
-
-### Migration on First Run
+Currently: Object insertion order (delete + re-add = move to end).
+SQLite: `ORDER BY updated_at DESC`.
 
 ```javascript
-// In init(), check if threads.json exists alongside new SQLite
-if (fs.existsSync(threadsJsonPath)) {
-  const old = JSON.parse(fs.readFileSync(threadsJsonPath, 'utf8'));
-  for (const [threadId, entry] of Object.entries(old.threads)) {
-    db.prepare('INSERT OR IGNORE INTO threads ...').run(threadId, panelId, ...entry);
-  }
-  // Rename old file to threads.json.migrated (don't delete)
-  fs.renameSync(threadsJsonPath, threadsJsonPath + '.migrated');
+async list() {
+  const db = getDb();
+  const rows = await db('threads')
+    .where('panel_id', this.panelId)
+    .orderBy('updated_at', 'desc');
+
+  return rows.map(row => ({
+    threadId: row.thread_id,
+    entry: {
+      name: row.name,
+      createdAt: row.created_at,
+      resumedAt: row.resumed_at,
+      messageCount: row.message_count,
+      status: row.status,
+      date: row.date,
+    },
+  }));
+}
+```
+
+**`touch()` — MRU bump**
+
+Currently: delete key from object, re-add (moves to end of insertion order).
+SQLite: update `updated_at` timestamp.
+
+```javascript
+async touch(threadId) {
+  const db = getDb();
+  await db('threads').where('thread_id', threadId).update({ updated_at: Date.now() });
+  return this.get(threadId);
+}
+```
+
+**`create()`**
+
+```javascript
+async create(threadId, name = 'New Chat') {
+  const db = getDb();
+  const entry = {
+    thread_id: threadId,
+    panel_id: this.panelId,
+    name,
+    created_at: new Date().toISOString(),
+    message_count: 0,
+    status: 'suspended',
+    updated_at: Date.now(),
+  };
+  await db('threads').insert(entry);
+  return { name, createdAt: entry.created_at, messageCount: 0, status: 'suspended' };
+}
+```
+
+### Constructor Change
+
+Needs `panelId` for scoped queries. Currently scoped by directory path.
+
+```javascript
+constructor(panelId) {
+  this.panelId = panelId;
 }
 ```
 
 ### Steps
-- [ ] Add `panelId` parameter to ThreadIndex constructor (needed for scoped queries)
-- [ ] Replace file read/write with `better-sqlite3` prepared statements
-- [ ] `touch()` uses `UPDATE updated_at` instead of delete+reinsert
-- [ ] `list()` uses `ORDER BY updated_at DESC` instead of insertion order
-- [ ] Migration: import threads.json on first run, rename to .migrated
-- [ ] Verify: create thread, list threads, rename, delete, MRU ordering all work
-- [ ] Verify: ThreadManager works unchanged (same interface)
-
----
-
-## 1.3 Redirect HistoryFile.js → SQLite
-
-HistoryFile currently reads/writes `history.json` per thread. Replace with SQLite exchanges table.
-
-### Current Interface (preserve exactly)
-
-```
-async create(threadId)         → HistoryData
-async read()                   → HistoryData | null
-async addExchange(threadId, userInput, parts) → Exchange
-async exists()                 → boolean
-async countExchanges()         → number
-async getLastExchange()        → Exchange | null
-```
-
-### Key Changes
-
-| Method | Currently | SQLite |
-|--------|-----------|--------|
-| `create()` | Write new JSON file with empty exchanges | No-op (thread row in threads table is sufficient) |
-| `read()` | Read entire JSON file | `SELECT * FROM exchanges WHERE thread_id = ? ORDER BY seq` → reconstruct HistoryData object |
-| `addExchange()` | Read file, append to array, write file | `INSERT INTO exchanges (thread_id, seq, ts, user_input, assistant, metadata)` |
-| `exists()` | `fs.existsSync(historyPath)` | `SELECT 1 FROM exchanges WHERE thread_id = ? LIMIT 1` |
-| `countExchanges()` | Read file, return array length | `SELECT COUNT(*) FROM exchanges WHERE thread_id = ?` |
-| `getLastExchange()` | Read file, return last element | `SELECT * FROM exchanges WHERE thread_id = ? ORDER BY seq DESC LIMIT 1` |
-
-### Assistant Parts Storage
-
-The `assistant` field is a JSON object `{ parts: [...] }` with heterogeneous part types (text, think, tool_call). Store as JSON text in the `assistant` column. Parse on read.
-
-This keeps the schema simple. If we need to query individual tool calls later, we can add a denormalized `parts` table — but not now.
-
-### Migration on First Run
-
-```javascript
-// For each thread directory containing history.json
-const historyPath = path.join(threadDir, 'history.json');
-if (fs.existsSync(historyPath)) {
-  const data = JSON.parse(fs.readFileSync(historyPath, 'utf8'));
-  for (const exchange of data.exchanges) {
-    db.prepare('INSERT OR IGNORE INTO exchanges ...').run(
-      data.threadId, exchange.seq, exchange.ts,
-      exchange.user, JSON.stringify(exchange.assistant),
-      JSON.stringify(exchange.metadata || [])
-    );
-  }
-  fs.renameSync(historyPath, historyPath + '.migrated');
-}
-```
-
-### Steps
-- [ ] Replace file read/write with SQLite queries
-- [ ] `read()` reconstructs the full HistoryData shape from rows (for backward compatibility)
-- [ ] `addExchange()` does a single INSERT (much faster than read-modify-write entire file)
-- [ ] Migration: import existing history.json files on first run
-- [ ] Verify: addExchange, read, countExchanges, getLastExchange all work
-- [ ] Verify: ThreadManager.getRichHistory() works unchanged
+- [ ] Modify constructor: accept `panelId` instead of `threadsDir`
+- [ ] Replace all fs operations with Knex queries
+- [ ] `list()` uses `ORDER BY updated_at DESC` for MRU
+- [ ] `touch()` updates `updated_at` instead of delete+reinsert
+- [ ] Remove `load()` / `_save()` file caching (SQLite is the cache)
+- [ ] Update callers: ThreadManager, ThreadWebSocketHandler
+- [ ] `rebuild()`: scan filesystem for CHAT.md files, INSERT OR IGNORE into threads table
+- [ ] Verify: create/list/rename/delete threads works
+- [ ] Verify: MRU ordering correct after touch
+- [ ] Verify: daily-rolling strategy finds today's thread by date
 
 ---
 
 ## 1.4 ChatFile.js → Per-User Thread Folders
 
-ChatFile.js continues writing markdown (stays in repo). But the output path changes from thread UUID folders to per-user named folders.
+ChatFile continues writing markdown to the repo. Output path changes.
 
 ### Current Path
 ```
@@ -260,17 +429,17 @@ ai/panels/{workspace}/threads/{threadId}/CHAT.md
 
 ### New Path
 ```
-ai/views/{workspace}/chat/threads/{username}/THREAD_NAME.md
+ai/views/{workspace}/chat/threads/{username}/thread-name.md
 ```
 
 ### Username Detection
 
 ```javascript
+const { execSync } = require('child_process');
+
 function getUsername() {
-  // 1. Check Robin profile (future — return null for now)
-  // 2. Check git config
   try {
-    return execSync('git config user.name').toString().trim();
+    return execSync('git config user.name', { encoding: 'utf8' }).trim();
   } catch {
     return 'local';
   }
@@ -278,8 +447,6 @@ function getUsername() {
 ```
 
 ### Thread Name → Filename
-
-Thread name from ThreadIndex → sanitize to filesystem-safe slug → `.md` extension.
 
 ```javascript
 function threadNameToFilename(name) {
@@ -293,8 +460,6 @@ function threadNameToFilename(name) {
 
 ### threads/index.json
 
-Sort configuration for the thread list:
-
 ```json
 {
   "sort": "last-active",
@@ -302,50 +467,84 @@ Sort configuration for the thread list:
 }
 ```
 
-Supported sort values: `last-active`, `created`, `name`, `custom`.
-
 ### Steps
 - [ ] Add `getUsername()` utility
 - [ ] Add `threadNameToFilename()` utility
 - [ ] Modify ChatFile constructor to accept per-user path
-- [ ] Create `threads/index.json` on first write
-- [ ] Create user subfolder on first write
+- [ ] Create `threads/` and `threads/{username}/` directories on first write
+- [ ] Create `threads/index.json` with default sort config
 - [ ] On thread rename: rename the .md file too
-- [ ] Verify: markdown files land in `threads/{username}/thread-name.md`
+- [ ] Verify: markdown lands in `threads/{username}/thread-name.md`
+
+---
+
+## 1.5 Cleanup
+
+### Stop Creating Thread UUID Directories
+
+Currently the server creates `threads/{uuid}/` directories to hold CHAT.md and history.json. With SQLite handling exchange data, and ChatFile writing to per-user folders, these UUID directories are no longer needed for new threads.
+
+- [ ] Remove directory creation from ThreadManager.createThread() (or delegate to ChatFile only)
+- [ ] HistoryFile no longer needs `ensureDir()` — it writes to SQLite
+
+### Old Files
+
+This is pre-production. No migration needed. Old threads.json and history.json files can be left in place or deleted manually. They won't be read.
+
+- [ ] Add `threads.json` and `history.json` patterns to `.gitignore`
 
 ---
 
 ## Issues / Discussion Points
 
-### better-sqlite3 Native Compilation
-`better-sqlite3` requires a C++ compiler. On macOS with Xcode Command Line Tools this is fine. For distribution (Electron), prebuilt binaries are available. No issue for development, but note for packaging.
+### Knex Async vs better-sqlite3 Sync
 
-### SQLite WAL Mode
-WAL (Write-Ahead Logging) allows concurrent reads while one writer is active. Important because the server reads threads from multiple WebSocket connections while the runner may be writing. Default SQLite mode (rollback journal) would block reads during writes.
+`better-sqlite3` is synchronous. Knex wraps it in Promises. The existing codebase uses `async/await` throughout (HistoryFile, ThreadIndex, ThreadManager all use `async` methods). So Knex's async wrapper is fine — the calling code is already async.
 
-### Thread Directory Cleanup
-After migrating threads.json and history.json to SQLite, the old thread UUID folders still contain CHAT.md files. These become orphaned once ChatFile writes to per-user folders instead. Options:
-- Leave them (no harm, git ignores them)
-- Migration script moves CHAT.md content to per-user folders
-- Let them age out naturally
+If we ever swap to Postgres (Supabase), the async is real. No code changes needed.
 
-Recommend: migration script that copies CHAT.md to per-user path, then leaves old folders. No deletion.
+### JSON Round-Trip Fidelity
 
-### Panel ID Scoping
-ThreadIndex currently operates per-directory (one threads.json per panel). In SQLite, all threads are in one table, scoped by `panel_id`. The ThreadIndex constructor needs a `panelId` parameter. ThreadManager already knows which panel it manages — just pass it through.
+The `assistant` column stores `JSON.stringify({ parts: [...] })`. On read, `JSON.parse()` must return the exact same shape. This is safe for:
+- Strings, numbers, booleans, null
+- Nested objects and arrays
+- `undefined` values are dropped by JSON.stringify (this is fine — no part uses undefined)
 
-### Atomic Writes
-Currently `_save()` writes the entire JSON file on every change. In SQLite, each operation is an atomic INSERT/UPDATE. This is strictly better — no risk of corrupted JSON from interrupted writes. One less failure mode.
+**Test:** Write a tool_call part with arguments + result + display, read it back, deep-equal compare. This is the most fragile point.
+
+### Knex Migration Runner
+
+Knex has a built-in migration system. On server startup:
+```javascript
+await db.migrate.latest({ directory: './lib/db/migrations' });
+```
+
+This auto-creates tables on first run and applies schema changes on updates. Standard pattern.
+
+### Supabase Future Path
+
+When Supabase is added:
+```javascript
+// Switch from SQLite to Postgres by changing config:
+db = knex({
+  client: 'pg',
+  connection: process.env.SUPABASE_DB_URL,
+});
+```
+
+Same Knex queries, different driver. The schema migrations work for both. This is why we use Knex instead of raw `better-sqlite3`.
 
 ---
 
 ## Completion Criteria
 
-- [ ] `better-sqlite3` installed, robin.db created on server start
-- [ ] ThreadIndex reads/writes SQLite instead of threads.json
-- [ ] HistoryFile reads/writes SQLite instead of history.json
-- [ ] Existing threads.json and history.json migrated on first run
+- [ ] `knex` and `better-sqlite3` installed
+- [ ] `ai/system/robin.db` created on server start (4 tables)
+- [ ] HistoryFile reads/writes exchanges table (JSON round-trip verified)
+- [ ] ThreadIndex reads/writes threads table (MRU ordering verified)
 - [ ] ChatFile writes to `threads/{username}/thread-name.md`
 - [ ] threads/index.json created with sort config
-- [ ] All existing ThreadManager operations work unchanged
-- [ ] Server starts cleanly with no JSON files (pure SQLite)
+- [ ] Client receives `exchanges` array on thread:open → instant render works
+- [ ] Tool call arguments + results survive SQLite JSON round-trip
+- [ ] No more history.json or threads.json files created for new threads
+- [ ] Server starts cleanly
