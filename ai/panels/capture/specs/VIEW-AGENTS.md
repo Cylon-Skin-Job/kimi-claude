@@ -177,16 +177,27 @@ Append-only institutional memory per workflow. Frozen copy drops into run folder
 
 ### TRIGGERS.md
 
-Event-driven activation. See SPEC-EVENT-SYSTEM.md for full syntax. Currently two types: `file-change` and `cron`. Expanding to chat, ticket, agent, system events.
+Event-driven activation. See SPEC-EVENT-SYSTEM.md for full syntax. TRIGGERS.md lives at **two levels**:
+
+- **Agent-level** (`agents/{agentName}/TRIGGERS.md`) — fronting persona triggers. Cross-workflow concerns, nightly audits, general agent-scoped events.
+- **Workflow-level** (`agents/{agentName}/workflows/{name}/TRIGGERS.md`) — workflow-specific triggers. "When a source file changes, run THIS workflow."
+
+Both are discovered by the trigger-loader. They chain via the event bus — one workflow completing emits `agent:run_completed`, which another workflow's TRIGGERS.md can listen for.
+
+Every trigger fire is an event itself (`trigger:fired`) with a `chain_id` that links to all downstream effects (ticket creation, dispatch, run start, run completion). Full causal traceability.
 
 **What's built:**
 - [x] wiki-manager TRIGGERS.md fully populated (4 triggers: source-file-change, wiki-page-changed, daily-freshness, nightly-audit)
 - [x] Trigger parser, loader, cron scheduler all built
 - [x] Hold registry for batching rapid-fire triggers
+- [x] Trigger loader scans agent folders for TRIGGERS.md
 
 **What's needed:**
-- [ ] Populate code-manager and ops-manager TRIGGERS.md
+- [ ] Trigger loader recurses into `workflows/*/TRIGGERS.md` (currently only reads agent-level)
+- [ ] Populate code-manager and ops-manager TRIGGERS.md (agent-level + per-workflow)
 - [ ] Extended event types (chat, ticket, agent, system) per SPEC-EVENT-SYSTEM.md
+- [ ] `trigger:fired` event emission with chain_id
+- [ ] `trigger:registered` / `trigger:unregistered` lifecycle events
 
 ---
 

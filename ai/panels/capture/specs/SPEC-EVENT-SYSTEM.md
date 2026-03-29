@@ -112,41 +112,63 @@ The existing system handles **filesystem events** and **cron schedules**. To bec
 
 Currently, each module (watcher, dispatch, wiki hooks, runner) handles its own events internally. To support cross-cutting triggers (e.g., "when an agent completes, send a Signal message"), we need a lightweight central emitter that all modules can fire into.
 
-**New file: `lib/event-bus.js`** (~60 lines)
+**New file: `lib/event-bus.js`** (~80 lines)
 
 ```javascript
-/**
- * Central event bus. All modules emit here.
- * Trigger loader registers listeners from TRIGGERS.md blocks.
- * Action handlers execute when events match.
- */
-
 const EventEmitter = require('events');
+const crypto = require('crypto');
 
 const bus = new EventEmitter();
-bus.setMaxListeners(100);
+bus.setMaxListeners(200);
 
-/**
- * Emit an event with context.
- * @param {string} type - Event type (e.g., 'chat:turn_end', 'ticket:created')
- * @param {Object} data - Event payload
- */
-function emit(type, data = {}) {
-  const event = {
-    type,
-    timestamp: Date.now(),
-    ...data,
-  };
-  bus.emit(type, event);
-  bus.emit('*', event); // wildcard listeners
+// Chain tracking — links cause to effect across events
+let currentChainId = null;
+const MAX_CHAIN_DEPTH = 5;
+let currentDepth = 0;
+
+// Event ID counter
+let eventCounter = 0;
+
+function generateEventId() {
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  return `evt-${date}-${String(++eventCounter).padStart(4, '0')}`;
+}
+
+function generateChainId() {
+  return `chain-${crypto.randomBytes(4).toString('hex')}`;
 }
 
 /**
- * Register a listener for an event type.
- * @param {string} type - Event type or '*' for all
- * @param {Function} handler - (event) => void
- * @returns {Function} unsubscribe function
+ * Emit an event with context.
+ * chain_id propagates automatically — if this emit was caused by
+ * a trigger that was caused by another event, they share the same chain.
  */
+function emit(type, data = {}) {
+  if (currentDepth >= MAX_CHAIN_DEPTH) {
+    console.warn(`[EventBus] Max chain depth (${MAX_CHAIN_DEPTH}), dropping: ${type}`);
+    return;
+  }
+
+  const event = {
+    id: generateEventId(),
+    type,
+    chain_id: data.chain_id || currentChainId || generateChainId(),
+    timestamp: Date.now(),
+    ...data,
+  };
+
+  const prevChain = currentChainId;
+  currentChainId = event.chain_id;  // propagate to downstream emits
+  currentDepth++;
+  try {
+    bus.emit(type, event);
+    bus.emit('*', event);
+  } finally {
+    currentDepth--;
+    currentChainId = prevChain;
+  }
+}
+
 function on(type, handler) {
   bus.on(type, handler);
   return () => bus.off(type, handler);
@@ -154,6 +176,21 @@ function on(type, handler) {
 
 module.exports = { emit, on, bus };
 ```
+
+### Chain IDs
+
+Every event gets a `chain_id`. When a trigger fires and creates a ticket, the ticket:created event carries the same `chain_id` as the trigger:fired event. When dispatch claims that ticket, same chain. When the runner starts, same chain.
+
+```
+chain-a1b2c3:
+  trigger:fired       → source-file-change matched secrets.js
+  ticket:created      → KIMI-0045 assigned to kimi-wiki
+  ticket:claimed      → KIMI-0045 claimed
+  agent:run_started   → wiki-manager run began
+  agent:run_completed → wiki-manager run succeeded
+```
+
+A nightly audit script can trace the full causal chain from a file edit to the final evidence card. Robin's dashboard can show chains visually.
 
 ### Integration Points (emit calls to add)
 
@@ -207,6 +244,25 @@ emit('system:session_created', { sessionId, workspace, threadId });
 emit('system:session_evicted', { sessionId, reason });
 emit('system:project_switched', { from, to });
 emit('system:workspace_switched', { from, to });
+```
+
+**Trigger lifecycle** (in trigger-loader and event bus):
+```javascript
+// When trigger-loader registers a trigger from TRIGGERS.md
+emit('trigger:registered', { name, type, source_file, agent, workflow });
+
+// When a TRIGGERS.md is deleted or changed (re-registration)
+emit('trigger:unregistered', { name, source_file });
+
+// When a trigger's condition matches and it fires
+emit('trigger:fired', {
+  chain_id,              // links this trigger fire to all downstream effects
+  trigger_name,
+  trigger_file,
+  matched_condition,     // what matched (e.g., "file_modified: secrets.js")
+  action,                // what it did (e.g., "create-ticket")
+  result,                // outcome (e.g., { ticket_id: "KIMI-0045" })
+});
 ```
 
 ### Extended Trigger Loader
