@@ -10,7 +10,7 @@
   "created": "2026-03-20T14:00:00Z",
   "updated": "2026-03-27T21:00:00Z",
   "frozen": false,
-  "children": ["home", "background-agents", "gitlab", "hooks", "model-config", "path-resolution", "progressive-disclosure", "run-auditing", "screenshot-capture", "session-scoping", "setup-wizard", "ticket-routing", "wiki-interface", "wiki-system", "workspace-agent-model", "workspace-index", "workspaces"],
+  "children": ["home", "background-agents", "chat-panel-architecture", "wire-protocol", "gitlab", "hooks", "model-config", "path-resolution", "progressive-disclosure", "run-auditing", "screenshot-capture", "session-scoping", "setup-wizard", "ticket-routing", "wiki-interface", "wiki-system", "workspace-agent-model", "workspace-index", "workspaces"],
   "edges_out": null,
   "edges_in": null,
   "sources": null,

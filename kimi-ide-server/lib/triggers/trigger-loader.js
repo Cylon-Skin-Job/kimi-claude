@@ -68,7 +68,46 @@ function registerBusListener(eventType, block, assignee, actionHandlers) {
 }
 
 /**
+ * Recursively find all TRIGGERS.md files under a directory.
+ *
+ * @param {string} dir - Directory to scan
+ * @returns {string[]} Absolute paths to TRIGGERS.md files
+ */
+function findTriggersFiles(dir) {
+  const results = [];
+  if (!fs.existsSync(dir)) return results;
+
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.name === 'node_modules' || entry.name === '.git') continue;
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...findTriggersFiles(fullPath));
+    } else if (entry.name === 'TRIGGERS.md') {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+/**
+ * Derive an assignee name from a TRIGGERS.md file path.
+ * Uses the nearest meaningful parent folder name, or 'system'.
+ *
+ * @param {string} triggersPath - Absolute path to a TRIGGERS.md file
+ * @param {string} projectRoot - Absolute path to project root
+ * @returns {string} Assignee name
+ */
+function deriveAssignee(triggersPath, projectRoot) {
+  const rel = path.relative(projectRoot, path.dirname(triggersPath));
+  const segments = rel.split(path.sep).filter(Boolean);
+  // Use the last meaningful segment as the assignee
+  return segments[segments.length - 1] || 'system';
+}
+
+/**
  * Scan agent folders for TRIGGERS.md and build filters + cron triggers.
+ * Also scans ai/panels/ and ai/components/ recursively for additional TRIGGERS.md files.
  *
  * @param {string} projectRoot - Absolute path to project root
  * @param {string} agentsBasePath - Absolute path to agents panel
@@ -80,41 +119,70 @@ function registerBusListener(eventType, block, assignee, actionHandlers) {
 function loadTriggers(projectRoot, agentsBasePath, registry, actionHandlers) {
   const filters = [];
   const cronTriggers = [];
+  const processedPaths = new Set();
 
-  // Build reverse lookup: folder path → bot name
-  const folderToBot = {};
-  for (const [botName, agent] of Object.entries(registry.agents || {})) {
-    folderToBot[agent.folder] = botName;
-  }
+  // --- Pass 1: Agent TRIGGERS.md files (with known assignees from registry) ---
 
-  // Scan each agent folder for TRIGGERS.md
   for (const [botName, agent] of Object.entries(registry.agents || {})) {
     const agentPath = path.join(agentsBasePath, agent.folder);
-    const triggersPath = path.join(agentPath, 'TRIGGERS.md');
 
-    if (!fs.existsSync(triggersPath)) continue;
+    // Scan agent root and all subfolders (workflows, etc.)
+    const agentTriggerFiles = findTriggersFiles(agentPath);
+    for (const triggersPath of agentTriggerFiles) {
+      processedPaths.add(triggersPath);
+      const blocks = parseTriggerBlocks(triggersPath);
+      const rel = path.relative(agentPath, triggersPath);
+      console.log(`[TriggerLoader] ${botName}${rel !== 'TRIGGERS.md' ? '/' + path.dirname(rel) : ''}: parsed ${blocks.length} triggers`);
 
-    const blocks = parseTriggerBlocks(triggersPath);
-    console.log(`[TriggerLoader] ${botName}: parsed ${blocks.length} triggers from TRIGGERS.md`);
+      for (const block of blocks) {
+        processBlock(block, botName, projectRoot, actionHandlers, filters, cronTriggers);
+      }
+    }
+  }
 
-    for (const block of blocks) {
-      if (block.type === 'cron') {
-        cronTriggers.push({ trigger: block, assignee: botName });
-      } else if (['chat', 'ticket', 'agent', 'system'].includes(block.type)) {
-        if (!block.event) {
-          console.warn(`[TriggerLoader] ${block.name || 'unnamed'}: type "${block.type}" requires an "event" field, skipping`);
-          continue;
-        }
-        registerBusListener(`${block.type}:${block.event}`, block, botName, actionHandlers);
-      } else {
-        // Default: file-change trigger → watcher filter
-        const filter = buildTriggerFilter(block, botName, projectRoot, actionHandlers);
-        if (filter) filters.push(filter);
+  // --- Pass 2: Recursive scan of ai/panels/ and ai/components/ ---
+
+  const scanDirs = [
+    path.join(projectRoot, 'ai', 'panels'),
+    path.join(projectRoot, 'ai', 'components'),
+  ];
+
+  for (const scanDir of scanDirs) {
+    const triggerFiles = findTriggersFiles(scanDir);
+    for (const triggersPath of triggerFiles) {
+      if (processedPaths.has(triggersPath)) continue;
+      processedPaths.add(triggersPath);
+
+      const assignee = deriveAssignee(triggersPath, projectRoot);
+      const blocks = parseTriggerBlocks(triggersPath);
+      const rel = path.relative(projectRoot, triggersPath);
+      console.log(`[TriggerLoader] ${rel}: parsed ${blocks.length} triggers (assignee: ${assignee})`);
+
+      for (const block of blocks) {
+        processBlock(block, assignee, projectRoot, actionHandlers, filters, cronTriggers);
       }
     }
   }
 
   return { filters, cronTriggers };
+}
+
+/**
+ * Process a single trigger block — categorize and register.
+ */
+function processBlock(block, assignee, projectRoot, actionHandlers, filters, cronTriggers) {
+  if (block.type === 'cron') {
+    cronTriggers.push({ trigger: block, assignee });
+  } else if (['chat', 'ticket', 'agent', 'system'].includes(block.type)) {
+    if (!block.event) {
+      console.warn(`[TriggerLoader] ${block.name || 'unnamed'}: type "${block.type}" requires an "event" field, skipping`);
+      return;
+    }
+    registerBusListener(`${block.type}:${block.event}`, block, assignee, actionHandlers);
+  } else {
+    const filter = buildTriggerFilter(block, assignee, projectRoot, actionHandlers);
+    if (filter) filters.push(filter);
+  }
 }
 
 /**
@@ -139,17 +207,19 @@ function buildTriggerFilter(block, assignee, projectRoot, actionHandlers) {
   const message = normalizeMessage(block.message);
 
   // Build a filter definition compatible with buildFilter()
+  const action = block.action || 'create-ticket';
   const def = {
     name: block.name || 'unnamed-trigger',
     events: block.events || ['modify', 'create', 'delete'],
     match: block.match,
     exclude: block.exclude,
     condition: block.condition,
-    action: 'create-ticket',
+    action,
     prompt: block.prompt || null,
     script: block.script || null,
     function: block.function || null,
-    _autoHold: true,
+    modal: block.modal || null,
+    _autoHold: action === 'create-ticket',
     ticket: {
       assignee,
       title: message

@@ -40,8 +40,24 @@ export function ChatArea({ panel }: ChatAreaProps) {
   // Show orb if: local sending state OR streaming with no segments yet
   const showOrb = (isSending || currentTurn?.status === 'streaming') && segments.length === 0;
 
+  const finalizeTurn = usePanelStore((state) => state.finalizeTurn);
+
+  // Turn is active if there's a currentTurn (streaming or revealing).
+  // This drives the send/stop button toggle.
+  const isTurnActive = !!currentTurn || isSending;
+
   const handleSend = (text: string) => {
     setIsSending(true);
+
+    // If there's an active turn, finalize it BEFORE adding the user
+    // message. finalizeTurn snapshots to messages[], clears currentTurn.
+    //
+    // KNOWN PAST BUG (DO NOT REINTRODUCE):
+    // User bubble appeared above the live assistant response mid-stream.
+    const ps = usePanelStore.getState().panels[panel];
+    if (ps?.currentTurn) {
+      finalizeTurn(panel);
+    }
 
     justSentRef.current = true;
     addMessage(panel, {
@@ -52,6 +68,17 @@ export function ChatArea({ panel }: ChatAreaProps) {
     });
 
     sendMessage(text, panel);
+  };
+
+  // Stop: immediately finalize the turn — snap all remaining content
+  // to display, move to history. The AI may keep running server-side
+  // but the client moves on.
+  const handleStop = () => {
+    const ps = usePanelStore.getState().panels[panel];
+    if (ps?.currentTurn) {
+      finalizeTurn(panel);
+    }
+    setIsSending(false);
   };
 
   return (
@@ -102,7 +129,13 @@ export function ChatArea({ panel }: ChatAreaProps) {
         <div style={{ minHeight: '80vh' }} />
       </div>
 
-      <ChatInput onSend={handleSend} disabled={false} panel={panel} />
+      <ChatInput
+        onSend={handleSend}
+        onStop={handleStop}
+        disabled={false}
+        panel={panel}
+        isTurnActive={isTurnActive}
+      />
     </section>
   );
 }

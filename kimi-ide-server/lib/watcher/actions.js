@@ -107,6 +107,64 @@ function createActionHandlers(deps = {}) {
     },
 
     /**
+     * Show a modal overlay on connected clients.
+     * Modal type is loaded from ai/components/modals/{type}/.
+     * The trigger's modal block provides data (source, target, title, message).
+     */
+    'show-modal'(def, vars) {
+      if (!def.modal || !def.modal.type) {
+        console.warn(`[Action:show-modal] No modal.type specified, skipping`);
+        return;
+      }
+
+      if (!deps.getModalDefinition) {
+        console.warn(`[Action:show-modal] No getModalDefinition function provided`);
+        return;
+      }
+
+      if (!deps.broadcastModal) {
+        console.warn(`[Action:show-modal] No broadcastModal function provided`);
+        return;
+      }
+
+      const modalType = applyTemplate(def.modal.type, vars);
+      const definition = deps.getModalDefinition(modalType);
+      if (!definition) {
+        console.warn(`[Action:show-modal] Unknown modal type: ${modalType}`);
+        return;
+      }
+
+      // Read source file content for client preview (if source specified)
+      let sourceContent = null;
+      const sourcePath = def.modal.source ? applyTemplate(def.modal.source, vars) : null;
+      if (sourcePath && deps.projectRoot) {
+        const fullSourcePath = path.resolve(deps.projectRoot, sourcePath);
+        try {
+          sourceContent = fs.readFileSync(fullSourcePath, 'utf8');
+        } catch (err) {
+          console.warn(`[Action:show-modal] Could not read source file: ${err.message}`);
+        }
+      }
+
+      const modalData = {
+        source: sourcePath,
+        target: def.modal.target ? applyTemplate(def.modal.target, vars) : null,
+        title: def.modal.title ? applyTemplate(def.modal.title, vars) : `Modal: ${modalType}`,
+        message: def.modal.message ? applyTemplate(def.modal.message, vars) : '',
+        sourceContent,
+      };
+
+      deps.broadcastModal({
+        modalType,
+        config: definition.config,
+        styles: definition.styles,
+        data: modalData,
+      });
+
+      console.log(`[Action:show-modal] ${modalType}: ${modalData.title}`);
+    },
+
+    /**
      * Write template-expanded content to a file path.
      * Path must be within the project root.
      */

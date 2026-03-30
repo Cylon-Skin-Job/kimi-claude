@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePanelStore } from '../state/panelStore';
 import { applyPanelTheme } from '../lib/panels';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -7,6 +7,8 @@ import { Sidebar } from './Sidebar';
 import { ChatArea } from './ChatArea';
 import { ContentArea } from './ContentArea';
 import { Toast } from './Toast';
+import { ModalOverlay } from './Modal/ModalOverlay';
+import { RobinOverlay } from './Robin/RobinOverlay';
 import './App.css';
 
 function App() {
@@ -21,6 +23,8 @@ function App() {
   const getConfig = usePanelStore((state) => state.getPanelConfig);
   const isConnected = ws?.readyState === WebSocket.OPEN;
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const [robinOpen, setRobinOpen] = useState(false);
 
   const loading = configs.length === 0;
 
@@ -55,12 +59,14 @@ function App() {
             <button className="menu-btn">
               <span className="material-symbols-outlined">menu</span>
             </button>
-            <span className="project-name">kimi-claude</span>
-          </div>
-          <div className="header-right">
             <div className={`connection-status ${isConnected ? 'connected' : ''}`}>
               {isConnected ? 'Connected' : 'Connecting...'}
             </div>
+          </div>
+          <div className="header-right">
+            <button className="robin-icon-btn" onClick={() => setRobinOpen(true)}>
+              <span className="material-symbols-outlined">raven</span>
+            </button>
           </div>
         </header>
         <div className="panel-container" style={{
@@ -84,13 +90,15 @@ function App() {
           <button className="menu-btn">
             <span className="material-symbols-outlined">menu</span>
           </button>
-          <span className="project-name">kimi-claude</span>
-        </div>
-
-        <div className="header-right">
           <div className={`connection-status ${isConnected ? 'connected' : ''}`}>
             {isConnected ? 'Connected' : 'Disconnected'}
           </div>
+        </div>
+
+        <div className="header-right">
+          <button className="robin-icon-btn" onClick={() => setRobinOpen(true)}>
+            <span className="material-symbols-outlined">raven</span>
+          </button>
         </div>
       </header>
 
@@ -129,6 +137,8 @@ function App() {
         })}
       </div>
       <Toast />
+      <ModalOverlay />
+      <RobinOverlay open={robinOpen} onClose={() => setRobinOpen(false)} />
     </div>
   );
 }

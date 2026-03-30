@@ -208,7 +208,8 @@ const BEHAVIOR_OVERRIDES: Record<SegmentType, Partial<SegmentBehavior>> = {
     contentFormat: 'code',
     renderMode: 'grouped-summary',
     groupable: true,
-    summaryField: 'file_path',
+    // Wire protocol: ReadFile tool uses 'path', not 'file_path'
+    summaryField: 'path',
     syntaxHighlight: true,
     languageDetection: 'from-path',
   },
@@ -338,16 +339,16 @@ const ERROR_OVERRIDES: Record<SegmentType, SegmentErrorStyle> = {
 const LABEL_BUILDERS: Record<SegmentType, (args?: Record<string, unknown>) => string> = {
   text: () => '',
   think: () => 'Thinking',
-  shell: () => 'shell',
-  read: () => 'read',
-  write: () => 'write',
-  edit: () => 'edit',
-  glob: () => 'glob',
-  grep: () => 'grep',
-  web_search: () => 'web_search',
-  fetch: () => 'fetch',
-  subagent: () => 'subagent',
-  todo: () => 'todo',
+  shell: () => 'Shell',
+  read: () => 'Read',
+  write: () => 'Write',
+  edit: () => 'Edit',
+  glob: () => 'Glob',
+  grep: () => 'Grep',
+  web_search: () => 'Web Search',
+  fetch: () => 'Fetch',
+  subagent: () => 'Subagent',
+  todo: () => 'Todo',
 };
 
 // =============================================================================

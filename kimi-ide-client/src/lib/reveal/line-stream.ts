@@ -10,8 +10,8 @@ import { createLineBreakParser } from './parsers/line-break';
 import type { RevealController } from './types';
 
 export const lineStreamReveal: RevealController = {
-  async run(contentRef, setDisplayed, cancelRef, completeRef) {
+  async run(contentRef, setDisplayed, cancelRef, completeRef, options?) {
     const parser = createLineBreakParser();
-    await orchestrateReveal(contentRef, setDisplayed, cancelRef, completeRef, parser);
+    await orchestrateReveal(contentRef, setDisplayed, cancelRef, completeRef, parser, options);
   },
 };

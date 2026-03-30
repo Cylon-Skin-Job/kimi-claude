@@ -27,6 +27,15 @@ const wikiHooks = require('./lib/wiki/hooks');
 // Event bus for TRIGGERS.md automations
 const { emit } = require('./lib/event-bus');
 
+// Hardwired enforcement — settings/ folders are write-locked for AI
+const { checkSettingsBounce } = require('./lib/enforcement');
+
+// Component loader for modal definitions
+const { loadComponents, getModalDefinition } = require('./lib/components/component-loader');
+
+// File operations with archive support
+const { moveFileWithArchive } = require('./lib/file-ops');
+
 // Config system for persistence
 const config = require('./config');
 
@@ -717,7 +726,31 @@ wss.on('connection', (ws) => {
           let parsedArgs = {};
           try { parsedArgs = JSON.parse(fullArgs); } catch (_) {}
           delete session.toolArgs[toolCallId];
-          
+
+          // --- Hardwired enforcement: settings/ folder write-lock ---
+          const toolNameForBounce = payload?.function?.name || '';
+          const bounce = checkSettingsBounce(toolNameForBounce, parsedArgs);
+          if (bounce) {
+            emit('system:tool_bounced', {
+              workspace: 'explorer',
+              threadId: session.currentThreadId,
+              toolName: toolNameForBounce,
+              filePath: parsedArgs.file_path,
+              reason: bounce.message
+            });
+            ws.send(JSON.stringify({
+              type: 'tool_result',
+              toolCallId,
+              toolArgs: parsedArgs,
+              toolOutput: bounce.message,
+              toolDisplay: [],
+              isError: true,
+              turnId: session.currentTurn?.id
+            }));
+            break;
+          }
+          // --- End enforcement ---
+
           // Find and update the corresponding tool_call part
           const toolCallPart = session.assistantParts.find(
             p => p.type === 'tool_call' && p.name === (payload?.function?.name || '')
@@ -1164,6 +1197,31 @@ wss.on('connection', (ws) => {
         return;
       }
       
+      if (clientMsg.type === 'file:move') {
+        try {
+          const { source, target } = clientMsg;
+          const projectRoot = getDefaultProjectRoot();
+          const result = moveFileWithArchive(source, target, projectRoot);
+          emit('system:file_deployed', {
+            source,
+            target,
+            archived: result.archived,
+            moved: result.moved,
+          });
+          ws.send(JSON.stringify({
+            type: 'file:moved',
+            ...result,
+          }));
+        } catch (err) {
+          console.error(`[FileMove] ${err.message}`);
+          ws.send(JSON.stringify({
+            type: 'file:move_error',
+            error: err.message,
+          }));
+        }
+        return;
+      }
+
       // Unknown message type
       console.log('[WS] Unknown message type:', clientMsg.type);
       
@@ -1264,9 +1322,14 @@ function startServer() {
 
     // Load declarative filters (.md) from filters/
     const filterDir = path.join(__dirname, 'lib', 'watcher', 'filters');
+    // Load modal component definitions from ai/components/
+    const componentsDir = path.join(getDefaultProjectRoot(), 'ai', 'components');
+    loadComponents(componentsDir);
+
     const actionHandlers = createActionHandlers({
       createTicket: wrappedCreateTicket,
       projectRoot: getDefaultProjectRoot(),
+      getModalDefinition,
       sendChatMessage(target, message, role) {
         for (const [ws, sess] of sessions) {
           if (ws.readyState === 1) {
@@ -1276,6 +1339,13 @@ function startServer() {
               role: role || 'system',
               target,
             }));
+          }
+        }
+      },
+      broadcastModal(config) {
+        for (const [ws, sess] of sessions) {
+          if (ws.readyState === 1) {
+            ws.send(JSON.stringify({ type: 'modal:show', ...config }));
           }
         }
       },

@@ -33,6 +33,20 @@ export interface ChunkParser {
 }
 
 /**
+ * Options for controlling reveal speed and behavior.
+ * All fields are optional — when absent, the orchestrator uses its defaults.
+ * Passed from the pressure gauge to attenuate animation under backlog.
+ */
+export interface RevealOptions {
+  speedFast?: number;
+  speedSlow?: number;
+  batchSizeFast?: number;
+  interChunkPause?: number;
+  /** Skip typing entirely — wait for content to be complete, then show at once. */
+  instantReveal?: boolean;
+}
+
+/**
  * Reveal Controller — drives the animation for one segment.
  *
  * Gets content/complete refs that update as streaming progresses.
@@ -44,5 +58,6 @@ export interface RevealController {
     setDisplayed: (content: string) => void,
     cancelRef: { current: boolean },
     completeRef: { current: boolean },
+    options?: RevealOptions,
   ): Promise<void>;
 }

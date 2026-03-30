@@ -7,8 +7,10 @@
  */
 
 export { getTextChunkBoundary, getCodeChunkBoundary, getCodeCommentBoundary, formattingIsBalanced } from './chunk-boundary';
-export { createChunkBuffer, SPEED_FAST, SPEED_SLOW } from './chunk-buffer';
+export { createChunkBuffer } from './chunk-buffer';
 export type { ChunkBuffer, RenderedChunk } from './chunk-buffer';
+export { SPEED_FAST, SPEED_SLOW, computeSpeed, speedToMs } from './speed-attenuator';
+export type { QueueItem, AttenuatorOptions } from './speed-attenuator';
 export { truncateHtmlToChars, getVisibleTextLength } from './html-utils';
 
 // Sub-type renderers (ordered by match specificity)
@@ -70,7 +72,25 @@ export function parseTextChunks(content: string): string[] {
       chunks.push(content.slice(fromIndex, boundary));
       fromIndex = boundary;
     } else {
-      // No complete boundary yet — check stall threshold
+      // No complete boundary yet.
+      //
+      // CODE FENCES: Wait for the closing ```. Do NOT push partial
+      // content. The code block is one atomic unit — we don't type
+      // it until it's complete. The cursor blinks at the paragraph
+      // boundary while the code block streams in. When the closing
+      // ``` arrives, the full fence is produced as one chunk.
+      //
+      // This also prevents cursor drift: a partial code fence pushed
+      // now would have a different length when the closing tag arrives,
+      // causing the index-based tracking to lose characters.
+      const isCodeFence = codeFenceRenderer.matches(content, fromIndex);
+      if (isCodeFence) {
+        // Don't push anything — wait for the closing ```
+        break;
+      }
+
+      // Other block types (paragraphs, lists): push partial content
+      // so the user sees text appearing as it streams.
       const pending = content.length - fromIndex;
       if (pending >= STALL_THRESHOLD) {
         // Force break at last balanced whitespace

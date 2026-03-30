@@ -227,20 +227,54 @@ export const usePanelStore = create<AppState>((set, get) => ({
     }
   })),
 
+  // TURN FINALIZATION — completes the full turn lifecycle in one atomic update.
+  // Called exactly once per turn, by LiveSegmentRenderer's completion effect,
+  // when BOTH conditions are met:
+  //   1. All segments have been revealed (revealedCount >= segments.length)
+  //   2. turn_end has arrived (pendingTurnEnd is true → onRevealComplete is defined)
+  //
+  // This does THREE things atomically:
+  //   1. Snapshots the turn into messages[] (moves from live to history)
+  //   2. Clears currentTurn (LiveSegmentRenderer unmounts)
+  //   3. Clears segments and pendingTurnEnd
+  //
+  // After this fires, the turn renders via InstantSegmentRenderer (history).
+  // There is NO limbo state. The turn goes directly from live → history.
+  //
+  // KNOWN PAST BUG (DO NOT REINTRODUCE):
+  // The old finalizeTurn only set status='complete' but left the turn in
+  // currentTurn. The turn stayed in limbo — still rendered by LiveSegment-
+  // Renderer — until the next turn_begin snapshotted it. This caused:
+  //   - User bubble appearing above the live response on mid-stream send
+  //   - Turn never moving to history if no follow-up message was sent
+  //   - Stale LiveSegmentRenderer state persisting after animation completed
   finalizeTurn: (panel) => {
     const state = get();
     const ps = getPs(state, panel);
     const turn = ps.currentTurn;
     if (turn) {
+      const segments = ps.segments;
+      const newMessages = [
+        ...ps.messages,
+        {
+          id: turn.id || `turn-${Date.now()}`,
+          type: 'assistant' as const,
+          content: turn.content,
+          timestamp: Date.now(),
+          segments: segments.length > 0 ? [...segments] : undefined,
+        },
+      ];
       set((s) => ({
         panels: {
           ...s.panels,
           [panel]: {
             ...getPs(s, panel),
-            currentTurn: { ...turn, status: 'complete' },
+            messages: newMessages,
+            currentTurn: null,
+            segments: [],
             pendingTurnEnd: false,
             pendingMessage: null,
-            lastReleasedSegmentCount: ps.segments.length
+            lastReleasedSegmentCount: 0,
           }
         }
       }));

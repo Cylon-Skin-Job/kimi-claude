@@ -1,13 +1,28 @@
+/**
+ * ChatInput — Send button + Stop button in the same position.
+ *
+ * Send: visible when no turn is active. Sends user message.
+ * Stop: visible when a turn is active (streaming or revealing).
+ *       Immediately ends the turn — renders all remaining content
+ *       instantly and finalizes to history.
+ *
+ * The stop button has a spinning 3/4-circle border to indicate
+ * the AI is working. Clicking it kills the turn cleanly.
+ */
+
 import { useState, useRef } from 'react';
 import { usePanelStore } from '../state/panelStore';
 
 interface ChatInputProps {
   onSend: (text: string) => void;
+  onStop: () => void;
   disabled: boolean;
   panel: string;
+  /** True when the AI is streaming or the renderer is still revealing. */
+  isTurnActive: boolean;
 }
 
-export function ChatInput({ onSend, disabled, panel }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, disabled, panel, isTurnActive }: ChatInputProps) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const config = usePanelStore((s) => s.getPanelConfig(panel));
@@ -24,7 +39,11 @@ export function ChatInput({ onSend, disabled, panel }: ChatInputProps) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      if (isTurnActive) {
+        onStop();
+      } else {
+        handleSend();
+      }
     }
   };
 
@@ -50,15 +69,27 @@ export function ChatInput({ onSend, disabled, panel }: ChatInputProps) {
           disabled={disabled}
           rows={1}
         />
-        <button
-          className="send-btn"
-          onClick={handleSend}
-          disabled={disabled || !text.trim()}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-            arrow_upward
-          </span>
-        </button>
+        {isTurnActive ? (
+          <button
+            className="stop-btn"
+            onClick={onStop}
+            title="Stop generating"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+              stop
+            </span>
+          </button>
+        ) : (
+          <button
+            className="send-btn"
+            onClick={handleSend}
+            disabled={disabled || !text.trim()}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+              arrow_upward
+            </span>
+          </button>
+        )}
       </div>
     </div>
   );

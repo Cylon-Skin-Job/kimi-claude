@@ -27,4 +27,4 @@ export function getReveal(mode: RenderMode): RevealController {
   return REVEAL_MAP[mode];
 }
 
-export type { RevealController } from './types';
+export type { RevealController, RevealOptions } from './types';

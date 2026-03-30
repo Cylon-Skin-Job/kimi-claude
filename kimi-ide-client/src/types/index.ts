@@ -81,7 +81,11 @@ export type WebSocketMessageType =
   | 'thread:renamed'
   | 'thread:deleted'
   | 'message:sent'
-  | 'auth_error';
+  | 'auth_error'
+  // Modal messages
+  | 'modal:show'
+  | 'file:moved'
+  | 'file:move_error';
 
 export interface WebSocketMessage {
   type: WebSocketMessageType;

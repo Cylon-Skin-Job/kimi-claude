@@ -9,20 +9,18 @@
 import { usePanelStore } from '../state/panelStore';
 import { toolNameToSegmentType, SEGMENT_ICONS } from '../lib/instructions';
 import { isGroupable, getSummaryField } from '../lib/segmentCatalog';
+import {
+  onToolCall,
+  getGroupForResult,
+  breakSequence,
+  reset as resetGrouper,
+} from '../lib/tool-grouper';
 import { setLoggerWs, captureConsoleLogs } from '../lib/logger';
 import { loadRootTree } from '../lib/file-tree';
 import { showToast } from '../lib/toast';
+import { showModal } from '../lib/modal';
 import { loadAllPanels } from '../lib/panels';
 import type { WebSocketMessage, ExchangeData, AssistantPart, StreamSegment, SegmentType } from '../types';
-
-// --- Types ---
-
-interface GroupState {
-  type: SegmentType;
-  segmentIndex: number;
-  toolCallIds: Set<string>;
-  count: number;
-}
 
 // --- Module state ---
 
@@ -30,7 +28,6 @@ const WS_URL = 'ws://localhost:3001';
 
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let group: GroupState | null = null;
 
 // --- Public API ---
 
@@ -50,7 +47,7 @@ export function connectWs() {
 
   ws.onopen = () => {
     console.log('[WS] Connected');
-    group = null;
+    resetGrouper();
     const store = usePanelStore.getState();
     store.setWs(ws);
     setLoggerWs(ws);
@@ -111,12 +108,17 @@ function handleMessage(msg: WebSocketMessage) {
 
     case 'turn_begin': {
       console.log('[WS] Turn begin');
+      // Safety net: if the previous turn wasn't finalized (edge case —
+      // finalizeTurn normally handles this), snapshot it now. In the
+      // normal flow, currentTurn is already null by this point because
+      // finalizeTurn cleared it.
       const panelState = store.panels[panel];
       if (panelState) {
         const prevTurn = panelState.currentTurn;
         const segments = panelState.segments;
 
         if (prevTurn) {
+          console.warn('[WS] turn_begin: previous turn was not finalized — snapshotting now');
           store.addMessage(panel, {
             id: prevTurn.id,
             type: 'assistant',
@@ -128,7 +130,21 @@ function handleMessage(msg: WebSocketMessage) {
       }
 
       store.resetSegments(panel);
-      group = null;
+      resetGrouper();
+
+      // CRITICAL: Clear pendingTurnEnd from the PREVIOUS turn.
+      //
+      // If the old turn's renderer hadn't finished revealing when this
+      // turn_begin arrives, pendingTurnEnd is still true. Without this
+      // clear, the NEW turn would inherit it — causing premature
+      // finalization as soon as the first segment of the new turn
+      // finishes revealing.
+      //
+      // KNOWN PAST BUG (DO NOT REMOVE):
+      // Omitting this line caused new turns to finalize immediately
+      // after their first segment, because the stale pendingTurnEnd
+      // from the previous turn was still set.
+      store.setPendingTurnEnd(panel, false);
 
       store.setCurrentTurn(panel, {
         id: msg.turnId || '',
@@ -150,7 +166,7 @@ function handleMessage(msg: WebSocketMessage) {
           const ttft = t.firstTokenAt - t.sendAt;
           console.log(`[TIMING] FIRST TOKEN (content) at ${t.firstTokenAt.toFixed(1)}ms — TTFT: ${ttft.toFixed(1)}ms`);
         }
-        group = null;
+        breakSequence();
         store.appendSegment(panel, 'text', msg.text);
 
         const turn = usePanelStore.getState().panels[panel]?.currentTurn;
@@ -169,7 +185,7 @@ function handleMessage(msg: WebSocketMessage) {
           const ttft = t.firstTokenAt - t.sendAt;
           console.log(`[TIMING] FIRST TOKEN (thinking) at ${t.firstTokenAt.toFixed(1)}ms — TTFT: ${ttft.toFixed(1)}ms`);
         }
-        group = null;
+        breakSequence();
         store.appendSegment(panel, 'think', msg.text);
       }
       break;
@@ -177,69 +193,79 @@ function handleMessage(msg: WebSocketMessage) {
     case 'tool_call': {
       const segType = toolNameToSegmentType(msg.toolName || '');
       const toolCallId = msg.toolCallId || '';
+      const segCount = usePanelStore.getState().panels[panel]?.segments.length ?? 0;
 
-      if (isGroupable(segType)) {
-        if (group && group.type === segType) {
-          group.toolCallIds.add(toolCallId);
-          group.count++;
-        } else {
-          group = null;
-          const segIndex = usePanelStore.getState().panels[panel]?.segments.length ?? 0;
-          store.pushSegment(panel, {
-            type: segType,
-            content: '',
-            toolCallId,
-            toolArgs: msg.toolArgs,
-          });
-          group = {
-            type: segType,
-            segmentIndex: segIndex,
-            toolCallIds: new Set([toolCallId]),
-            count: 1,
-          };
-        }
-      } else {
-        group = null;
+      const action = onToolCall(segType, toolCallId, segCount);
+
+      if (action.action === 'new') {
         store.pushSegment(panel, {
           type: segType,
           content: '',
           toolCallId,
+          toolArgs: msg.toolArgs,
         });
       }
+      // 'extend' = tool was added to existing group segment. No store action needed.
 
       break;
     }
 
     case 'tool_result': {
       const toolCallId = msg.toolCallId || '';
+      const groupLookup = getGroupForResult(toolCallId);
 
-      if (group && group.toolCallIds.has(toolCallId)) {
-        const summaryFieldName = getSummaryField(group.type);
+      if (groupLookup) {
+        // Grouped tool — append summary line to the group's segment.
+        // Uses layer 2 (toolCallMap) which survives thinking interleaving.
+        const summaryFieldName = getSummaryField(groupLookup.type);
         const summaryValue = summaryFieldName && msg.toolArgs?.[summaryFieldName];
         const summaryLine = typeof summaryValue === 'string'
           ? summaryValue
-          : msg.toolOutput?.slice(0, 80) || group.type;
-        const prefix = usePanelStore.getState().panels[panel]?.segments[group.segmentIndex]?.content ? '\n' : '';
-        store.appendSegmentContentByIndex(panel, group.segmentIndex, prefix + summaryLine);
-      } else {
-        if (toolCallId) {
-          store.updateSegmentByToolCallId(panel, toolCallId, {
-            content: msg.toolOutput || '',
-            toolArgs: msg.toolArgs,
-            toolDisplay: msg.toolDisplay,
-            isError: msg.isError,
-            complete: true,
-          });
-        }
+          : msg.toolOutput?.slice(0, 80) || groupLookup.type;
+        const existing = usePanelStore.getState().panels[panel]?.segments[groupLookup.segmentIndex]?.content;
+        const prefix = existing ? '\n' : '';
+        store.appendSegmentContentByIndex(panel, groupLookup.segmentIndex, prefix + summaryLine);
+      } else if (toolCallId) {
+        // Non-grouped tool — set full content on the segment.
+        store.updateSegmentByToolCallId(panel, toolCallId, {
+          content: msg.toolOutput || '',
+          toolArgs: msg.toolArgs,
+          toolDisplay: msg.toolDisplay,
+          isError: msg.isError,
+          complete: true,
+        });
       }
 
       break;
     }
 
     case 'turn_end': {
+      // turn_end signals that the API has finished producing content.
+      // All segments and their content have been delivered.
+      //
+      // We do NOT finalize the turn here. Instead we set pendingTurnEnd,
+      // which tells the renderer "whenever you finish revealing, call
+      // finalizeTurn." This decouples stream completion from render
+      // completion — the renderer might be far behind the stream.
+      //
+      // LIFECYCLE:
+      //   turn_end arrives → setPendingTurnEnd(true)
+      //                    → MessageList passes onRevealComplete to LiveSegmentRenderer
+      //                    → LiveSegmentRenderer's completion effect checks:
+      //                        revealedCount >= segments.length AND onRevealComplete defined
+      //                    → When both true: finalizeTurn() fires ONCE
+      //                    → currentTurn.status = 'complete', pendingTurnEnd = false
+      //
+      // EITHER ORDER IS SAFE:
+      //   Stream finishes first: pendingTurnEnd set, renderer catches up later, effect fires.
+      //   Renderer catches up first: all revealed, then turn_end arrives, effect fires.
+      //
+      // See LiveSegmentRenderer.tsx completion detection comments for the
+      // full explanation of why this is an effect and not a callback.
       const currentTurn = usePanelStore.getState().panels[panel]?.currentTurn;
 
       if (currentTurn) {
+        // Mark last segment complete (closing tag) so reveal knows it's done
         const segs = usePanelStore.getState().panels[panel]?.segments || [];
         if (segs.length > 0) {
           const lastSeg = segs[segs.length - 1];
@@ -333,6 +359,18 @@ function handleMessage(msg: WebSocketMessage) {
 
     case 'message:sent':
       console.log('[WS] Message saved to thread');
+      break;
+
+    case 'modal:show':
+      showModal(msg as unknown as import('../lib/modal').ModalConfig);
+      break;
+
+    case 'file:moved':
+      console.log('[WS] File moved:', msg);
+      break;
+
+    case 'file:move_error':
+      showToast(`File move failed: ${(msg as any).error}`);
       break;
 
     default:

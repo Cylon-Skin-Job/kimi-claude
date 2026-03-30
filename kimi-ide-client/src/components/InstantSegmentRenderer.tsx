@@ -8,8 +8,8 @@
 import { useState } from 'react';
 import { renderTextInstant } from '../lib/text';
 import type { StreamSegment } from '../types';
-import { isGroupable, getRenderMode, getSegmentBehavior } from '../lib/segmentCatalog';
-import { getContentRenderer } from '../lib/segment-renderers';
+import { isGroupable } from '../lib/segmentCatalog';
+import { getToolRenderer } from '../lib/tool-renderers';
 import { ToolCallBlock } from './ToolCallBlock';
 
 interface InstantSegmentRendererProps {
@@ -99,13 +99,12 @@ function InstantText({ content }: { content: string }) {
 
 function InstantToolBlock({ segment }: { segment: StreamSegment }) {
   const [expanded, setExpanded] = useState(false);
-  const renderMode = getRenderMode(segment.type);
-  const renderer = getContentRenderer(renderMode);
-  const behavior = getSegmentBehavior(segment.type);
+  const renderer = getToolRenderer(segment.type);
 
   return (
     <ToolCallBlock
       type={segment.type}
+      label={renderer.buildTitle(1, segment.toolArgs)}
       toolArgs={segment.toolArgs}
       isError={segment.isError}
       expanded={expanded}
@@ -113,14 +112,9 @@ function InstantToolBlock({ segment }: { segment: StreamSegment }) {
     >
       {segment.content && (
         <div
-          style={{
-            fontFamily: behavior.contentFormat === 'code' || behavior.contentFormat === 'diff'
-              ? 'monospace' : 'inherit',
-            fontStyle: segment.type === 'think' ? 'italic' : 'normal',
-            whiteSpace: 'pre-wrap',
-          }}
+          style={renderer.contentStyle}
           dangerouslySetInnerHTML={{
-            __html: renderer.renderInstant(segment.content, segment.toolArgs),
+            __html: renderer.formatContent(segment.content, segment.toolArgs),
           }}
         />
       )}
@@ -133,29 +127,22 @@ function InstantToolBlock({ segment }: { segment: StreamSegment }) {
 function InstantGroupedBlock({ segments }: { segments: StreamSegment[] }) {
   const [expanded, setExpanded] = useState(false);
   const type = segments[0].type;
-  const renderer = getContentRenderer('grouped-summary');
-
-  // Build summary: one line per segment showing the summary field value
-  const summaryLines = segments.map(seg => {
-    const behavior = getSegmentBehavior(seg.type);
-    const field = behavior.summaryField;
-    const value = field && seg.toolArgs?.[field];
-    return typeof value === 'string' ? value : seg.label || seg.type;
-  });
-
-  const label = `${type} (${segments.length})`;
+  const renderer = getToolRenderer(type);
 
   return (
     <ToolCallBlock
       type={type}
-      label={label}
+      label={renderer.buildTitle(segments.length, segments[0].toolArgs)}
       isError={segments.some(s => s.isError)}
       expanded={expanded}
       onToggle={() => setExpanded(!expanded)}
     >
       <div
+        style={renderer.contentStyle}
         dangerouslySetInnerHTML={{
-          __html: renderer.renderInstant(summaryLines.join('\n')),
+          __html: segments.map(seg =>
+            renderer.formatContent(seg.content, seg.toolArgs)
+          ).join(''),
         }}
       />
     </ToolCallBlock>

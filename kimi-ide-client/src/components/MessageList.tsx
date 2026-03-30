@@ -1,8 +1,30 @@
 /**
- * MessageList — Pure routing.
+ * MessageList — Pure routing between Live and Instant renderers.
  *
  * History messages → InstantSegmentRenderer (collapsed, no animation)
  * Current turn     → LiveSegmentRenderer (orb gatekeeper → animated typing)
+ *
+ * ┌─────────────────────────────────────────────────────────────────┐
+ * │ TURN FINALIZATION HANDOFF                                       │
+ * │                                                                 │
+ * │ This component bridges the store (pendingTurnEnd) and the       │
+ * │ renderer (onRevealComplete callback).                           │
+ * │                                                                 │
+ * │ When pendingTurnEnd is true (turn_end received from API),       │
+ * │ onRevealComplete is set to finalizeTurn. LiveSegmentRenderer    │
+ * │ calls it when ALL segments have finished revealing.             │
+ * │                                                                 │
+ * │ The callback can arrive in EITHER ORDER:                        │
+ * │   - turn_end first, then renderer catches up → works           │
+ * │   - Renderer done first, then turn_end arrives → works         │
+ * │                                                                 │
+ * │ See LiveSegmentRenderer.tsx for the completion detection logic  │
+ * │ that makes both orderings safe.                                 │
+ * │                                                                 │
+ * │ CRITICAL: onRevealComplete must be undefined (not a no-op)      │
+ * │ when pendingTurnEnd is false. LiveSegmentRenderer uses the      │
+ * │ presence/absence of this prop as part of its completion gate.   │
+ * └─────────────────────────────────────────────────────────────────┘
  */
 
 import { usePanelStore } from '../state/panelStore';
@@ -29,6 +51,9 @@ export function MessageList({
 }: MessageListProps) {
   const pendingTurnEnd = usePanelStore((s) => s.panels[panel].pendingTurnEnd);
   const finalizeTurn = usePanelStore((s) => s.finalizeTurn);
+
+  // CRITICAL: undefined when not pending, NOT a no-op function.
+  // LiveSegmentRenderer's completion effect checks `if (!onRevealComplete) return;`
   const onRevealComplete = pendingTurnEnd ? () => finalizeTurn(panel) : undefined;
 
   // Find the last user message index for scroll anchoring

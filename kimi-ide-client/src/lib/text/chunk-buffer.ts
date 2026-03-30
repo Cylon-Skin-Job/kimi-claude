@@ -1,21 +1,22 @@
 /**
- * Text Chunk Buffer — Queue + speed attenuator for typing animation.
+ * Text Chunk Buffer — Pure FIFO queue for renderable chunks.
  *
- * Manages a queue of renderable chunks. Determines typing speed by
- * checking look-ahead:
+ * Holds chunks and tracks the cursor position. Speed decisions
+ * are delegated to the speed attenuator (speed-attenuator.ts).
  *
- *   → Next chunk buffered? → FAST (1ms per char, 5 chars/tick)
- *   → Only current chunk?  → SLOW (6ms per char, 1 char/tick)
- *
- * Effect: when tokens stream fast, text races. When they slow, typing decelerates.
+ * The buffer is the DATA. The attenuator is the DECISION.
+ * They are separate concerns.
  */
 
-export const SPEED_FAST = 1;
-export const SPEED_SLOW = 6;
+import { computeSpeed, speedToMs, type AttenuatorOptions } from './speed-attenuator';
 
 export interface RenderedChunk {
   content: string;
   isFinal?: boolean;
+  /** Code blocks don't count as lookahead for speed decisions. */
+  isCodeBlock?: boolean;
+  /** Partial chunks (still streaming, no boundary yet) don't count as lookahead. */
+  isPartial?: boolean;
 }
 
 export interface ChunkBuffer {
@@ -23,15 +24,20 @@ export interface ChunkBuffer {
   hasNext(): boolean;
   next(): RenderedChunk | null;
   peek(): RenderedChunk | null;
+  /** Speed decision — delegated to the attenuator. */
   getSpeed(): 'fast' | 'slow';
+  /** Speed in ms per char — delegated to the attenuator. */
   getSpeedMs(): number;
   size(): number;
   clear(): void;
+  /** Signal that content is pending but not ready (e.g., incomplete code fence). */
+  setPendingBlock(pending: boolean): void;
 }
 
-export function createChunkBuffer(): ChunkBuffer {
+export function createChunkBuffer(attenuatorOptions?: AttenuatorOptions): ChunkBuffer {
   const chunks: RenderedChunk[] = [];
   let cursor = 0;
+  let pendingBlock = false;
 
   return {
     push(chunk: RenderedChunk) {
@@ -53,11 +59,11 @@ export function createChunkBuffer(): ChunkBuffer {
     },
 
     getSpeed(): 'fast' | 'slow' {
-      return cursor + 2 < chunks.length ? 'fast' : 'slow';
+      return computeSpeed(chunks, cursor, pendingBlock, attenuatorOptions);
     },
 
     getSpeedMs(): number {
-      return this.getSpeed() === 'fast' ? SPEED_FAST : SPEED_SLOW;
+      return speedToMs(this.getSpeed());
     },
 
     size(): number {
@@ -67,6 +73,11 @@ export function createChunkBuffer(): ChunkBuffer {
     clear() {
       chunks.length = 0;
       cursor = 0;
+      pendingBlock = false;
+    },
+
+    setPendingBlock(pending: boolean) {
+      pendingBlock = pending;
     },
   };
 }

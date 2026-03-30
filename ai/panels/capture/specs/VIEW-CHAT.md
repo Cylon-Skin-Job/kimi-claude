@@ -18,12 +18,16 @@ Chat is not a standalone workspace — it attaches to workspaces. Every workspac
 A `chat/` folder anywhere defines chat behavior. The folder contains:
 
 ```
-ai/views/{workspace}/chat/
+ai/panels/{workspace}/chat/
   chat.json              ← chat type config
-  PROMPT.md              ← agent identity for this chat context (optional)
-  SESSION.md             ← CLI profile, tools, DB access, harness config
-  MEMORY.md              ← persistent memory (nightly rollover for daily, pre-compact for threaded)
-  TRIGGERS.md            ← chat-specific triggers (optional)
+  MEMORY.md              ← persistent memory (agent can write)
+  TRIGGERS.md            ← chat-specific triggers (agent can write)
+  settings/
+    PROMPT.md            ← agent identity (human-deployed only)
+    SESSION.md           ← CLI profile, tools, DB access (human-deployed only)
+    archive/             ← prior versions auto-archived on replacement
+      PROMPT-2026-03-28T14-30-00.md
+      SESSION-2026-03-27T10-00-00.md
   threads/
     index.json           ← sort/filter config (by date, name, last-active, custom)
     {username}/
@@ -35,7 +39,24 @@ ai/views/{workspace}/chat/
 
 `threads/index.json` is the single source of truth for how threads appear — drives both the UI sidebar thread list and the markdown folder ordering. Sort by date, name, last-active, or custom order.
 
-For **daily-rolling** chats, PROMPT.md, SESSION.md, TRIGGERS.md, and MEMORY.md live in the chat folder and define the agent's behavior. MEMORY.md is written to at nightly rollover when the day transitions.
+### Settings Folder (Human-Only Zone)
+
+**Any folder named `settings/` is permanently write-locked for AI.** This is a system-wide enforcement rule hardcoded in the server — not configurable, not trigger-driven. The AI can read from settings/ but can never write to it.
+
+PROMPT.md and SESSION.md live inside `settings/` to ensure the AI cannot modify its own identity or permissions without human review.
+
+**Deploy flow:**
+1. AI generates a new PROMPT.md or SESSION.md and drops it in the `chat/` folder (not settings/)
+2. A trigger detects the new file and shows a drag-to-deploy modal overlay
+3. The user drags the file from the preview panel to the settings/ drop target
+4. The server archives the prior copy to `settings/archive/` and moves the new file in
+5. The modal dismisses and the new configuration is live
+
+**Archive pattern:** When a file is deployed to settings/, any existing file with the same name is moved to `settings/archive/FILENAME-{ISO-date}.md`. This creates an immutable audit trail.
+
+### Chat-Level Files
+
+For **daily-rolling** chats, PROMPT.md and SESSION.md in `settings/` define the agent's behavior. MEMORY.md and TRIGGERS.md live in the chat root where the agent can write to them. MEMORY.md is written to at nightly rollover when the day transitions.
 
 For **threaded** chats, MEMORY.md is loaded before context compression when resuming a thread — it acts as a refresher of key context.
 

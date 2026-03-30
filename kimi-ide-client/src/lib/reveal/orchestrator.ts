@@ -15,11 +15,12 @@
  */
 
 import { INTER_CHUNK_PAUSE } from '../timing';
-import type { ChunkParser, ParsedChunk } from './types';
+import type { ChunkParser, ParsedChunk, RevealOptions } from './types';
 
-const SPEED_FAST = 1;  // ms per char
-const SPEED_SLOW = 6;  // ms per char
-const BATCH_SIZE_FAST = 5;  // chars per tick at fast speed
+// Defaults — used when no RevealOptions are provided (backlog normal).
+const DEFAULT_SPEED_FAST = 1;  // ms per char
+const DEFAULT_SPEED_SLOW = 6;  // ms per char
+const DEFAULT_BATCH_SIZE_FAST = 5;  // chars per tick at fast speed
 const POLL_INTERVAL = 30;   // ms to wait when buffer is empty
 const FLUSH_TIMEOUT = 150;  // ms before flushing partial content from parser
 
@@ -29,14 +30,15 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Type text character by character, calling onChar after each batch.
+ * batchSize controls how many chars are emitted per tick.
  */
 async function typeChunk(
   text: string,
   msPerChar: number,
+  batchSize: number,
   onChar: (typed: string) => void,
   cancelRef: { current: boolean },
 ): Promise<void> {
-  const batchSize = msPerChar <= SPEED_FAST ? BATCH_SIZE_FAST : 1;
   let i = 0;
   while (i < text.length && !cancelRef.current) {
     const end = Math.min(i + batchSize, text.length);
@@ -54,7 +56,26 @@ export async function orchestrateReveal(
   cancelRef: { current: boolean },
   completeRef: { current: boolean },
   parser: ChunkParser,
+  options?: RevealOptions,
 ): Promise<void> {
+  // ── Resolve options with defaults ──
+  const speedFast = options?.speedFast ?? DEFAULT_SPEED_FAST;
+  const speedSlow = options?.speedSlow ?? DEFAULT_SPEED_SLOW;
+  const batchFast = options?.batchSizeFast ?? DEFAULT_BATCH_SIZE_FAST;
+  const chunkPause = options?.interChunkPause ?? INTER_CHUNK_PAUSE;
+
+  // ── Instant reveal shortcut ──
+  // Under heavy pressure, skip typing entirely. Wait for content to
+  // be complete, then show everything at once.
+  if (options?.instantReveal) {
+    while (!completeRef.current && !cancelRef.current) {
+      setDisplayed(contentRef.current);
+      await sleep(POLL_INTERVAL);
+    }
+    setDisplayed(contentRef.current);
+    return;
+  }
+
   const buffer: ParsedChunk[] = [];
   let bufferCursor = 0;   // next chunk to render
   let charCursor = 0;     // characters rendered so far
@@ -77,18 +98,19 @@ export async function orchestrateReveal(
       stallStart = 0; // reset stall timer when we have chunks
       const chunk = buffer[bufferCursor];
       const nextChunkReady = bufferCursor + 1 < buffer.length;
-      const speed = nextChunkReady ? SPEED_FAST : SPEED_SLOW;
+      const speed = nextChunkReady ? speedFast : speedSlow;
+      const batch = nextChunkReady ? batchFast : 1;
 
       // ── Step 3: Type this chunk ──
-      await typeChunk(chunk.text, speed, (typed) => {
+      await typeChunk(chunk.text, speed, batch, (typed) => {
         charCursor += typed.length;
         setDisplayed(contentRef.current.slice(0, charCursor));
       }, cancelRef);
 
       bufferCursor++;
 
-      if (!cancelRef.current) {
-        await sleep(INTER_CHUNK_PAUSE);
+      if (!cancelRef.current && chunkPause > 0) {
+        await sleep(chunkPause);
       }
     } else {
       // ── Step 4: Buffer empty — wait or exit ──
@@ -117,7 +139,7 @@ export async function orchestrateReveal(
         // Render any remaining buffered chunks
         while (bufferCursor < buffer.length && !cancelRef.current) {
           const chunk = buffer[bufferCursor];
-          await typeChunk(chunk.text, SPEED_SLOW, (typed) => {
+          await typeChunk(chunk.text, speedSlow, 1, (typed) => {
             charCursor += typed.length;
             setDisplayed(contentRef.current.slice(0, charCursor));
           }, cancelRef);

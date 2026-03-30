@@ -10,7 +10,7 @@
   "created": "2026-03-27T00:00:00Z",
   "updated": "2026-03-27T23:30:00Z",
   "frozen": true,
-  "children": ["system-overview", "code-standards", "database-architecture", "evidence-gated-execution", "attestation-card", "workflow-design", "agent-folder-structure", "validation-subagent", "universal-index", "setup", "template-fallback", "panel-rename", "capability-services", "cascading-settings"],
+  "children": ["system-overview", "code-standards", "database-architecture", "turn-lifecycle", "warmth-settings", "evidence-gated-execution", "attestation-card", "workflow-design", "agent-folder-structure", "validation-subagent", "universal-index", "setup", "template-fallback", "panel-rename", "capability-services", "cascading-settings"],
   "edges_out": null,
   "edges_in": null,
   "sources": null,

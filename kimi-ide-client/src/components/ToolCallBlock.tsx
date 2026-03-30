@@ -26,6 +26,8 @@ interface ToolCallBlockProps {
   onToggle: () => void;
   /** Show shimmer animation on the header */
   shimmer?: boolean;
+  /** Override collapse animation duration (ms). Syncs CSS transition with JS sleep under pressure. */
+  collapseDuration?: number;
   children?: React.ReactNode;
 }
 
@@ -37,8 +39,10 @@ export function ToolCallBlock({
   expanded,
   onToggle,
   shimmer,
+  collapseDuration: collapseDurationOverride,
   children,
 }: ToolCallBlockProps) {
+  const effectiveCollapse = collapseDurationOverride ?? COLLAPSE_DURATION;
   const visual = getSegmentVisual(type);
   const icon = getSegmentIcon(type, isError);
   const iconColor = getSegmentIconColor(type, isError);
@@ -87,7 +91,7 @@ export function ToolCallBlock({
                 verticalAlign: 'middle',
                 marginLeft: '2px',
                 transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)',
-                transition: `transform ${COLLAPSE_DURATION}ms ease`,
+                transition: `transform ${effectiveCollapse}ms ease`,
               }}
             >
               arrow_drop_down
@@ -104,7 +108,7 @@ export function ToolCallBlock({
             maxHeight: expanded ? '2000px' : '0px',
             opacity: expanded ? 1 : 0,
             overflow: 'hidden',
-            transition: `max-height ${COLLAPSE_DURATION}ms ease, opacity ${COLLAPSE_DURATION}ms ease`,
+            transition: `max-height ${effectiveCollapse}ms ease, opacity ${effectiveCollapse}ms ease`,
             ...(visual.borderLeft
               ? {
                   borderLeft: `${visual.borderLeft.width} solid ${visual.borderLeft.color}`,
