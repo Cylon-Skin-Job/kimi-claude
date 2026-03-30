@@ -1,35 +1,15 @@
 /**
- * Universal Tool Call Timing — single source of truth.
+ * Timing Constants — fallback defaults for tool call animations.
  *
- * Every tool block follows this sequence:
- *
- *   fade-in (300ms) → shimmer hold (200ms) → reveal → collapse
- *
- * Adjust values here. They apply to ALL tool types.
+ * Most timing is now controlled by the pressure gauge (lib/pressure.ts).
+ * These constants are only used as fallback defaults when pressure
+ * values aren't provided:
+ *   - INTER_CHUNK_PAUSE: reveal/orchestrator.ts fallback
+ *   - COLLAPSE_DURATION: ToolCallBlock.tsx fallback
  */
 
-// ── Shimmer Phase ──
-/** CSS opacity fade-in for tool block header */
-export const SHIMMER_FADE_IN = 200;
-/** Hold after fade-in before first chunk check (shimmer visible, no content) */
-export const SHIMMER_HOLD = 200;
-/** Total shimmer duration before reveal starts */
-export const SHIMMER_TOTAL = SHIMMER_FADE_IN + SHIMMER_HOLD;
-
-// ── Reveal Phase ──
-/** Pause between typing chunks within a reveal */
+/** Pause between typing chunks within a reveal (fallback for reveal orchestrator) */
 export const INTER_CHUNK_PAUSE = 80;
 
-// ── Collapse Phase ──
-/** Pause after reveal ends before fold starts (shimmer off, content visible) */
-export const POST_TYPING_PAUSE = 500;
-/** Duration of the maxHeight fold animation */
+/** Duration of the maxHeight fold animation (fallback for ToolCallBlock) */
 export const COLLAPSE_DURATION = 300;
-
-// ── Between Segments ──
-/** Pause after collapse before next segment starts */
-export const INTER_SEGMENT_PAUSE = 250;
-
-// ── Orb ──
-/** Fixed orb animation duration (gatekeeper, not a tool) */
-export const ORB_DURATION = 2000;

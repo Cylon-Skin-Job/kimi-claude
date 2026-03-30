@@ -156,12 +156,3 @@ export function formatNodeName(name: string): string {
   return name;
 }
 
-/** Calculate indentation padding based on depth in tree
- * depth 0 = 0.75rem (root level)
- * depth 1 = 2rem (1.25rem additional per level)
- */
-export function getIndentPadding(depth: number): string {
-  const basePadding = 0.75;
-  const indentPerLevel = 1.25;
-  return `${basePadding + depth * indentPerLevel}rem`;
-}

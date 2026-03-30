@@ -400,41 +400,10 @@ export const SEGMENT_CATALOG: Record<SegmentType, SegmentDefinition> = {
 // =============================================================================
 
 /**
- * Get the complete definition for a segment type
- */
-export function getSegmentDefinition(type: SegmentType): SegmentDefinition {
-  return SEGMENT_CATALOG[type];
-}
-
-/**
  * Get the visual style for a segment type
  */
 export function getSegmentVisual(type: SegmentType): SegmentVisualStyle {
   return SEGMENT_CATALOG[type].visual;
-}
-
-/**
- * Get the behavior specification for a segment type
- */
-export function getSegmentBehavior(type: SegmentType): SegmentBehavior {
-  return SEGMENT_CATALOG[type].behavior;
-}
-
-/**
- * Get the error style for a segment type
- */
-export function getSegmentErrorStyle(type: SegmentType): SegmentErrorStyle {
-  return SEGMENT_CATALOG[type].errorStyle;
-}
-
-/**
- * Build the label for a segment type with the given tool arguments
- */
-export function buildSegmentLabel(
-  type: SegmentType,
-  args?: Record<string, unknown>
-): string {
-  return SEGMENT_CATALOG[type].buildLabel(args);
 }
 
 /**
@@ -453,13 +422,6 @@ export function buildSegmentLabelWithError(
   }
 
   return label;
-}
-
-/**
- * Check if a segment type has an icon
- */
-export function hasIcon(type: SegmentType): boolean {
-  return SEGMENT_CATALOG[type].visual.icon !== '';
 }
 
 /**
@@ -525,17 +487,3 @@ export function getSummaryField(type: SegmentType): string | undefined {
   return SEGMENT_CATALOG[type].behavior.summaryField;
 }
 
-/** All segment types that have icons */
-export const ICON_TYPES: SegmentType[] = [
-  'think',
-  'shell',
-  'read',
-  'write',
-  'edit',
-  'glob',
-  'grep',
-  'web_search',
-  'fetch',
-  'subagent',
-  'todo',
-];

@@ -28,14 +28,14 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { markdownToHtml } from '../lib/transforms';
 import type { StreamSegment } from '../types';
 import { getRenderMode } from '../lib/segmentCatalog';
 import { getReveal } from '../lib/reveal';
 import { getToolRenderer } from '../lib/tool-renderers';
 import { computeTimingProfile, type TimingProfile } from '../lib/pressure';
-import { createChunkBuffer, parseTextChunks } from '../lib/text';
-import { getChunkStrategy } from '../lib/chunk-strategies';
+import { renderTextInstant } from '../lib/text';
+import { animateText } from '../lib/text/text-animate';
+import { sleep, injectCursor } from '../lib/animate-utils';
 import { ToolCallBlock } from './ToolCallBlock';
 import { Orb } from './Orb';
 
@@ -228,13 +228,18 @@ interface LiveTextSegmentProps {
   onDone: (index: number) => void;
 }
 
+/**
+ * LiveTextSegment — Thin shell. All logic lives in text-animate.ts.
+ *
+ * Owns React state and refs. Delegates animation to animateText().
+ * Display state is HTML (pre-rendered by sub-renderers), not raw markdown.
+ */
 function LiveTextSegment({ segment, index, skipAnimation, getTimingProfile, onDone }: LiveTextSegmentProps) {
-  const [displayedContent, setDisplayedContent] = useState('');
+  const [displayedHtml, setDisplayedHtml] = useState('');
   const [typing, setTyping] = useState(true);
   const animatingRef = useRef(false);
   const contentRef = useRef(segment.content);
   const completeRef = useRef(segment.complete ?? false);
-  const cursorRef = useRef(0);
   const cancelRef = useRef(false);
 
   contentRef.current = segment.content;
@@ -243,158 +248,30 @@ function LiveTextSegment({ segment, index, skipAnimation, getTimingProfile, onDo
   useEffect(() => {
     if (animatingRef.current) return;
     animatingRef.current = true;
-    cancelRef.current = false;
 
-    // ── Skipped segments render instantly (snap-to-frontier) ──
     if (skipAnimation) {
-      setDisplayedContent(contentRef.current);
+      setDisplayedHtml(renderTextInstant(contentRef.current));
       setTyping(false);
       setTimeout(() => onDone(index), 0);
       return;
     }
 
-    const strategy = getChunkStrategy(segment.type);
-    const buffer = createChunkBuffer({
-      codeFenceAsLookahead: strategy.codeFenceAsLookahead ?? true,
+    cancelRef.current = false;
+
+    animateText({
+      contentRef, completeRef, cancelRef,
+      segmentType: segment.type,
+      setDisplayedHtml, setTyping, getTimingProfile,
+      onDone: () => onDone(index),
     });
-    let totalChunksPushed = 0;
 
-    const animate = async () => {
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // TEXT TYPING LOOP
-      //
-      // Chunks = semantic blocks (paragraphs, headers, code
-      // fences, lists). Once a chunk starts typing, it types
-      // to completion. NO stopping mid-paragraph.
-      //
-      // Pressure ONLY acts at chunk boundaries:
-      //   - instantReveal: bail, show everything
-      //   - interChunkPause: pause between paragraphs
-      //     (skipped if next paragraph is already buffered)
-      //
-      // Within-chunk speed is the buffer's domain:
-      //   buffer.getSpeedMs() — FAST if next chunk is buffered,
-      //   SLOW if not. This is the right granularity.
-      //
-      // KNOWN PAST BUG (DO NOT REINTRODUCE):
-      // Pressure was reaching into per-character speed mid-chunk,
-      // which could cause visual stutter. Pressure only controls
-      // the pauses BETWEEN chunks and the instantReveal bail.
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      let lastParsedLen = 0;
-
-      while (!cancelRef.current) {
-        const content = contentRef.current;
-
-        // Re-parse when content grows and push only new chunks.
-        // Each chunk is tagged so the speed attenuator knows what
-        // counts as real lookahead vs. decoration or partial content:
-        //
-        //   isCodeBlock: code fences — same "thought" as preceding text
-        //   isPartial:   still streaming, no boundary — NOT evidence we're ahead
-        //
-        // Universal convention: speed only goes FAST when there are
-        // 2+ complete, boundary-terminated, non-code-block chunks ahead.
-        if (content.length > lastParsedLen) {
-          const chunks = parseTextChunks(content);
-          for (let c = totalChunksPushed; c < chunks.length; c++) {
-            const isCodeBlock = chunks[c].trimStart().startsWith('```');
-            const isLast = c === chunks.length - 1;
-            // Last chunk is partial if: it's the last one, the segment
-            // isn't complete (more content may arrive), and it doesn't
-            // end with a newline (no boundary detected by the parser).
-            const isPartial = isLast && !completeRef.current && !chunks[c].endsWith('\n');
-            buffer.push({ content: chunks[c], isCodeBlock, isPartial });
-            totalChunksPushed++;
-          }
-
-          // Detect held-back code fence: parseTextChunks consumed less
-          // than the full content because a code fence is waiting for
-          // its closing ```. Signal the buffer to attenuate speed.
-          const totalChunkedChars = chunks.reduce((sum, c) => sum + c.length, 0);
-          buffer.setPendingBlock(totalChunkedChars < content.length);
-
-          lastParsedLen = content.length;
-        }
-
-        if (buffer.hasNext()) {
-          // ── CHUNK BOUNDARY: pressure check ──
-          // This is the ONLY place pressure affects text rendering.
-          const p = getTimingProfile();
-          if (p.instantReveal && contentRef.current.length > 0) {
-            break;
-          }
-
-          const chunk = buffer.next();
-          if (chunk) {
-            // Speed: buffer's own lookahead decides. NOT pressure.
-            // If next chunk is buffered → FAST. If not → SLOW.
-            const speedMs = buffer.getSpeedMs();
-            const batchSize = speedMs <= 1 ? 5 : 1;
-
-            // Type entire chunk to completion. No interruption.
-            await typeText(chunk.content, speedMs, batchSize, (text) => {
-              cursorRef.current += text.length;
-              setDisplayedContent(contentRef.current.slice(0, cursorRef.current));
-            }, cancelRef);
-
-            // Pause AFTER this chunk — but only if the buffer is empty.
-            // If the next paragraph is already cached, go straight to it.
-            // The pause is the "breathe" between paragraphs. When we're
-            // keeping up, it feels natural. When we're behind, skipping
-            // it lets us catch up without compressing within-chunk speed.
-            if (!buffer.hasNext() && !cancelRef.current) {
-              const pause = getTimingProfile().interChunkPause;
-              if (pause > 0) await sleep(pause);
-            }
-          }
-        } else {
-          // Buffer empty — wait for more content or exit
-          await sleep(30);
-          if (cursorRef.current >= contentRef.current.length && contentRef.current.length > 0) {
-            break;
-          }
-          // FLUSH STALL FIX:
-          // parseTextChunks holds back trailing content without a boundary.
-          // If the segment is complete (turn_end fired, no more tokens) and
-          // the buffer is empty but untyped content remains, force-break.
-          //
-          // KNOWN PAST BUG (DO NOT REINTRODUCE):
-          // Without this, the text typing loop spins forever when the last
-          // text segment has trailing content without a paragraph boundary.
-          if (completeRef.current && cursorRef.current < contentRef.current.length) {
-            break;
-          }
-        }
-      }
-
-      setDisplayedContent(contentRef.current);
-      setTyping(false);
-      const segPause = getTimingProfile().interSegmentPause;
-      if (segPause > 0) await sleep(segPause);
-      onDone(index);
-    };
-
-    animate();
     return () => { cancelRef.current = true; };
   }, []);
-
-  // Inject cursor INSIDE the markdown structure so it renders inline with text.
-  // A marker is placed in the raw text before parsing — markdown wraps it
-  // into the same element as surrounding content. Then we swap it for the
-  // real cursor span in the HTML output.
-  const raw = displayedContent || '';
-  const html = typing
-    ? markdownToHtml(raw + CURSOR_MARKER).replace(
-        CURSOR_MARKER,
-        '<span class="typing-cursor">&#x2588;</span>'
-      )
-    : markdownToHtml(raw);
 
   return (
     <div
       className="message-assistant-content streaming"
-      dangerouslySetInnerHTML={{ __html: html }}
+      dangerouslySetInnerHTML={{ __html: displayedHtml }}
     />
   );
 }
@@ -491,6 +368,9 @@ function LiveToolSegment({ segment, index, skipShimmer, skipAnimation, getTiming
       }
       const revealProfile = getTimingProfile();
       await reveal.run(contentRef, setDisplayedContent, cancelRef, completeRef, {
+        speedFast: revealProfile.speedFast,
+        speedSlow: revealProfile.speedSlow,
+        batchSizeFast: revealProfile.batchSizeFast,
         interChunkPause: revealProfile.interChunkPause,
         instantReveal: revealProfile.instantReveal,
       });
@@ -544,52 +424,3 @@ function LiveToolSegment({ segment, index, skipShimmer, skipAnimation, getTiming
   );
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// SHARED HELPERS
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-/**
- * Marker injected into raw text BEFORE markdown parsing.
- * Markdown wraps it into the same inline/block element as surrounding text.
- * After parsing, we replace it with the actual cursor span — so the cursor
- * lives inside the HTML structure, not appended after closing tags.
- */
-const CURSOR_MARKER = '\u200BCURSOR\u200B';
-
-const CURSOR_HTML = '<span class="typing-cursor">&#x2588;</span>';
-
-/**
- * Inject cursor inside the last HTML element for tool segments.
- * If no closing tags exist (flat escaped text), just appends.
- * If closing tags exist, injects before the last one so the cursor
- * renders inline with the final content line.
- */
-function injectCursor(html: string): string {
-  const lastClose = html.lastIndexOf('</');
-  if (lastClose === -1) return html + CURSOR_HTML;
-  return html.slice(0, lastClose) + CURSOR_HTML + html.slice(lastClose);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function typeText(
-  text: string,
-  msPerChar: number,
-  batchSize: number,
-  onProgress: (typed: string) => void,
-  cancelRef: React.MutableRefObject<boolean>,
-): Promise<void> {
-  let i = 0;
-
-  while (i < text.length && !cancelRef.current) {
-    const end = Math.min(i + batchSize, text.length);
-    const batch = text.slice(i, end);
-    onProgress(batch);
-    i = end;
-    if (i < text.length) {
-      await sleep(msPerChar);
-    }
-  }
-}

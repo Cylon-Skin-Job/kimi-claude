@@ -1,24 +1,16 @@
 /**
  * Text Module — entry point.
  *
- * Re-exports chunk boundary detection, buffer, HTML utils, and sub-renderers.
- * The sub-renderers are ordered by specificity: code fence > header > list > paragraph.
+ * Exports: parseTextChunks (cursor-forward block parser), renderTextInstant,
+ * chunk buffer, and HTML utilities for progressive reveal.
+ *
+ * Sub-renderers are ordered by specificity: code fence > header > list > paragraph.
  * The dispatcher tries each in order; paragraph is the fallback.
  */
 
-export { getTextChunkBoundary, getCodeChunkBoundary, getCodeCommentBoundary, formattingIsBalanced } from './chunk-boundary';
 export { createChunkBuffer } from './chunk-buffer';
 export type { ChunkBuffer, RenderedChunk } from './chunk-buffer';
-export { SPEED_FAST, SPEED_SLOW, computeSpeed, speedToMs } from './speed-attenuator';
-export type { QueueItem, AttenuatorOptions } from './speed-attenuator';
 export { truncateHtmlToChars, getVisibleTextLength } from './html-utils';
-
-// Sub-type renderers (ordered by match specificity)
-export { codeFenceRenderer } from './renderers/code-fence';
-export { headerRenderer } from './renderers/header';
-export { listRenderer } from './renderers/list';
-export { paragraphRenderer } from './renderers/paragraph';
-export type { TextSubRenderer } from './renderers/types';
 
 import { codeFenceRenderer } from './renderers/code-fence';
 import { headerRenderer } from './renderers/header';
@@ -41,7 +33,7 @@ const SUB_RENDERERS: TextSubRenderer[] = [
 /**
  * Identify which sub-renderer handles the content at the given position.
  */
-export function getTextSubRenderer(content: string, fromIndex: number): TextSubRenderer {
+function getTextSubRenderer(content: string, fromIndex: number): TextSubRenderer {
   for (const renderer of SUB_RENDERERS) {
     if (renderer.matches(content, fromIndex)) {
       return renderer;
@@ -50,79 +42,148 @@ export function getTextSubRenderer(content: string, fromIndex: number): TextSubR
   return paragraphRenderer;
 }
 
+// ── ParsedBlock: what parseTextChunks returns ────────────────────────
+
+export interface ParsedBlock {
+  /** Raw markdown for this block (used for buffer metadata + cursor advancement) */
+  content: string;
+  /** Pre-rendered HTML via the sub-renderer that matched this block */
+  html: string;
+  /** True if this block starts with ``` (code fence) */
+  isCodeBlock: boolean;
+  /** True if no boundary was found — block is still streaming */
+  isPartial: boolean;
+}
+
+export interface ParseResult {
+  /** Parsed blocks with pre-rendered HTML */
+  blocks: ParsedBlock[];
+  /** How far into the content string we consumed (byte position) */
+  consumed: number;
+}
+
 /** Stall threshold — force a chunk break after this many chars with no boundary */
 const STALL_THRESHOLD = 500;
 
 /**
- * Parse streaming text content into chunks using type-specific sub-renderers.
- * Replaces the old monolithic markdownRenderer.parseChunks().
+ * Parse streaming text content into blocks, starting from a cursor position.
  *
- * Each chunk corresponds to one sub-block (paragraph, header, code fence, list).
- * Includes a 500-char stall safety to prevent infinite waits on long unbroken text.
+ * Each block is one semantic sub-unit (paragraph, header, code fence, list).
+ * Blocks carry pre-rendered HTML from their matched sub-renderer.
+ *
+ * Cursor-forward: pass `fromIndex` to parse only untyped content.
+ * No re-parsing of already-typed content. No cursor drift.
+ *
+ * @param content   Full content string (grows as tokens stream in)
+ * @param fromIndex Byte position to start parsing from (default 0)
+ * @param isComplete True when the segment is done streaming — last block is NOT partial
+ * @returns { blocks, consumed } — blocks to type + how far we got
  */
-export function parseTextChunks(content: string): string[] {
-  const chunks: string[] = [];
-  let fromIndex = 0;
+export function parseTextChunks(
+  content: string,
+  fromIndex: number = 0,
+  isComplete: boolean = false,
+): ParseResult {
+  const blocks: ParsedBlock[] = [];
+  let cursor = fromIndex;
 
-  while (fromIndex < content.length) {
-    const renderer = getTextSubRenderer(content, fromIndex);
-    const boundary = renderer.findBoundary(content, fromIndex);
+  while (cursor < content.length) {
+    const renderer = getTextSubRenderer(content, cursor);
+    const boundary = renderer.findBoundary(content, cursor);
 
-    if (boundary > fromIndex) {
-      chunks.push(content.slice(fromIndex, boundary));
-      fromIndex = boundary;
+    if (boundary > cursor) {
+      // Complete block — boundary found.
+      const raw = content.slice(cursor, boundary);
+      blocks.push({
+        content: raw,
+        html: renderer.toHtml(raw),
+        isCodeBlock: codeFenceRenderer.matches(content, cursor),
+        isPartial: false,
+      });
+      cursor = boundary;
     } else {
       // No complete boundary yet.
       //
       // CODE FENCES: Wait for the closing ```. Do NOT push partial
       // content. The code block is one atomic unit — we don't type
-      // it until it's complete. The cursor blinks at the paragraph
-      // boundary while the code block streams in. When the closing
-      // ``` arrives, the full fence is produced as one chunk.
-      //
-      // This also prevents cursor drift: a partial code fence pushed
-      // now would have a different length when the closing tag arrives,
-      // causing the index-based tracking to lose characters.
-      const isCodeFence = codeFenceRenderer.matches(content, fromIndex);
-      if (isCodeFence) {
-        // Don't push anything — wait for the closing ```
+      // it until it's complete. The cursor blinks at the previous
+      // block boundary while the code block streams in.
+      if (codeFenceRenderer.matches(content, cursor)) {
+        // If the segment is complete and this is the last content,
+        // render the incomplete fence as-is (it won't get a closing tag).
+        if (isComplete) {
+          const raw = content.slice(cursor);
+          blocks.push({
+            content: raw,
+            html: renderer.toHtml(raw),
+            isCodeBlock: true,
+            isPartial: false,
+          });
+          cursor = content.length;
+        }
+        // Otherwise wait — don't push anything.
         break;
       }
 
-      // Other block types (paragraphs, lists): push partial content
-      // so the user sees text appearing as it streams.
-      const pending = content.length - fromIndex;
-      if (pending >= STALL_THRESHOLD) {
+      // Other block types: push partial content so the user sees
+      // text appearing as it streams.
+      const pending = content.length - cursor;
+
+      if (isComplete) {
+        // Segment is done — everything remaining is final.
+        const raw = content.slice(cursor);
+        blocks.push({
+          content: raw,
+          html: renderer.toHtml(raw),
+          isCodeBlock: false,
+          isPartial: false,
+        });
+        cursor = content.length;
+      } else if (pending >= STALL_THRESHOLD) {
         // Force break at last balanced whitespace
-        const beforeStall = fromIndex;
-        for (let i = content.length; i > fromIndex; i--) {
+        const beforeStall = cursor;
+        for (let i = content.length; i > cursor; i--) {
           const ch = content[i - 1];
           if (ch === ' ' || ch === '\n') {
-            if (isBalanced(content.slice(fromIndex, i))) {
-              chunks.push(content.slice(fromIndex, i));
-              fromIndex = i;
+            if (isBalanced(content.slice(cursor, i))) {
+              const raw = content.slice(cursor, i);
+              blocks.push({
+                content: raw,
+                html: renderer.toHtml(raw),
+                isCodeBlock: false,
+                isPartial: true,
+              });
+              cursor = i;
               break;
             }
           }
         }
-        // If no safe break found, take everything to prevent infinite loop
-        if (fromIndex === beforeStall) {
-          chunks.push(content.slice(fromIndex));
-          fromIndex = content.length;
+        // If no safe break found, take everything
+        if (cursor === beforeStall) {
+          const raw = content.slice(cursor);
+          blocks.push({
+            content: raw,
+            html: renderer.toHtml(raw),
+            isCodeBlock: false,
+            isPartial: true,
+          });
+          cursor = content.length;
         }
       } else {
-        // Not enough content yet — take what we have as a partial chunk
-        chunks.push(content.slice(fromIndex));
-        break;
+        // Not enough content yet — push as partial
+        const raw = content.slice(cursor);
+        blocks.push({
+          content: raw,
+          html: renderer.toHtml(raw),
+          isCodeBlock: false,
+          isPartial: true,
+        });
+        cursor = content.length;
       }
     }
   }
 
-  if (chunks.length === 0 && content.length > 0) {
-    chunks.push(content);
-  }
-
-  return chunks;
+  return { blocks, consumed: cursor };
 }
 
 /**

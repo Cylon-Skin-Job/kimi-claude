@@ -12,7 +12,6 @@ import { computeSpeed, speedToMs, type AttenuatorOptions } from './speed-attenua
 
 export interface RenderedChunk {
   content: string;
-  isFinal?: boolean;
   /** Code blocks don't count as lookahead for speed decisions. */
   isCodeBlock?: boolean;
   /** Partial chunks (still streaming, no boundary yet) don't count as lookahead. */
