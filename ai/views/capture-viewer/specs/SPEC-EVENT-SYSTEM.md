@@ -54,7 +54,7 @@ name: source-file-change
 type: file-change
 events: [modify, create, delete]
 match: "kimi-ide-server/lib/**/*.js"
-exclude: ["ai/panels/capture/**"]
+exclude: ["ai/views/capture-viewer/**"]
 condition: "fileStats.tokens > 500"
 prompt: WORKFLOW.md
 script: ai/scripts/check-sources.js

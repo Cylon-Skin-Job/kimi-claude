@@ -113,7 +113,7 @@ tools:
     - git_log
     - git_diff
   restricted:
-    write_file: ["ai/wiki-data/project/**", "ai/panels/wiki-viewer/runs/**"]
+    write_file: ["ai/wiki-data/project/**", "ai/views/wiki-viewer/runs/**"]
     edit_file: ["ai/wiki-data/project/**"]
   denied:
     - shell_exec

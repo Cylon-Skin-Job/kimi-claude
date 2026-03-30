@@ -49,8 +49,8 @@ class ThreadManager {
    */
   _getViewsDir() {
     if (!this.projectRoot) return null;
-    // Map panelId to workspace: 'code-viewer' → 'code-viewer', 'agent:foo' → 'agents'
-    const workspace = this.panelId.startsWith('agent:') ? 'agents' : this.panelId;
+    // Map panelId to workspace: 'code-viewer' → 'code-viewer', 'agent:foo' → 'agents-viewer'
+    const workspace = this.panelId.startsWith('agent:') ? 'agents-viewer' : this.panelId;
     return path.join(this.projectRoot, 'ai', 'views', workspace, 'chat', 'threads', getUsername());
   }
 
@@ -60,7 +60,7 @@ class ThreadManager {
    */
   async _ensureThreadsIndex() {
     if (!this.projectRoot) return;
-    const workspace = this.panelId.startsWith('agent:') ? 'agents' : this.panelId;
+    const workspace = this.panelId.startsWith('agent:') ? 'agents-viewer' : this.panelId;
     const threadsDir = path.join(this.projectRoot, 'ai', 'views', workspace, 'chat', 'threads');
     const indexPath = path.join(threadsDir, 'index.json');
     const fs = require('fs').promises;

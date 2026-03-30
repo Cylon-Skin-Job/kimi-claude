@@ -4,3 +4,5 @@
 Source: conversation
 Changed: Created design spec from discussion about making file-explorer, wiki, JSON viewer into declarative capabilities any view can compose
 By: Claude (IDE)
+
+## 2026-03-30 — Updated

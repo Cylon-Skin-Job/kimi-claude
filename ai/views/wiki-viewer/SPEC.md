@@ -12,15 +12,15 @@ Each run folder freezes the PROMPT.md and WORKFLOW.md that were active at run ti
 
 Wiki pages sync to GitLab for a browser-readable UI, but the local folders are the source of truth.
 
-This panel follows the universal panel agent model defined in `ai/panels/capture/specs/PANEL-AGENT-SPEC.md`.
+This panel follows the universal panel agent model defined in `ai/views/capture-viewer/specs/PANEL-AGENT-SPEC.md`.
 
 ---
 
 ## Folder Structure
 
 ```
-ai/panels/wiki/
-├── PROMPT.md                ← agent identity (see ai/panels/capture/specs/PANEL-AGENT-SPEC.md)
+ai/views/wiki-viewer/
+├── PROMPT.md                ← agent identity (see ai/views/capture-viewer/specs/PANEL-AGENT-SPEC.md)
 ├── TOOLS.md                 ← agent capabilities
 ├── WORKFLOW.md              ← agent process rules (injected on every write)
 ├── SPEC.md                  ← this file
@@ -251,7 +251,7 @@ One agent for the entire wiki panel. Not one per topic.
 
 ```
 Reads:   entire project (code, git history, other panel threads, other wikis)
-Writes:  only within ai/panels/wiki/ and ai/STATE.md
+Writes:  only within ai/views/wiki-viewer/ and ai/STATE.md
 ```
 
 ### Session Lifecycle
@@ -338,18 +338,18 @@ Only `PAGE.md` files. `LOG.md`, `.slug`, manifests, index.json, and agent files 
 
 1. Create the folder:
    ```bash
-   mkdir -p ai/panels/wiki/{topic-name}
+   mkdir -p ai/views/wiki-viewer/{topic-name}
    ```
 
 2. Create the two files:
    ```bash
-   touch ai/panels/wiki/{topic-name}/PAGE.md
-   echo "# Change Log" > ai/panels/wiki/{topic-name}/LOG.md
+   touch ai/views/wiki-viewer/{topic-name}/PAGE.md
+   echo "# Change Log" > ai/views/wiki-viewer/{topic-name}/LOG.md
    ```
 
 3. (Optional) Add `.slug` if auto-titlecase is wrong:
    ```bash
-   echo "CustomSlug" > ai/panels/wiki/{topic-name}/.slug
+   echo "CustomSlug" > ai/views/wiki-viewer/{topic-name}/.slug
    ```
 
 4. Write the page content in `PAGE.md`
@@ -369,7 +369,7 @@ The wiki agent routinely reads from other panels and project locations:
 
 | Source | What it reads | Why |
 |--------|--------------|-----|
-| `ai/panels/explorer/threads/` | Recent coding conversations | Capture decisions made during development |
+| `ai/views/code-viewer/threads/` | Recent coding conversations | Capture decisions made during development |
 | `kimi-ide-server/lib/` | Source code | Verify wiki accuracy against implementation |
 | `git log` | Recent commits | Detect what changed since last wiki update |
 | `ai/STATE.md` | Cross-panel activity | Know what other panels did recently |
@@ -384,7 +384,7 @@ This is read-only. The wiki agent writes only within its panel and to ai/STATE.m
 The wiki panel is **Layer 3** in the progressive disclosure model:
 
 ```
-Layer 1: CLAUDE.md        → "a wiki exists at ai/panels/wiki/"
+Layer 1: CLAUDE.md        → "a wiki exists at ai/views/wiki-viewer/"
 Layer 2: Skills           → "check wiki/secrets for auth details"
 Layer 3: Wiki (PAGE.md)   → full documentation, living truth
 Layer 4: Upstream docs    → external references linked from PAGE.md
@@ -446,7 +446,7 @@ Publishing should be deliberate. The agent writes locally. A human (or orchestra
 
 When the kimi-claude IDE opens a new project:
 
-1. Create `ai/panels/wiki/` in the project
+1. Create `ai/views/wiki-viewer/` in the project
 2. Clone the project's `.wiki.git` repo into `.wiki-repo/`
 3. Add PROMPT.md, TOOLS.md, WORKFLOW.md, panel.json (copy from template)
 4. Create `home/PAGE.md` with project overview

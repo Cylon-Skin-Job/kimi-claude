@@ -18,7 +18,7 @@ Chat is not a standalone workspace — it attaches to workspaces. Every workspac
 A `chat/` folder anywhere defines chat behavior. The folder contains:
 
 ```
-ai/panels/{workspace}/chat/
+ai/views/{workspace}/chat/
   chat.json              ← chat type config
   MEMORY.md              ← persistent memory (agent can write)
   TRIGGERS.md            ← chat-specific triggers (agent can write)

@@ -59,8 +59,8 @@ Spawn a sub-agent to check what happened today that the wiki might need to refle
 Instruct it to:
 - Run git log for today's date — what files changed?
 - Read ai/STATE.md for cross-panel activity
-- Check ai/panels/issues/done/ for tickets closed today — what work was completed?
-- Check ai/panels/explorer/threads/ for today's chat sessions — were architectural decisions made?
+- Check ai/views/issues-viewer/done/ for tickets closed today — what work was completed?
+- Check ai/views/code-viewer/chat/threads/ for today's chat sessions — were architectural decisions made?
 - Cross-reference: for each significant change or decision, is there a wiki topic that should mention it?
 - Return: list of changes/decisions not yet reflected in the wiki
 

@@ -19,7 +19,7 @@ kimi-claude/
 
 ## How It Works
 
-1. Tickets are created in `ai/panels/issues/` and tracked in `issues/index.json`
+1. Tickets are created in `ai/views/issues-viewer/` and tracked in `tickets.json`
 2. When a ticket is assigned to a bot name (e.g., `kimi-wiki`), the dispatch watcher fires
 3. The runner looks up the bot name in `registry.json` → finds the agent folder
 4. The runner spawns an orchestrator from the agent's `prompt.md` with the ticket as context
@@ -48,9 +48,9 @@ agents/{agent-id}/
 
 ## Key Resources
 
-- **Wiki:** `ai/panels/wiki/` — browse topics via `index.json`, read `{topic}/PAGE.md`
-- **Tickets:** `ai/panels/issues/` — board state via `index.json`, individual tickets as `KIMI-NNNN.md`
-- **Cross-panel state:** `ai/STATE.md` — recent activity from all panels
+- **Wiki:** `ai/wiki-data/` — browse topics via `topics.json`, read `{collection}/{topic}/PAGE.md`
+- **Tickets:** `ai/views/issues-viewer/` — board state via `tickets.json`, individual tickets as `KIMI-NNNN.md`
+- **Cross-panel state:** `ai/STATE.md` — recent activity from all views
 - **Secrets:** macOS Keychain, account `kimi-ide` — access via `security find-generic-password -a "kimi-ide" -s "KEY_NAME" -w`
 
 ## Rules

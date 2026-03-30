@@ -80,7 +80,7 @@ Each view's `index.json` gains a `capabilities` array:
   "capabilities": [
     {
       "type": "agent-tiles",
-      "source": "ai/panels/agents/",
+      "source": "ai/views/agents-viewer/",
       "placement": "main"
     },
     {
@@ -242,11 +242,11 @@ Add `json-viewer` as a new capability type. Any view can declare it. No server c
 
 ## What This Does NOT Change
 
-- `ai/panels/` folder structure — views still live here
+- `ai/views/` folder structure — views still live here
 - `ai/wiki-data/` — wiki data still lives here
 - WebSocket protocol — same message types, maybe add `source` field
 - Thread management — still per-view
-- Agent runner — still reads from `ai/panels/agents/`
+- Agent runner — still reads from `ai/views/agents-viewer/`
 
 ---
 

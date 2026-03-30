@@ -36,8 +36,8 @@ Fix bugs, rename files, expand SESSION.md, populate triggers. No new features �
 - `kimi-ide-client/src/state/agentStore.ts` — AGENT_CONFIG_FILES array
 - `kimi-ide-client/src/components/agents/AgentTiles.tsx` — FILE_ICONS map
 - `kimi-ide-client/src/components/agents/PromptCardView.tsx` — configNames filter
-- `ai/panels/agents/System/*/SESSION.md` — 3 agent session configs
-- `ai/panels/agents/System/*/PROMPT.md` — 3 files to rename
+- `ai/views/agents-viewer/System/*/SESSION.md` — 3 agent session configs
+- `ai/views/agents-viewer/System/*/PROMPT.md` — 3 files to rename
 
 ---
 
@@ -77,16 +77,16 @@ Tool segments using line-break parser won't emit a chunk until `\n` arrives. Slo
 
 | File | Line | Change |
 |------|------|--------|
-| `ai/panels/agents/System/code-manager/SESSION.md` | 5 | `system-context: ["PROMPT.md", "MEMORY.md"]` |
-| `ai/panels/agents/System/ops-manager/SESSION.md` | 5 | `system-context: ["PROMPT.md", "MEMORY.md"]` |
-| `ai/panels/agents/System/wiki-manager/SESSION.md` | 5 | `system-context: ["PROMPT.md", "MEMORY.md"]` |
+| `ai/views/agents-viewer/System/code-manager/SESSION.md` | 5 | `system-context: ["PROMPT.md", "MEMORY.md"]` |
+| `ai/views/agents-viewer/System/ops-manager/SESSION.md` | 5 | `system-context: ["PROMPT.md", "MEMORY.md"]` |
+| `ai/views/agents-viewer/System/wiki-manager/SESSION.md` | 5 | `system-context: ["PROMPT.md", "MEMORY.md"]` |
 
 ### File Renames (3 files)
 
 ```bash
-mv ai/panels/agents/System/code-manager/PROMPT.md ai/panels/agents/System/code-manager/PROMPT.md
-mv ai/panels/agents/System/ops-manager/PROMPT.md ai/panels/agents/System/ops-manager/PROMPT.md
-mv ai/panels/agents/System/wiki-manager/PROMPT.md ai/panels/agents/System/wiki-manager/PROMPT.md
+mv ai/views/agents-viewer/System/code-manager/PROMPT.md ai/views/agents-viewer/System/code-manager/PROMPT.md
+mv ai/views/agents-viewer/System/ops-manager/PROMPT.md ai/views/agents-viewer/System/ops-manager/PROMPT.md
+mv ai/views/agents-viewer/System/wiki-manager/PROMPT.md ai/views/agents-viewer/System/wiki-manager/PROMPT.md
 ```
 
 ### Wiki Page Updates (10 references across 3 files)
@@ -136,7 +136,7 @@ endpoint: https://api.anthropic.com/v1/messages
 tools:
   allowed: [read_file, glob, grep, git_log, git_diff, git_show, list_directory, todo_read, todo_write]
   restricted:
-    write_file: ["ai/wiki-data/project/**", "ai/panels/wiki-viewer/runs/**"]
+    write_file: ["ai/wiki-data/project/**", "ai/views/wiki-viewer/runs/**"]
     edit_file: ["ai/wiki-data/project/**"]
   denied: [shell_exec, git_commit, git_push]
 
@@ -162,7 +162,7 @@ db:
    - [ ] ops-manager: define appropriate read/write scope
 
 3. **Delete standalone TOOLS.md**:
-   - [ ] Remove `ai/panels/wiki-viewer/TOOLS.md` (content now in SESSION.md)
+   - [ ] Remove `ai/views/wiki-viewer/TOOLS.md` (content now in SESSION.md)
 
 4. **Verification**:
    - [ ] `parseSessionConfig()` returns all new fields
@@ -183,7 +183,7 @@ name: source-file-change
 type: file-change
 events: [modify, create, delete]
 match: "kimi-ide-server/lib/**/*.js"
-exclude: ["ai/panels/**"]
+exclude: ["ai/views/**"]
 prompt: PROMPT.md
 message: |
   Server source changed: {{filePath}} ({{event}})

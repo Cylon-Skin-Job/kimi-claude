@@ -459,7 +459,7 @@ ChatFile continues writing markdown to the repo. Output path changes.
 
 ### Current Path
 ```
-ai/panels/{workspace}/threads/{threadId}/CHAT.md
+ai/views/{workspace}/threads/{threadId}/CHAT.md
 ```
 
 ### New Path

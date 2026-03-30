@@ -47,7 +47,7 @@ The capture workspace renders documents, screenshots, specs, and files as tile r
 ## Folder Structure
 
 ```
-ai/panels/capture/
+ai/views/capture-viewer/
   ├── captures/
   ├── screenshots/     ← symlink to ~/Desktop/Screenshots/
   ├── specs/

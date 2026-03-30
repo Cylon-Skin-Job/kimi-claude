@@ -5,7 +5,7 @@ name: source-file-change
 type: file-change
 events: [modify, create, delete]
 match: "kimi-ide-server/lib/**/*.js"
-exclude: ["ai/panels/capture/**"]
+exclude: ["ai/views/capture-viewer/**"]
 prompt: PROMPT_01.md
 message: |
   Source file changed: {{filePath}} ({{event}})

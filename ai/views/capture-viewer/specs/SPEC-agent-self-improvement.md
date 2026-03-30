@@ -18,7 +18,7 @@ Agents improve over time through self-editable knowledge files (MEMORY.md, LESSO
 ## Agent Folder Structure
 
 ```
-ai/panels/agents/System/{agent-name}/
+ai/views/agents-viewer/System/{agent-name}/
 ├── PROMPT.md              ← identity — LOCKED
 ├── SESSION.md             ← config/permissions — LOCKED
 ├── MEMORY.md              ← user intent, shaping (rolling cache)

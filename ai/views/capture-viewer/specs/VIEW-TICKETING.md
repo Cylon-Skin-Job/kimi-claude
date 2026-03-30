@@ -218,7 +218,7 @@ The sync system checks `visibility` before pushing. Local tickets stay local. Pu
 ## Folder Structure
 
 ```
-ai/panels/issues/
+ai/views/issues-viewer/
   ├── index.json             ← view config, defaults, state
   ├── sync.json              ← last sync timestamp, ID counter, bot accounts
   ├── tickets.json           ← index of all tickets
