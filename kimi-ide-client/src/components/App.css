@@ -183,6 +183,7 @@
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.2s ease;
+  min-height: 0; /* children must not blow out the grid */
 }
 
 .panel.active {
@@ -198,6 +199,7 @@
   flex-direction: column;
   padding: 16px;
   overflow: hidden;
+  min-height: 0; /* prevent grid blowout */
 }
 
 .sidebar-header {
@@ -238,6 +240,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0; /* prevent grid blowout */
 }
 
 .chat-messages {
@@ -254,7 +257,10 @@
   background: var(--bg-solid);
   padding: 24px;
   overflow-y: auto;
+  min-height: 0; /* prevent grid blowout */
 }
+
+/* Content area in full layout gets no padding (explorer/viewer fills it) */
 
 /* Layout classes — driven by index.json "layout" field */
 .layout-full {

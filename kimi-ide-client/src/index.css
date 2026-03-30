@@ -66,6 +66,12 @@ body {
   line-height: 1.6;
 }
 
+/* Streaming variant — applied by LiveSegmentRenderer during live typing.
+   Ensures min-height so the container doesn't collapse before content arrives. */
+.message-assistant-content.streaming {
+  min-height: 1.6em;
+}
+
 .message-assistant-content h1,
 .message-assistant-content h2,
 .message-assistant-content h3,
@@ -121,8 +127,9 @@ body {
   padding: 8px;
 }
 
-/* Chat list styles */
-.chat-list {
+/* Chat/thread list styles */
+.chat-list,
+.thread-list {
   flex: 1;
   overflow-y: auto;
 }
