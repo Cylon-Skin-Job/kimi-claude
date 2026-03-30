@@ -83,7 +83,7 @@ function releaseClaim(issuesDir, ticket) {
 }
 
 function loadRegistry(projectRoot) {
-  const registryPath = path.join(projectRoot, 'ai', 'panels', 'agents', 'registry.json');
+  const registryPath = path.join(projectRoot, 'ai', 'views', 'agents-viewer', 'registry.json');
   try {
     return JSON.parse(fs.readFileSync(registryPath, 'utf8'));
   } catch {
@@ -157,7 +157,7 @@ function dispatch(ticket, registry) {
 }
 
 function startDispatchWatcher(projectRoot) {
-  const issuesDir = path.join(projectRoot, 'ai', 'panels', 'issues');
+  const issuesDir = path.join(projectRoot, 'ai', 'views', 'issues-viewer');
 
   if (!fs.existsSync(issuesDir)) {
     console.error(`Issues directory not found: ${issuesDir}`);

@@ -82,7 +82,7 @@ app.get('/api/panel-file/:panel/{*filePath}', (req, res) => {
   const panel = req.params.panel;
   const rawPath = req.params.filePath;
   const filePath = Array.isArray(rawPath) ? rawPath.join('/') : rawPath;
-  const dirPath = path.join(getDefaultProjectRoot(), 'ai', 'panels', panel, path.dirname(filePath));
+  const dirPath = path.join(getDefaultProjectRoot(), 'ai', 'views', panel, path.dirname(filePath));
   const fileName = path.basename(filePath);
 
   try {
@@ -154,8 +154,8 @@ function getDefaultProjectRoot() {
 // AI panels path for thread storage
 // Relative to PROJECT ROOT (not server directory)
 // This allows the IDE to work with any project, not just kimi-claude
-const AI_PANELS_PATH = path.join(getDefaultProjectRoot(), 'ai', 'panels');
-console.log(`[Server] AI panels path: ${AI_PANELS_PATH}`);
+const AI_PANELS_PATH = path.join(getDefaultProjectRoot(), 'ai', 'views');
+console.log(`[Server] AI views path: ${AI_PANELS_PATH}`);
 
 // ============================================================================
 // File Explorer Functions (unchanged from original)
@@ -557,9 +557,9 @@ wss.on('connection', (ws) => {
   sessions.set(ws, session);
   
   // Set up code panel for thread management
-  // Must match frontend panel ID ('explorer')
-  ThreadWebSocketHandler.setPanel(ws, 'explorer', {
-    panelPath: path.join(AI_PANELS_PATH, 'explorer'),
+  // Must match frontend panel ID ('explorer-viewer')
+  ThreadWebSocketHandler.setPanel(ws, 'explorer-viewer', {
+    panelPath: path.join(AI_PANELS_PATH, 'explorer-viewer'),
     projectRoot: getDefaultProjectRoot(),
   });
 
@@ -979,7 +979,7 @@ wss.on('connection', (ws) => {
         }
 
         const { parseSessionConfig, buildSystemContext, checkSessionInvalidation, getStrategy } = require('./lib/session/session-loader');
-        const agentFolderPath = path.join(AI_PANELS_PATH, 'agents', agentPath);
+        const agentFolderPath = path.join(AI_PANELS_PATH, 'agents-viewer', agentPath);
 
         // Load SESSION.md config
         const config = parseSessionConfig(agentFolderPath);
@@ -1049,7 +1049,7 @@ wss.on('connection', (ws) => {
         initializeWire(session.wire);
 
         // Track agent wire session for notifications
-        const registry = JSON.parse(fs.readFileSync(path.join(AI_PANELS_PATH, 'agents', 'registry.json'), 'utf8'));
+        const registry = JSON.parse(fs.readFileSync(path.join(AI_PANELS_PATH, 'agents-viewer', 'registry.json'), 'utf8'));
         for (const [botName, agent] of Object.entries(registry.agents || {})) {
           if (agent.folder === agentPath) {
             agentWireSessions.set(botName, session.wire);
@@ -1302,11 +1302,11 @@ function startServer() {
     const { createWatcher } = require('./lib/watcher');
     const { loadFilters } = require('./lib/watcher/filter-loader');
     const { createActionHandlers } = require('./lib/watcher/actions');
-    const { createTicket } = require(path.join(getDefaultProjectRoot(), 'ai', 'panels', 'issues', 'scripts', 'create-ticket'));
+    const { createTicket } = require(path.join(getDefaultProjectRoot(), 'ai', 'views', 'issues-viewer', 'scripts', 'create-ticket'));
 
     // Create hold registry for auto-block timers
     const { createHoldRegistry } = require('./lib/triggers/hold-registry');
-    const issuesDir = path.join(AI_PANELS_PATH, 'issues');
+    const issuesDir = path.join(AI_PANELS_PATH, 'issues-viewer');
     const holdRegistry = global.__holdRegistry = createHoldRegistry(issuesDir);
 
     // Wrap createTicket to hook trigger-created tickets into the hold registry
@@ -1358,7 +1358,7 @@ function startServer() {
     const { createCronScheduler } = require('./lib/triggers/cron-scheduler');
     const { evaluateCondition } = require('./lib/watcher/filter-loader');
 
-    const agentsBasePath = path.join(AI_PANELS_PATH, 'agents');
+    const agentsBasePath = path.join(AI_PANELS_PATH, 'agents-viewer');
     try {
       const registry = JSON.parse(fs.readFileSync(path.join(agentsBasePath, 'registry.json'), 'utf8'));
       const { filters: triggerFilters, cronTriggers } = loadTriggers(

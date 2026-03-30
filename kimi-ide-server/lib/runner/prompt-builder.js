@@ -93,7 +93,7 @@ function parsePrompt(promptPath) {
  */
 function buildContext(projectRoot, agentFolder, runPath, ticket) {
   const agentBase = path.join(
-    projectRoot, 'ai', 'panels', 'agents', agentFolder
+    projectRoot, 'ai', 'views', 'agents-viewer', agentFolder
   );
 
   // --- System context ---

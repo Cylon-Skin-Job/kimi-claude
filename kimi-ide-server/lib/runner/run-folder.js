@@ -28,7 +28,7 @@ function makeTimestamp() {
  */
 function createRunFolder(projectRoot, agentFolder, ticket) {
   const runId = makeTimestamp();
-  const agentBase = path.join(projectRoot, 'ai', 'panels', 'agents', agentFolder);
+  const agentBase = path.join(projectRoot, 'ai', 'views', 'agents-viewer', agentFolder);
   const runPath = path.join(agentBase, 'runs', runId);
 
   // Create run directory (and runs/ parent if needed)
@@ -38,7 +38,7 @@ function createRunFolder(projectRoot, agentFolder, ticket) {
 
   // 1. ticket.md — copy from the issues panel
   const ticketSource = path.join(
-    projectRoot, 'ai', 'panels', 'issues', ticket.filename
+    projectRoot, 'ai', 'views', 'issues-viewer', ticket.filename
   );
   if (fs.existsSync(ticketSource)) {
     fs.copyFileSync(ticketSource, path.join(runPath, 'ticket.md'));
