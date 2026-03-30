@@ -182,7 +182,7 @@ function clearSessionRoot(ws) {
 
 function getPanelPath(panel, ws) {
   // explorer gets the project root (file explorer browses the whole project)
-  if (panel === 'explorer-viewer') {
+  if (panel === 'code-viewer') {
     return getSessionRoot(ws, panel);
   }
   // __panels__ pseudo-panel: resolves to ai/views/ (for discovery)
@@ -263,7 +263,7 @@ function parseExtension(filename) {
 }
 
 async function handleFileTreeRequest(ws, msg) {
-  const panel = msg.panel || 'explorer';
+  const panel = msg.panel || 'code-viewer';
   const requestPath = msg.path || '';
   const panelPath = getPanelPath(panel, ws);
 
@@ -392,7 +392,7 @@ async function handleFileTreeRequest(ws, msg) {
 }
 
 async function handleFileContentRequest(ws, msg) {
-  const panel = msg.panel || 'explorer';
+  const panel = msg.panel || 'code-viewer';
   const requestPath = msg.path || '';
   const panelPath = getPanelPath(panel, ws);
 
@@ -557,9 +557,9 @@ wss.on('connection', (ws) => {
   sessions.set(ws, session);
   
   // Set up code panel for thread management
-  // Must match frontend panel ID ('explorer-viewer')
-  ThreadWebSocketHandler.setPanel(ws, 'explorer-viewer', {
-    panelPath: path.join(AI_PANELS_PATH, 'explorer-viewer'),
+  // Must match frontend panel ID ('code-viewer')
+  ThreadWebSocketHandler.setPanel(ws, 'code-viewer', {
+    panelPath: path.join(AI_PANELS_PATH, 'code-viewer'),
     projectRoot: getDefaultProjectRoot(),
   });
 
@@ -645,7 +645,7 @@ wss.on('connection', (ws) => {
             turnId: session.currentTurn.id,
             userInput: payload?.user_input || ''
           }));
-          emit('chat:turn_begin', { workspace: 'explorer', threadId: session.currentThreadId, turnId: session.currentTurn.id, userInput: payload?.user_input || '' });
+          emit('chat:turn_begin', { workspace: 'code-viewer', threadId: session.currentThreadId, turnId: session.currentTurn.id, userInput: payload?.user_input || '' });
           break;
           
         case 'ContentPart':
@@ -668,7 +668,7 @@ wss.on('connection', (ws) => {
               text: payload.text,
               turnId: session.currentTurn.id
             }));
-            emit('chat:content', { workspace: 'explorer', threadId: session.currentThreadId, turnId: session.currentTurn.id, text: payload.text });
+            emit('chat:content', { workspace: 'code-viewer', threadId: session.currentThreadId, turnId: session.currentTurn.id, text: payload.text });
           } else if (payload?.type === 'think') {
             // Track thinking separately (not combined with text)
             const lastPart = session.assistantParts[session.assistantParts.length - 1];
@@ -685,7 +685,7 @@ wss.on('connection', (ws) => {
               text: payload.think || '',
               turnId: session.currentTurn?.id
             }));
-            emit('chat:thinking', { workspace: 'explorer', threadId: session.currentThreadId, turnId: session.currentTurn?.id, text: payload.think || '' });
+            emit('chat:thinking', { workspace: 'code-viewer', threadId: session.currentThreadId, turnId: session.currentTurn?.id, text: payload.think || '' });
           }
           break;
           
@@ -711,7 +711,7 @@ wss.on('connection', (ws) => {
             toolCallId: session.activeToolId,
             turnId: session.currentTurn?.id
           }));
-          emit('chat:tool_call', { workspace: 'explorer', threadId: session.currentThreadId, turnId: session.currentTurn?.id, toolName: payload?.function?.name || 'unknown', toolCallId: session.activeToolId });
+          emit('chat:tool_call', { workspace: 'code-viewer', threadId: session.currentThreadId, turnId: session.currentTurn?.id, toolName: payload?.function?.name || 'unknown', toolCallId: session.activeToolId });
           break;
           
         case 'ToolCallPart':
@@ -732,7 +732,7 @@ wss.on('connection', (ws) => {
           const bounce = checkSettingsBounce(toolNameForBounce, parsedArgs);
           if (bounce) {
             emit('system:tool_bounced', {
-              workspace: 'explorer',
+              workspace: 'code-viewer',
               threadId: session.currentThreadId,
               toolName: toolNameForBounce,
               filePath: parsedArgs.file_path,
@@ -774,7 +774,7 @@ wss.on('connection', (ws) => {
             isError: payload?.return_value?.is_error || false,
             turnId: session.currentTurn?.id
           }));
-          emit('chat:tool_result', { workspace: 'explorer', threadId: session.currentThreadId, turnId: session.currentTurn?.id, toolCallId, toolName: payload?.function?.name, isError: payload?.return_value?.is_error || false });
+          emit('chat:tool_result', { workspace: 'code-viewer', threadId: session.currentThreadId, turnId: session.currentTurn?.id, toolCallId, toolName: payload?.function?.name, isError: payload?.return_value?.is_error || false });
           break;
         }
           
@@ -806,7 +806,7 @@ wss.on('connection', (ws) => {
               fullText: session.currentTurn.text,
               hasToolCalls: session.hasToolCalls
             }));
-            emit('chat:turn_end', { workspace: 'explorer', threadId: session.currentThreadId, turnId: session.currentTurn.id, fullText: session.currentTurn.text, hasToolCalls: session.hasToolCalls });
+            emit('chat:turn_end', { workspace: 'code-viewer', threadId: session.currentThreadId, turnId: session.currentTurn.id, fullText: session.currentTurn.text, hasToolCalls: session.hasToolCalls });
 
             // Reset turn tracking
             session.currentTurn = null;
@@ -1265,7 +1265,7 @@ wss.on('connection', (ws) => {
   const initialProjectName = path.basename(projectRoot);
   ws.send(JSON.stringify({
     type: 'panel_config',
-    panel: 'explorer',
+    panel: 'code-viewer',
     projectRoot,
     projectName: initialProjectName
   }));

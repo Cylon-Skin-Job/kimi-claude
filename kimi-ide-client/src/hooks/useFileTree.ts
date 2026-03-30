@@ -64,7 +64,7 @@ export function useFileTreeListener() {
   // Load root tree when first connecting or reconnecting.
   // Reset lastWsRef on cleanup so strict-mode remount re-sends the request.
   useEffect(() => {
-    if (!ws || currentPanel !== 'explorer-viewer') return;
+    if (!ws || currentPanel !== 'code-viewer') return;
     if (ws === lastWsRef.current) return;
     if (ws.readyState !== WebSocket.OPEN) return;
 

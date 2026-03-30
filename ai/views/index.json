@@ -9,6 +9,13 @@
   "rank": 1,
   "sort": "ranked",
   "created": "2026-03-12T18:17:00-07:00",
-  "children": ["capture-viewer", "explorer-viewer", "terminal-viewer", "issues-viewer", "wiki-viewer", "agents-viewer"],
+  "children": [
+    "capture-viewer",
+    "code-viewer",
+    "terminal-viewer",
+    "issues-viewer",
+    "wiki-viewer",
+    "agents-viewer"
+  ],
   "settings": {}
 }

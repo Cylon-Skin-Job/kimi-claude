@@ -1,8 +1,8 @@
 {
   "version": "1.0",
-  "id": "explorer-viewer",
-  "folderName": "explorer-viewer",
-  "label": "Explorer",
+  "id": "code-viewer",
+  "folderName": "code-viewer",
+  "label": "Code",
   "description": "Primary coding assistant — write, edit, and explore source files",
   "type": "file-explorer",
   "icon": "code_blocks",

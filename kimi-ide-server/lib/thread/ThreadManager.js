@@ -18,7 +18,7 @@ const DEFAULT_CONFIG = {
 
 class ThreadManager {
   /**
-   * @param {string} panelId - Panel identifier (e.g., 'explorer', 'agent:bot-name')
+   * @param {string} panelId - Panel identifier (e.g., 'code-viewer', 'agent:bot-name')
    * @param {object} [config]
    * @param {string} [config.panelPath] - Filesystem path for legacy ChatFile fallback
    * @param {string} [config.projectRoot] - Project root for per-user views path
@@ -49,7 +49,7 @@ class ThreadManager {
    */
   _getViewsDir() {
     if (!this.projectRoot) return null;
-    // Map panelId to workspace: 'explorer' → 'explorer', 'agent:foo' → 'agents'
+    // Map panelId to workspace: 'code-viewer' → 'code-viewer', 'agent:foo' → 'agents'
     const workspace = this.panelId.startsWith('agent:') ? 'agents' : this.panelId;
     return path.join(this.projectRoot, 'ai', 'views', workspace, 'chat', 'threads', getUsername());
   }

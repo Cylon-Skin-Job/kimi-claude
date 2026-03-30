@@ -91,7 +91,7 @@ export const usePanelStore = create<AppState>((set, get) => ({
   getPanelConfig: (id) => get().panelConfigs.find((c) => c.id === id),
 
   // Initial state — empty until discovery populates
-  currentPanel: 'explorer-viewer',
+  currentPanel: 'code-viewer',
   panels: {},
   ws: null,
   contextUsage: 0,
