@@ -140,7 +140,7 @@ export function TicketBoard() {
   }, []);
 
   usePanelData({
-    panel: 'issues',
+    panel: 'issues-viewer',
     indexPath: 'tickets.json',
     onIndex,
     onError,
@@ -154,7 +154,7 @@ export function TicketBoard() {
     lastDailyWsRef.current = ws;
     ws.send(JSON.stringify({
       type: 'thread:open-daily',
-      panel: 'issues',
+      panel: 'issues-viewer',
     }));
     return () => {
       lastDailyWsRef.current = null;

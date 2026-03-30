@@ -2,7 +2,7 @@
  * Run Folder Setup — creates the run directory and freezes seed files.
  *
  * Each run lives at:
- *   {projectRoot}/ai/panels/agents/{agentFolder}/runs/{timestamp}/
+ *   {projectRoot}/ai/views/agents-viewer/{agentFolder}/runs/{timestamp}/
  */
 
 const fs = require('fs');

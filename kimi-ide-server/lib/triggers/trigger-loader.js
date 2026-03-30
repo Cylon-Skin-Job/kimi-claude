@@ -107,7 +107,7 @@ function deriveAssignee(triggersPath, projectRoot) {
 
 /**
  * Scan agent folders for TRIGGERS.md and build filters + cron triggers.
- * Also scans ai/panels/ and ai/components/ recursively for additional TRIGGERS.md files.
+ * Also scans ai/views/ and ai/components/ recursively for additional TRIGGERS.md files.
  *
  * @param {string} projectRoot - Absolute path to project root
  * @param {string} agentsBasePath - Absolute path to agents panel
@@ -140,10 +140,10 @@ function loadTriggers(projectRoot, agentsBasePath, registry, actionHandlers) {
     }
   }
 
-  // --- Pass 2: Recursive scan of ai/panels/ and ai/components/ ---
+  // --- Pass 2: Recursive scan of ai/views/ and ai/components/ ---
 
   const scanDirs = [
-    path.join(projectRoot, 'ai', 'panels'),
+    path.join(projectRoot, 'ai', 'views'),
     path.join(projectRoot, 'ai', 'components'),
   ];
 

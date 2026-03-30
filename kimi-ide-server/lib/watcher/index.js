@@ -18,9 +18,9 @@ const RENAME_WINDOW_MS = 2000;
 
 const DEFAULT_EXCLUDES = [
   'node_modules', 'dist', '.git', '.kimi',
-  'ai/panels/*/threads',
-  'ai/panels/*/runs',
-  'ai/panels/issues/done',
+  'ai/views/*/threads',
+  'ai/views/*/runs',
+  'ai/views/issues-viewer/done',
   '*.log', 'CHAT.md', 'history.json',
   'wire-debug.log', 'server-live.log',
 ];

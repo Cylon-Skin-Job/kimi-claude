@@ -91,21 +91,21 @@ function AgentDetail({ agent, request }: { agent: Agent; request: (path: string)
       if (!active) return;
       try {
         const msg = JSON.parse(event.data);
-        if (msg.type === 'file_tree_response' && msg.panel === 'agents' && msg.path === `System/${agent.id}`) {
+        if (msg.type === 'file_tree_response' && msg.panel === 'agents-viewer' && msg.path === `System/${agent.id}`) {
           const files = (msg.nodes || [])
             .filter((n: any) => n.type === 'file' && AGENT_CONFIG_FILES.includes(n.name))
             .map((n: any) => n.name)
             .sort((a: string, b: string) => AGENT_CONFIG_FILES.indexOf(a) - AGENT_CONFIG_FILES.indexOf(b));
           useAgentStore.getState().setConfigFiles(files);
         }
-        if (msg.type === 'file_tree_response' && msg.panel === 'agents' && msg.path === `System/${agent.id}/workflows`) {
+        if (msg.type === 'file_tree_response' && msg.panel === 'agents-viewer' && msg.path === `System/${agent.id}/workflows`) {
           const folders = (msg.nodes || [])
             .filter((n: any) => n.type === 'folder')
             .map((n: any) => n.name)
             .sort();
           useAgentStore.getState().setWorkflows(folders);
         }
-        if (msg.type === 'file_content_response' && msg.panel === 'agents' && msg.success) {
+        if (msg.type === 'file_content_response' && msg.panel === 'agents-viewer' && msg.success) {
           // Key by workflow folder name if it's a WORKFLOW.md, otherwise by filename
           const parts = msg.path.split('/');
           const fileName = parts[parts.length - 1];
@@ -121,8 +121,8 @@ function AgentDetail({ agent, request }: { agent: Agent; request: (path: string)
     };
 
     ws.addEventListener('message', handleMessage);
-    ws.send(JSON.stringify({ type: 'file_tree_request', panel: 'agents', path: `System/${agent.id}` }));
-    ws.send(JSON.stringify({ type: 'file_tree_request', panel: 'agents', path: `System/${agent.id}/workflows` }));
+    ws.send(JSON.stringify({ type: 'file_tree_request', panel: 'agents-viewer', path: `System/${agent.id}` }));
+    ws.send(JSON.stringify({ type: 'file_tree_request', panel: 'agents-viewer', path: `System/${agent.id}/workflows` }));
 
     return () => { active = false; ws.removeEventListener('message', handleMessage); };
   }, [agent.id, ws]);
@@ -295,7 +295,7 @@ export function AgentTiles() {
   }, []);
 
   const { request } = usePanelData({
-    panel: 'agents',
+    panel: 'agents-viewer',
     indexPath: 'agents.json',
     onIndex,
     onFileContent,

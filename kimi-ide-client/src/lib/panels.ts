@@ -1,7 +1,7 @@
 /**
  * @module panels
  * @role Shared panel discovery and config loading
- * @reads ai/panels/index.json, ai/panels/{id}/index.json
+ * @reads ai/views/index.json, ai/views/{id}/index.json
  *
  * Loads panel definitions from the repo filesystem via WebSocket.
  * Knows nothing about any specific panel type.
@@ -74,7 +74,7 @@ export function fetchPanelFile(ws: WebSocket, panel: string, filePath: string): 
 export async function loadPanelConfig(ws: WebSocket, panelId: string): Promise<PanelConfig | null> {
   try {
     // Use __panels__ pseudo-panel so the server always resolves to
-    // ai/panels/{id}/index.json — even for explorer, which has
+    // ai/views/{id}/index.json — even for explorer, which has
     // a special getPanelPath that maps to the project root.
     const raw = await fetchPanelFile(ws, '__panels__', `${panelId}/index.json`);
     const json = JSON.parse(raw);
@@ -108,7 +108,7 @@ export async function loadPanelConfig(ws: WebSocket, panelId: string): Promise<P
 }
 
 /**
- * Discover all panels by requesting the folder listing of ai/panels/.
+ * Discover all panels by requesting the folder listing of ai/views/.
  * Returns panel IDs (folder names).
  */
 export function discoverPanels(ws: WebSocket): Promise<string[]> {

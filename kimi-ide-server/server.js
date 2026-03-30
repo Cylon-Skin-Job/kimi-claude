@@ -4,7 +4,7 @@
  * This version includes persistent, named conversations with lifecycle management.
  * 
  * @see lib/thread/README.md - Thread management documentation
- * @see ../ai/panels/capture/specs/SPEC.md - Full specification
+ * @see ../ai/views/capture-viewer/specs/SPEC.md - Full specification
  */
 
 const express = require('express');
@@ -182,13 +182,13 @@ function clearSessionRoot(ws) {
 
 function getPanelPath(panel, ws) {
   // explorer gets the project root (file explorer browses the whole project)
-  if (panel === 'explorer') {
+  if (panel === 'explorer-viewer') {
     return getSessionRoot(ws, panel);
   }
-  // __panels__ pseudo-panel: resolves to ai/panels/ itself (for discovery)
+  // __panels__ pseudo-panel: resolves to ai/views/ (for discovery)
   if (panel === '__panels__') {
-    const panelsRoot = path.join(getDefaultProjectRoot(), 'ai', 'panels');
-    if (fs.existsSync(panelsRoot)) return panelsRoot;
+    const viewsRoot = path.join(getDefaultProjectRoot(), 'ai', 'views');
+    if (fs.existsSync(viewsRoot)) return viewsRoot;
     return null;
   }
   // Wiki panel resolves to ai/wiki-data/ (the unified wiki tree)
@@ -197,8 +197,8 @@ function getPanelPath(panel, ws) {
     if (fs.existsSync(wikiRoot)) return wikiRoot;
     return null;
   }
-  // All other panels resolve to their ai/panels/{id}/ folder
-  const panelPath = path.join(getDefaultProjectRoot(), 'ai', 'panels', panel);
+  // All other panels resolve to their ai/views/{id}/ folder
+  const panelPath = path.join(getDefaultProjectRoot(), 'ai', 'views', panel);
   if (fs.existsSync(panelPath)) return panelPath;
   return null;
 }
@@ -441,7 +441,7 @@ async function handleFileContentRequest(ws, msg) {
     let content = await fsPromises.readFile(targetPath, 'utf-8');
 
     // Enrich agents dashboard with human-readable schedule labels
-    if (panel === 'agents' && requestPath === 'agents.json') {
+    if (panel === 'agents-viewer' && requestPath === 'agents.json') {
       try {
         const { cronToLabel } = require('./lib/cron-label');
         const index = JSON.parse(content);
