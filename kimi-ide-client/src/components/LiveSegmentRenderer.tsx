@@ -29,10 +29,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { StreamSegment } from '../types';
-import { getRenderMode } from '../lib/segmentCatalog';
-import { getReveal } from '../lib/reveal';
 import { getToolRenderer } from '../lib/tool-renderers';
 import { computeTimingProfile, type TimingProfile } from '../lib/pressure';
+import { animateTool } from '../lib/tool-animate';
 import { renderTextInstant } from '../lib/text';
 import { animateText } from '../lib/text/text-animate';
 import { sleep, injectCursor } from '../lib/animate-utils';
@@ -329,9 +328,6 @@ function LiveToolSegment({ segment, index, skipShimmer, skipAnimation, getTiming
       return;
     }
 
-    const renderMode = getRenderMode(segment.type);
-    const reveal = getReveal(renderMode);
-
     // ── TIMING: Log when this segment's animate() fires ──
     const t = (window as any).__TIMING;
     const mountAt = performance.now();
@@ -352,27 +348,22 @@ function LiveToolSegment({ segment, index, skipShimmer, skipAnimation, getTiming
         }
       }
 
-      // Phase 2: Reveal — pressure only controls structural options.
-      // Within-reveal typing speed is the orchestrator's domain (its own
-      // lookahead decides FAST vs SLOW). Pressure controls:
-      //   - instantReveal: skip typing, show content at once
-      //   - interChunkPause: pause between typed lines
-      // Per-character speed (speedFast/speedSlow/batchSizeFast) stays
-      // with the orchestrator. Same principle as text segments: once
-      // a block is committed, the internal speed is not pressure's concern.
+      // Phase 2: Reveal — dispatched to tool-animate.ts (Level 2b controller).
+      // The catalog determines strategy, transform, renderer, speed, and
+      // whether to hold for tool result. See lib/catalog.ts.
       setPhase('revealing');
       if (t) {
         const revealAt = performance.now();
         const sinceSend = t.sendAt ? (revealAt - t.sendAt).toFixed(1) : '?';
         console.log(`[TIMING] REVEAL START (${segment.type} #${index}) at ${revealAt.toFixed(1)}ms — ${sinceSend}ms after send`);
       }
-      const revealProfile = getTimingProfile();
-      await reveal.run(contentRef, setDisplayedContent, cancelRef, completeRef, {
-        speedFast: revealProfile.speedFast,
-        speedSlow: revealProfile.speedSlow,
-        batchSizeFast: revealProfile.batchSizeFast,
-        interChunkPause: revealProfile.interChunkPause,
-        instantReveal: revealProfile.instantReveal,
+      await animateTool({
+        contentRef, completeRef, cancelRef,
+        segmentType: segment.type,
+        toolArgs: segment.toolArgs,
+        setDisplayedContent,
+        getTimingProfile,
+        onDone: () => {},  // collapse phase handles the real onDone
       });
       if (cancelRef.current) return;
 

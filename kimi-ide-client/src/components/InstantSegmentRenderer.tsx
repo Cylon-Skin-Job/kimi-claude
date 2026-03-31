@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import { renderTextInstant } from '../lib/text';
 import type { StreamSegment } from '../types';
-import { isGroupable } from '../lib/segmentCatalog';
+import { isGroupable } from '../lib/catalog-visual';
 import { getToolRenderer } from '../lib/tool-renderers';
 import { ToolCallBlock } from './ToolCallBlock';
 

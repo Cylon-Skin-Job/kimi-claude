@@ -8,7 +8,7 @@
 
 import { usePanelStore } from '../state/panelStore';
 import { toolNameToSegmentType, SEGMENT_ICONS } from '../lib/instructions';
-import { isGroupable, getSummaryField } from '../lib/segmentCatalog';
+import { isGroupable, getSummaryField } from '../lib/catalog-visual';
 import {
   onToolCall,
   getGroupForResult,

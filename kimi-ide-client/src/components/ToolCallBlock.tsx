@@ -12,7 +12,7 @@ import {
   getSegmentIconColor,
   getSegmentLabelColor,
   buildSegmentLabelWithError,
-} from '../lib/segmentCatalog';
+} from '../lib/catalog-visual';
 import { COLLAPSE_DURATION } from '../lib/timing';
 
 interface ToolCallBlockProps {

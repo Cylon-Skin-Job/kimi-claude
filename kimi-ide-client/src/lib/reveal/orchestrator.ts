@@ -23,6 +23,7 @@ const DEFAULT_SPEED_SLOW = 6;  // ms per char
 const DEFAULT_BATCH_SIZE_FAST = 5;  // chars per tick at fast speed
 const POLL_INTERVAL = 30;   // ms to wait when buffer is empty
 const FLUSH_TIMEOUT = 150;  // ms before flushing partial content from parser
+const LINE_END_HOLD = 15;   // ms minimum speed for last 2 chars before \n (universal rhythm)
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -45,7 +46,14 @@ async function typeChunk(
     onChar(text.slice(i, end));
     i = end;
     if (i < text.length) {
-      await sleep(msPerChar);
+      // Line-end deceleration: slow down for last 2 chars before a newline.
+      // This gives visual rhythm — lines feel written, not pasted.
+      const nextNewline = text.indexOf('\n', i);
+      const charsToNewline = nextNewline === -1 ? Infinity : nextNewline - i;
+      const effectiveSpeed = charsToNewline <= 2
+        ? Math.max(msPerChar, LINE_END_HOLD)
+        : msPerChar;
+      await sleep(effectiveSpeed);
     }
   }
 }

@@ -44,7 +44,7 @@
  */
 
 import type { SegmentType } from '../types';
-import { isGroupable } from './segmentCatalog';
+import { isGroupable } from './catalog-visual';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Types

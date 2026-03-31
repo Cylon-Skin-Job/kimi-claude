@@ -1,8 +1,11 @@
 /**
- * Segment Catalog — Unified Visual Definitions
+ * Catalog Visual — Unified Visual Definitions
  *
  * Single source of truth for how segments look (icon, color, label, borders).
- * Used by the static renderer (MessageList.tsx).
+ * Used by ToolCallBlock, InstantSegmentRenderer, tool-grouper, and ws-client.
+ *
+ * This file contains ONLY visual identity and behavior metadata.
+ * Pipeline data (strategies, renderers, transforms, speed) lives in catalog.ts.
  */
 
 import type { SegmentType } from '../types';
