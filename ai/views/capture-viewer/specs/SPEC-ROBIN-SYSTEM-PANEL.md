@@ -19,8 +19,7 @@ Robin is the system supervisor. She sits above workspaces. The system panel is a
 │             │  Tab Header: icon + title + description      │
 │             │  FAQ links (bulleted, right column)          │
 │             ├──────────────────────────────────────────────┤
-│             │  [CLIs] [Skills] [Connectors] [Secrets]      │
-│             │  [Triggers] [Appearance] [Enforcement]       │
+│             │  [CLIs] [Connectors] [Secrets] [Enforcement]  │
 │  Robin Chat ├────────────┬─────────────────────────────────┤
 │             │  Item List │  Wiki Detail / Registry         │
 │             │  (cards)   │  (from robin.db)                │
@@ -33,12 +32,11 @@ Robin is the system supervisor. She sits above workspaces. The system panel is a
 ### Tabs (left to right)
 
 1. **CLIs** — Installed AI assistants + add from registry
-2. **Skills** — Callable node scripts available to agents
-3. **Connectors** — External service integrations
-4. **Secrets** — API keys and tokens (encrypted, never exposed to agents)
-5. **Triggers** — Aggregated TRIGGERS.md blocks across the project
-6. **Appearance** — Theme and display settings
-7. **Enforcement** — Safety rules (hardcoded guardrails, human-only)
+2. **Connectors** — External service integrations
+3. **Secrets** — API keys and tokens (encrypted, never exposed to agents)
+4. **Enforcement** — Safety rules (hardcoded guardrails, human-only)
+
+> **Note:** Skills, Triggers, and Appearance have moved to the **Settings Viewer** (`ai/views/settings-viewer/`), which is a project-specific view in the left nav. Robin's system panel only contains global, system-level settings that live in robin.db. Project-specific configuration (skills, triggers, sessions, prompts, workflows, theme) is managed through the Settings Viewer, which reads from the project filesystem.
 
 ### Layout per tab
 
@@ -272,30 +270,86 @@ See lib/enforcement.js. Hardcoded, not configurable via triggers.
 
 ---
 
-## Open Questions for Next Session
+## Resolved: Database Philosophy
 
-### Database philosophy
+Decisions made 2026-03-30:
 
-1. **robin.db scope**: Currently holds threads, exchanges, system_config, system_wiki. Should CLI profiles, secrets, and connector configs also live here? Or do some of these belong in separate storage?
+1. **robin.db scope**: One robin.db, global, lives in Electron app data (`~/.openrobin/` or equivalent). Holds: wiki, CLIs, connectors, secrets, appearance, enforcement, system events, and **all chat thread history** (cross-workspace searchable, read-only from any workspace). Nothing else.
 
-2. **Secrets storage**: system_config could hold encrypted secrets, but is that the right place? Should there be a separate encrypted store, or is robin.db with encrypted values sufficient for a local-only app?
+2. **No per-workspace database.** Project-specific settings (triggers, sessions, prompts, styles, workflows) are files in the repo under `ai/views/*/`. The Settings Viewer reads them live from the filesystem.
 
-3. **CLI registry source**: The initial 6 CLIs are seeded. Should the registry be updatable (fetch from a remote list)? Or is it a static list that ships with each release?
+3. **CLI registry source**: Static seed that ships with each release. Updatable registry is a future concern.
 
-4. **Trigger aggregation**: The Triggers tab needs to show triggers from across the project (multiple TRIGGERS.md files). Should these be indexed in robin.db, or queried live from the filesystem? Live = always fresh. DB = faster queries but can go stale.
+4. **Trigger aggregation**: Live from filesystem. The Settings Viewer's Triggers tab scans TRIGGERS.md files across the project. No DB indexing — always fresh.
 
-5. **Multi-project**: When Phase 6 adds multi-project switching, does each project get its own robin.db? Or is there one robin.db (system-level) and per-project project.db files?
+5. **Multi-project**: One robin.db shared across all workspaces/projects. Chat history for all workspaces lives here. Project-specific config lives in each project's `ai/` folder.
 
-6. **Skill registry in DB**: Skills are currently discovered from manifest files. Should the Skills tab read from the filesystem (live) or from a DB index? Same staleness question as triggers.
+6. **Skill registry**: Live from filesystem. Discovered from manifest files at startup.
+
+7. **settings/ folders**: Gitignored globally (`**/settings/`). User config never syncs. Each user's SESSION.md, PROMPT.md, theme, and sort preferences stay local.
+
+---
+
+## Trigger System Access
+
+Triggers need access to **both** the project filesystem and robin.db (system CRUD). This is because some trigger actions are repo-scoped (file operations, ticket creation) while others are system-scoped (show-modal, CLI status, event logging).
+
+### Access tiers
+
+| Trigger action | Scope | What it touches |
+|----------------|-------|-----------------|
+| create-ticket | repo | Creates/updates markdown in issues view |
+| show-modal | system | Reads modal definition, broadcasts via WebSocket |
+| reload-triggers | system | Re-scans filesystem, updates in-memory trigger registry |
+| rename-collision | repo | Reads/renames markdown files in threads/ |
+| thread-auto-rename | system + repo | Queries robin.db for thread metadata, renames markdown file |
+| log-event | system | Writes to system_config or event log in robin.db |
+| tool-bounced | system | Fires event on bus, logged in robin.db |
+
+### How it works
+
+The action handler factory (`lib/watcher/actions.js`) already receives `deps` — the dependency bag injected at startup. System CRUD is provided through deps:
+
+```
+deps.db          — robin.db connection (Knex instance)
+deps.broadcast   — WebSocket broadcast to all clients
+deps.broadcastModal — modal-specific broadcast
+deps.getModalDefinition — reads modal config from filesystem
+deps.eventBus    — system event bus
+```
+
+Trigger actions that need system access use `deps.db` to query or write robin.db. Trigger actions that need repo access use `deps.projectRoot` + filesystem operations.
+
+### Security boundary
+
+- **AI agents** never get direct DB access. They use skills, which are scoped node scripts.
+- **Triggers** are human-authored (live in settings/ or TRIGGERS.md files). They run server-side with full deps access.
+- **Skills** called by Robin get read-only DB access via `inject: ["dbPath"]` in the skill manifest.
+
+The enforcement rule applies: AI can't write to settings/, so AI can't modify trigger definitions. Triggers are trusted code.
+
+---
+
+## Open Questions
+
+1. **Secrets encryption**: robin.db stores secrets. For a local-only Electron app, is SQLite encryption sufficient, or do we need OS keychain integration (macOS Keychain, Windows Credential Manager)?
+
+2. **CLI registry updates**: When the static seed becomes stale, what's the update path? App update only, or optional remote fetch?
+
+3. **Cross-workspace thread search**: Skills like `search-threads` query robin.db across all workspaces. Should results indicate which workspace a thread belongs to? (Yes — panel_id already tracks this.)
 
 ---
 
 ## Implementation Order
 
-1. Migration 002 (schema additions + seed data)
-2. lookup-system skill script
-3. API/WebSocket handlers for robin:tab-items, robin:wiki-page, robin:faqs
-4. RobinOverlay fetches from server instead of hardcoded arrays
-5. Robin's SESSION.md with context awareness + skill registration
-6. FAQ click → wiki page load + Robin notification
-7. CLI registry from cli_registry table + binary detection
+1. Migration 002 (schema additions: system_faq, cli_registry tables + seed data)
+2. Add `deps.db` to action handler factory for system CRUD access
+3. lookup-system skill script (robin.db queries)
+4. API/WebSocket handlers for robin:tab-items, robin:wiki-page, robin:faqs
+5. RobinOverlay fetches from server instead of hardcoded arrays (4 tabs: CLIs, Connectors, Secrets, Enforcement)
+6. Settings Viewer component (6 tabs: Skills, Triggers, Sessions, Prompts, Workflows, Theme — reads from filesystem)
+7. Robin's SESSION.md with context awareness + skill registration
+8. FAQ click → wiki page load + Robin notification
+9. CLI registry from cli_registry table + binary detection
+10. Global `**/settings/` gitignore rule
+11. Thread identity: frontmatter with thread_id in markdown files

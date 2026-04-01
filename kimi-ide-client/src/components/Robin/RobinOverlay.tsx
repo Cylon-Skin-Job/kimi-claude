@@ -33,11 +33,6 @@ const TABS = [
     'Why does Open Robin require a CLI?',
     'Will I get charged for using a CLI?',
   ]},
-  { id: 'skills', icon: 'dynamic_form', label: 'Skills', desc: 'Skills are things Open Robin and her agents can do — like searching your conversation history, tracing why a file changed, or looking up a specific message. They work automatically when an agent needs them.', faqs: [
-    'What can skills do?',
-    'Can I create my own skills?',
-    'How do agents discover skills?',
-  ]},
   { id: 'connectors', icon: 'link', label: 'Connectors', desc: 'Connectors let Open Robin talk to services you already use, like GitLab or GitHub. When a connector is active, Open Robin can sync tickets, pull in issues, and keep your external tools in the loop.', faqs: [
     'What services can I connect?',
     'Is my data shared externally?',
@@ -46,11 +41,6 @@ const TABS = [
     'Where are secrets stored?',
     'Can AI agents see my secrets?',
   ]},
-  { id: 'triggers', icon: 'bolt', label: 'Triggers', desc: 'Triggers are automatic reactions — when something happens (a file changes, a schedule fires, a task completes), Open Robin can respond by creating a ticket, showing a notification, or running a script. They\'re defined in simple text files throughout your project.', faqs: [
-    'How do I create a trigger?',
-    'What can triggers respond to?',
-  ]},
-  { id: 'appearance', icon: 'palette', label: 'Appearance', desc: 'Customize how Open Robin looks. Choose a color theme, adjust panel styling, and make it yours.', faqs: [] },
   { id: 'enforcement', icon: 'shield', label: 'Enforcement', desc: 'These are the safety rules. They control what AI agents are allowed to do on your machine. You\'re in charge here — agents can\'t change these settings, only you can.', faqs: [
     'What can agents do without my approval?',
     'Can I override these rules?',
@@ -62,28 +52,12 @@ const SETTINGS_BY_TAB: Record<string, SettingItem[]> = {
   clis: [
     { id: 'kimi', icon: 'terminal', name: 'Kimi', desc: 'The default AI assistant. Open Robin uses Kimi to power your chats and run agent tasks.', badge: 'active', badgeType: 'on', section: 'Active' },
   ],
-  skills: [
-    { id: 'read-history', icon: 'history', name: 'Read History', desc: 'Lets an agent read past conversations. Useful when it needs to recall what was discussed earlier.', badge: 'built-in', badgeType: 'value', section: 'Built-in' },
-    { id: 'search-threads', icon: 'search', name: 'Search Threads', desc: 'Searches across all your conversations by keyword. Agents use this to find relevant past discussions.', badge: 'built-in', badgeType: 'value', section: 'Built-in' },
-    { id: 'trace-change', icon: 'timeline', name: 'Trace Change', desc: 'Finds which conversation caused a file to change. Connects code changes back to the discussion that led to them.', badge: 'built-in', badgeType: 'value', section: 'Built-in' },
-    { id: 'return-message', icon: 'chat_bubble', name: 'Return Message', desc: 'Retrieves a specific message from a conversation by its ID. Used by other skills that need to reference exact messages.', badge: 'built-in', badgeType: 'value', section: 'Built-in' },
-  ],
   connectors: [
     { id: 'gitlab', icon: 'cloud', name: 'GitLab', desc: 'Syncs tickets and issues between Open Robin and your GitLab project. Changes flow both ways automatically.', badge: 'connected', badgeType: 'on', section: 'Active' },
   ],
   secrets: [
     { id: 'gitlab-token', icon: 'vpn_key', name: 'GitLab Token', desc: 'Lets Open Robin connect to your GitLab account. Created in GitLab under Settings > Access Tokens.', badge: 'set', badgeType: 'on', section: 'Tokens' },
     { id: 'anthropic-key', icon: 'vpn_key', name: 'Anthropic API Key', desc: 'Required if you want to use Claude as an AI assistant. Get one at console.anthropic.com.', badge: 'set', badgeType: 'on', section: 'Tokens' },
-  ],
-  triggers: [
-    { id: 'source-file-change', icon: 'code', name: 'Source File Change', desc: 'Notices when server code changes and creates a review ticket for the code-manager agent.', badge: 'file', badgeType: 'value', section: 'Code Manager' },
-    { id: 'client-source-change', icon: 'code', name: 'Client File Change', desc: 'Notices when frontend code changes and creates a review ticket for the code-manager agent.', badge: 'file', badgeType: 'value', section: 'Code Manager' },
-    { id: 'weekly-test-scan', icon: 'schedule', name: 'Weekly Test Scan', desc: 'Every Monday at 6am, asks the code-manager to check for untested code.', badge: 'cron', badgeType: 'value', section: 'Code Manager' },
-    { id: 'prompt-deploy-modal', icon: 'drag_pan', name: 'Prompt Deploy', desc: 'When an AI creates a new PROMPT.md file, shows you a drag-and-drop screen to approve it.', badge: 'file', badgeType: 'value', section: 'System' },
-    { id: 'session-deploy-modal', icon: 'drag_pan', name: 'Session Deploy', desc: 'When an AI creates a new SESSION.md file, shows you a drag-and-drop screen to approve it.', badge: 'file', badgeType: 'value', section: 'System' },
-  ],
-  appearance: [
-    { id: 'theme', icon: 'dark_mode', name: 'Theme', desc: 'Open Robin uses a dark theme by default. More options coming soon.', badge: 'dark', badgeType: 'value', section: 'Display' },
   ],
   enforcement: [
     { id: 'settings-write-lock', icon: 'lock', name: 'Settings Protection', desc: 'AI agents cannot modify any configuration files. Only you can change settings, by dragging files into the settings folder.', badge: 'on', badgeType: 'on', section: 'Rules' },
