@@ -59,15 +59,16 @@ function createActionHandlers(deps = {}) {
      */
     'notify'(def, vars) {
       const payload = {
-        type: 'file_change',
+        type: 'file_changed',
         filter: def.name,
         event: vars.event,
         filePath: vars.filePath,
         parentDir: vars.parentDir,
-        parentStats: vars.parentStats,
-        delta: vars.delta,
       };
-      console.log(`[Action:notify] ${JSON.stringify(payload)}`);
+      if (deps.broadcastFileChange) {
+        deps.broadcastFileChange(payload);
+      }
+      console.log(`[Action:notify] ${vars.event}: ${vars.filePath}`);
     },
 
     /**

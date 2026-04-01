@@ -9,8 +9,12 @@
  * will be replaced by a unified content module later.
  */
 
+import { useState, useEffect } from 'react';
 import type { FileWithContent } from '../tile-row/TileRow';
-import { isImageFile } from '../tile-row/DocumentTile';
+import { DocumentTile, isImageFile } from '../tile-row/DocumentTile';
+import { CodeView } from '../CodeView';
+import { copyResourcePath } from '../../lib/resource-path';
+import { useActiveResourceStore } from '../../state/activeResourceStore';
 
 interface FilePageViewProps {
   file: FileWithContent;
@@ -30,19 +34,46 @@ export function FilePageView({
   onSelectSibling,
 }: FilePageViewProps) {
   const isImage = isImageFile(file.name);
+  const isMarkdown = file.extension === 'md' || file.name.endsWith('.md');
+  const [viewMode, setViewMode] = useState<'code' | 'markdown'>('code');
+  const setActiveResource = useActiveResourceStore((s) => s.setActiveResource);
+
+  useEffect(() => {
+    setActiveResource('capture-viewer', file.path);
+  }, [file.path]);
 
   return (
     <div className="file-page-view">
-      {/* Top bar — back arrow + filename */}
+      {/* Top bar — back arrow + filename + toggle */}
       <div className="file-page-topbar">
         <button className="file-page-back" onClick={onBack} title="Back to tiles">
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
         <span className="file-page-filename">{file.name}</span>
+        <div className="file-page-actions">
+          <button
+            className="file-page-action"
+            onClick={() => copyResourcePath('capture-viewer', file.path)}
+            title="Copy file path"
+          >
+            <span className="material-symbols-outlined">link_2</span>
+          </button>
+          {isMarkdown && (
+            <button
+              className="file-page-action"
+              onClick={() => setViewMode(viewMode === 'code' ? 'markdown' : 'code')}
+              title={viewMode === 'code' ? 'Switch to document view' : 'Switch to code view'}
+            >
+              <span className="material-symbols-outlined">
+                {viewMode === 'code' ? 'toggle_off' : 'toggle_on'}
+              </span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Content area — fills remaining space */}
-      <div className="file-page-content">
+      <div className={`file-page-content${!isImage && !(isMarkdown && viewMode === 'markdown') ? ' file-page-document' : ''}`}>
         {isImage ? (
           <img
             src={`/api/panel-file/${panel}/${folder}/${encodeURIComponent(file.name)}`}
@@ -50,39 +81,26 @@ export function FilePageView({
             className="file-page-image"
           />
         ) : (
-          <pre className="file-page-text"><code>{file.content}</code></pre>
+          <CodeView content={file.content} extension={file.extension} mode={isMarkdown ? viewMode : 'code'} />
         )}
       </div>
 
       {/* Bottom ribbon — sibling tiles */}
       <div className="file-page-ribbon">
         <div className="file-page-ribbon-scroll">
-          {siblings.map((sib) => {
-            const sibIsImage = isImageFile(sib.name);
-            const isActive = sib.path === file.path;
-            return (
-              <div
-                key={sib.path}
-                className={`file-page-ribbon-tile${isActive ? ' active' : ''}`}
-                onClick={() => onSelectSibling(sib)}
-                title={sib.name}
-              >
-                <div className="ribbon-tile-preview">
-                  {sibIsImage ? (
-                    <img
-                      src={`/api/panel-file/${panel}/${folder}/${encodeURIComponent(sib.name)}`}
-                      alt={sib.name}
-                      loading="lazy"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  ) : (
-                    <span className="ribbon-tile-text">{sib.content.slice(0, 200)}</span>
-                  )}
-                </div>
-                <div className="ribbon-tile-label">{sib.name}</div>
-              </div>
-            );
-          })}
+          {siblings.map((sib) => (
+            <DocumentTile
+              key={sib.path}
+              name={sib.name}
+              content={sib.content}
+              extension={sib.extension}
+              panel={panel}
+              folderPath={folder}
+              size="small"
+              active={sib.path === file.path}
+              onClick={() => onSelectSibling(sib)}
+            />
+          ))}
         </div>
       </div>
     </div>

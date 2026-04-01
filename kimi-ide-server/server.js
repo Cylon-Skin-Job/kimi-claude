@@ -1367,6 +1367,13 @@ function startServer() {
           }
         }
       },
+      broadcastFileChange(payload) {
+        for (const [ws, sess] of sessions) {
+          if (ws.readyState === 1) {
+            ws.send(JSON.stringify(payload));
+          }
+        }
+      },
     });
     const declFilters = loadFilters(filterDir, actionHandlers);
     for (const f of declFilters) projectWatcher.addFilter(f);

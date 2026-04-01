@@ -11,6 +11,8 @@ import { useEffect, useRef, useCallback } from 'react';
 import { markdownToHtml } from '../../lib/transforms';
 import { useWikiStore } from '../../state/wikiStore';
 import { usePanelStore } from '../../state/panelStore';
+import { copyResourcePath } from '../../lib/resource-path';
+import { useActiveResourceStore } from '../../state/activeResourceStore';
 
 export function PageViewer() {
   const activeTopic = useWikiStore((s) => s.activeTopic);
@@ -26,6 +28,12 @@ export function PageViewer() {
   const goBack = useWikiStore((s) => s.goBack);
   const goForward = useWikiStore((s) => s.goForward);
   const error = useWikiStore((s) => s.error);
+
+  // Track active resource for live refresh
+  const setActiveResource = useActiveResourceStore((s) => s.setActiveResource);
+  useEffect(() => {
+    if (activeTopic) setActiveResource('wiki-viewer', `${activeTopic}/${activeTab === 'log' ? 'LOG' : 'PAGE'}.md`);
+  }, [activeTopic, activeTab]);
 
   // Build set of known slugs for link interception
   const knownSlugs = useRef(new Set<string>());
@@ -124,6 +132,15 @@ export function PageViewer() {
         <span className="wiki-breadcrumb">
           {topics[activeTopic]?.slug || activeTopic}
         </span>
+        <div className="wiki-nav-actions">
+          <button
+            className="file-page-action"
+            onClick={() => copyResourcePath('wiki-viewer', `${activeTopic}/${activeTab === 'log' ? 'LOG' : 'PAGE'}.md`)}
+            title="Copy file path"
+          >
+            <span className="material-symbols-outlined">link_2</span>
+          </button>
+        </div>
       </div>
 
       {/* Tab bar */}
@@ -162,14 +179,14 @@ export function PageViewer() {
 
       {activeTab === 'page' && !pageLoading && (
         <div
-          className="wiki-page-content markdown-body"
+          className="wiki-page-content"
           dangerouslySetInnerHTML={{ __html: renderedPage as string }}
         />
       )}
 
       {activeTab === 'log' && (
         <div
-          className="wiki-page-content markdown-body"
+          className="wiki-page-content"
           dangerouslySetInnerHTML={{ __html: renderedLog as string }}
         />
       )}

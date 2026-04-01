@@ -12,6 +12,7 @@ import { usePanelData } from '../../hooks/usePanelData';
 import { usePanelStore } from '../../state/panelStore';
 import { useAgentStore, AGENT_CONFIG_FILES, type Agent } from '../../state/agentStore';
 import { PromptCardView } from './PromptCardView';
+import { copyResourcePath } from '../../lib/resource-path';
 import './agents.css';
 
 /** Strip YAML frontmatter, return just the markdown body */
@@ -170,6 +171,13 @@ function AgentDetail({ agent, request }: { agent: Agent; request: (path: string)
         <span className="material-symbols-outlined agent-detail-header-icon">{agent.icon}</span>
         <span className="agent-detail-header-name">{formatId(agent.id)}</span>
         <span className={`agent-tile-status ${agent.status}`}>{agent.status}</span>
+        <button
+          className="file-page-action"
+          onClick={() => copyResourcePath('agents-viewer', `System/${agent.id}/`)}
+          title="Copy agent path"
+        >
+          <span className="material-symbols-outlined">link_2</span>
+        </button>
         <button className="agent-detail-exit" onClick={() => setExpanded(null)}>
           <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>close</span>
         </button>

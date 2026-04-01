@@ -143,7 +143,6 @@
   color: var(--text-dim);
   cursor: pointer;
   position: relative;
-  transition: all 0.2s ease;
 }
 
 .tool-btn:hover {
@@ -182,7 +181,6 @@
   grid-template-columns: var(--sidebar-width) var(--chat-width) 1fr;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.2s ease;
   min-height: 0; /* children must not blow out the grid */
 }
 

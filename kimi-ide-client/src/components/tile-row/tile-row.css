@@ -88,6 +88,34 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
+.doc-tile.active {
+  border-color: #a78bfa;
+}
+
+/* Small variant — used in ribbon strips */
+.doc-tile.doc-tile-small {
+  width: 100px;
+  height: 80px;
+}
+
+.doc-tile.doc-tile-small .doc-tile-preview {
+  width: 560px;
+  height: 380px;
+  transform: scale(0.178);
+}
+
+.doc-tile.doc-tile-small .doc-tile-footer {
+  padding: 4px 6px;
+}
+
+.doc-tile.doc-tile-small .doc-tile-icon {
+  font-size: 11px;
+}
+
+.doc-tile.doc-tile-small .doc-tile-name {
+  font-size: 0.5625rem;
+}
+
 /* The preview area — renders full-size content, scaled down */
 .doc-tile-preview {
   width: 560px;
@@ -103,71 +131,24 @@
   color: var(--text-primary, #e0e0e0);
   white-space: pre-wrap;
   word-break: break-word;
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
 }
 
-/* Markdown-style rendering inside preview */
-.doc-tile-preview h1 {
-  font-size: 20px;
-  font-weight: 700;
-  color: #fff;
-  margin: 0 0 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  padding-bottom: 6px;
+/* Code view inside tile preview — adjust gutter for scaled context */
+.doc-tile-preview .code-editor {
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.doc-tile-preview h2 {
-  font-size: 16px;
-  font-weight: 600;
-  color: #fff;
-  margin: 12px 0 6px;
+.doc-tile-preview .code-gutter {
+  padding: 8px 6px 8px 8px;
+  min-width: 32px;
 }
 
-.doc-tile-preview h3 {
-  font-size: 14px;
-  font-weight: 600;
-  color: #ccc;
-  margin: 10px 0 4px;
-}
-
-.doc-tile-preview p {
-  margin: 4px 0;
-  color: #bbb;
-}
-
-.doc-tile-preview code {
-  background: rgba(255, 255, 255, 0.06);
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-size: 12px;
-  color: #ddd;
-}
-
-.doc-tile-preview pre {
-  background: rgba(255, 255, 255, 0.04);
-  padding: 8px;
-  border-radius: 4px;
-  margin: 6px 0;
-  overflow: hidden;
-}
-
-.doc-tile-preview hr {
-  border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  margin: 8px 0;
-}
-
-.doc-tile-preview ul, .doc-tile-preview ol {
-  padding-left: 20px;
-  margin: 4px 0;
-}
-
-/* YAML frontmatter styling */
-.doc-tile-frontmatter {
-  color: #888;
-  border-left: 2px solid var(--ws-primary, var(--theme-primary, #a78bfa));
-  padding-left: 8px;
-  margin-bottom: 8px;
-  font-size: 11px;
+.doc-tile-preview .code-content {
+  padding: 8px 10px;
 }
 
 /* Footer label */

@@ -6,6 +6,7 @@
  */
 
 import { useState, type ReactElement } from 'react';
+import { CodeView } from '../CodeView';
 import './prompt-cards.css';
 
 interface PromptCardViewProps {
@@ -160,7 +161,8 @@ export function PromptCardView({ content, fileName, agentColor }: PromptCardView
   const [activeStep, setActiveStep] = useState(0);
 
   if (!isWorkflowFile(fileName)) {
-    return <pre className="agent-detail-prompt-content">{content}</pre>;
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    return <CodeView content={content} extension={ext} />;
   }
 
   const workflow = parseWorkflow(content);

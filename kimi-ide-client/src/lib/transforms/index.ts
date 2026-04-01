@@ -5,4 +5,5 @@
  */
 
 export { markdownToHtml } from './markdown';
-export { escapeHtml, codeBlockHtml, preWrapHtml } from './code';
+export { escapeHtml, codeBlockHtml, preWrapHtml, highlightCode } from './code';
+export { highlightWithFrontmatter, stripFrontmatter } from './frontmatter';

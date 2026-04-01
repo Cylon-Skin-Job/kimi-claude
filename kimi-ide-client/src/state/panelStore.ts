@@ -53,6 +53,10 @@ interface AppState {
   setWs: (ws: WebSocket | null) => void;
   sendMessage: (text: string, panel?: string) => void;
 
+  // Project root (absolute path from server)
+  projectRoot: string | null;
+  setProjectRoot: (root: string) => void;
+
   // Context usage
   contextUsage: number;
   setContextUsage: (usage: number) => void;
@@ -94,6 +98,7 @@ export const usePanelStore = create<AppState>((set, get) => ({
   currentPanel: 'code-viewer',
   panels: {},
   ws: null,
+  projectRoot: null,
   contextUsage: 0,
   threads: [],
   currentThreadId: null,
@@ -304,6 +309,7 @@ export const usePanelStore = create<AppState>((set, get) => ({
       }));
     }
   },
+  setProjectRoot: (root) => set({ projectRoot: root }),
   setContextUsage: (usage) => set({ contextUsage: usage }),
 
   // Thread actions

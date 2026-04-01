@@ -18,6 +18,7 @@ import {
 import { setLoggerWs, captureConsoleLogs } from '../lib/logger';
 import { loadRootTree } from '../lib/file-tree';
 import { showToast } from '../lib/toast';
+import { useActiveResourceStore } from '../state/activeResourceStore';
 import { showModal } from '../lib/modal';
 import { loadAllPanels } from '../lib/panels';
 import type { WebSocketMessage, ExchangeData, AssistantPart, StreamSegment, SegmentType } from '../types';
@@ -389,6 +390,27 @@ function handleMessage(msg: WebSocketMessage) {
     case 'modal:show':
       showModal(msg as unknown as import('../lib/modal').ModalConfig);
       break;
+
+    case 'panel_config':
+      if ((msg as any).projectRoot) {
+        store.setProjectRoot((msg as any).projectRoot);
+      }
+      break;
+
+    case 'file_changed': {
+      const activeRes = useActiveResourceStore.getState().activeResource;
+      if (activeRes && (msg as any).filePath?.endsWith(activeRes.relativePath)) {
+        const ws = store.ws;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'file_content_request',
+            panel: activeRes.panel,
+            path: activeRes.relativePath,
+          }));
+        }
+      }
+      break;
+    }
 
     case 'file:moved':
       console.log('[WS] File moved:', msg);
