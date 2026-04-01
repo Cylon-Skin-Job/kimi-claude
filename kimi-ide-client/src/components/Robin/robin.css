@@ -261,6 +261,68 @@
   text-decoration: underline;
 }
 
+/* --- Guide link (top of settings list) --- */
+
+.robin-guide-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 0.8rem;
+  color: var(--text-dim, rgba(255, 255, 255, 0.5));
+  cursor: pointer;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.robin-guide-link:hover {
+  color: var(--robin-primary, #4fc3f7);
+  background: rgba(79, 195, 247, 0.05);
+}
+
+.robin-guide-link.active {
+  color: var(--robin-primary, #4fc3f7);
+  background: rgba(79, 195, 247, 0.1);
+}
+
+.robin-guide-link .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.robin-list-separator {
+  height: 1px;
+  background: var(--robin-border, rgba(79, 195, 247, 0.15));
+  margin: 4px 8px 8px;
+}
+
+/* --- Wiki inline nav (section headings) --- */
+
+.robin-wiki-nav {
+  display: flex;
+  gap: 16px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--robin-border, rgba(79, 195, 247, 0.15));
+}
+
+.robin-wiki-nav-link {
+  font-size: 0.8rem;
+  color: var(--text-dim, rgba(255, 255, 255, 0.5));
+  cursor: pointer;
+  transition: color 0.15s;
+  white-space: nowrap;
+}
+
+.robin-wiki-nav-link:hover {
+  color: var(--robin-primary, #4fc3f7);
+}
+
+.robin-wiki-nav-link.active {
+  color: var(--robin-primary, #4fc3f7);
+  border-bottom: 1px solid var(--robin-primary, #4fc3f7);
+  padding-bottom: 2px;
+}
+
 /* --- Tab bar --- */
 
 .robin-settings-tabs {

@@ -29,6 +29,31 @@ const WS_URL = 'ws://localhost:3001';
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+// --- Robin message listeners ---
+// Components subscribe to specific message types for robin: responses.
+
+type RobinListener = (msg: any) => void;
+const robinListeners: Map<string, Set<RobinListener>> = new Map();
+
+export function sendRobinMessage(msg: Record<string, unknown>) {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify(msg));
+  }
+}
+
+export function onRobinMessage(type: string, listener: RobinListener): () => void {
+  if (!robinListeners.has(type)) robinListeners.set(type, new Set());
+  robinListeners.get(type)!.add(listener);
+  return () => { robinListeners.get(type)?.delete(listener); };
+}
+
+function emitRobin(type: string, msg: any) {
+  const listeners = robinListeners.get(type);
+  if (listeners) {
+    for (const fn of listeners) fn(msg);
+  }
+}
+
 // --- Public API ---
 
 export function connectWs() {
@@ -371,6 +396,13 @@ function handleMessage(msg: WebSocketMessage) {
 
     case 'file:move_error':
       showToast(`File move failed: ${(msg as any).error}`);
+      break;
+
+    // Robin system panel responses
+    case 'robin:tabs':
+    case 'robin:items':
+    case 'robin:wiki':
+      emitRobin(msg.type, msg);
       break;
 
     default:

@@ -4,89 +4,66 @@
  *
  * Open Robin sits above workspaces as the system supervisor.
  * Chat on the left, tabbed settings with list/detail split on the right.
- * Wiki detail content comes from robin.db (SQLite) and is injected
- * into Robin's wire session as shared context.
+ *
+ * All data (tabs, items, wiki content, CLI registry) comes from robin.db
+ * via WebSocket. Nothing is hardcoded — add a tab to the database and it
+ * appears here automatically.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { sendRobinMessage, onRobinMessage } from '../../lib/ws-client';
+import { markdownToHtml } from '../../lib/transforms/markdown';
 import './robin.css';
+
+// --- Types ---
 
 interface RobinOverlayProps {
   open: boolean;
   onClose: () => void;
 }
 
-interface SettingItem {
+interface Tab {
   id: string;
+  label: string;
   icon: string;
-  name: string;
-  desc: string;
-  badge: string;
-  badgeType: 'on' | 'off' | 'value';
-  section: string;
+  description: string;
+  sort_order: number;
 }
 
-const TABS = [
-  { id: 'clis', icon: 'terminal', label: 'CLIs', desc: 'Open Robin works by connecting to AI assistants that run on your machine. These assistants are called CLIs. You need at least one installed for Open Robin to work.', faqs: [
-    'What is a CLI?',
-    'How does Open Robin use a CLI?',
-    'Why does Open Robin require a CLI?',
-    'Will I get charged for using a CLI?',
-  ]},
-  { id: 'connectors', icon: 'link', label: 'Connectors', desc: 'Connectors let Open Robin talk to services you already use, like GitLab or GitHub. When a connector is active, Open Robin can sync tickets, pull in issues, and keep your external tools in the loop.', faqs: [
-    'What services can I connect?',
-    'Is my data shared externally?',
-  ]},
-  { id: 'secrets', icon: 'key', label: 'Secrets', desc: 'Some connectors and services need passwords or API keys to work. Secrets are stored safely on your machine and are never shared with AI agents. Only Open Robin uses them behind the scenes.', faqs: [
-    'Where are secrets stored?',
-    'Can AI agents see my secrets?',
-  ]},
-  { id: 'enforcement', icon: 'shield', label: 'Enforcement', desc: 'These are the safety rules. They control what AI agents are allowed to do on your machine. You\'re in charge here — agents can\'t change these settings, only you can.', faqs: [
-    'What can agents do without my approval?',
-    'Can I override these rules?',
-  ]},
-];
+interface WikiPage {
+  slug: string;
+  title: string;
+  content: string;
+  context?: string;
+  description?: string;
+  tab?: string;
+}
 
-// Settings items per tab — will be driven by robin.db queries
-const SETTINGS_BY_TAB: Record<string, SettingItem[]> = {
-  clis: [
-    { id: 'kimi', icon: 'terminal', name: 'Kimi', desc: 'The default AI assistant. Open Robin uses Kimi to power your chats and run agent tasks.', badge: 'active', badgeType: 'on', section: 'Active' },
-  ],
-  connectors: [
-    { id: 'gitlab', icon: 'cloud', name: 'GitLab', desc: 'Syncs tickets and issues between Open Robin and your GitLab project. Changes flow both ways automatically.', badge: 'connected', badgeType: 'on', section: 'Active' },
-  ],
-  secrets: [
-    { id: 'gitlab-token', icon: 'vpn_key', name: 'GitLab Token', desc: 'Lets Open Robin connect to your GitLab account. Created in GitLab under Settings > Access Tokens.', badge: 'set', badgeType: 'on', section: 'Tokens' },
-    { id: 'anthropic-key', icon: 'vpn_key', name: 'Anthropic API Key', desc: 'Required if you want to use Claude as an AI assistant. Get one at console.anthropic.com.', badge: 'set', badgeType: 'on', section: 'Tokens' },
-  ],
-  enforcement: [
-    { id: 'settings-write-lock', icon: 'lock', name: 'Settings Protection', desc: 'AI agents cannot modify any configuration files. Only you can change settings, by dragging files into the settings folder.', badge: 'on', badgeType: 'on', section: 'Rules' },
-    { id: 'deploy-modals', icon: 'drag_pan', name: 'Deploy Approval', desc: 'When an AI suggests new configuration, a visual approval screen appears. You drag the file to accept it, or close to reject.', badge: 'on', badgeType: 'on', section: 'Rules' },
-    { id: 'settings-archive', icon: 'archive', name: 'Version History', desc: 'Every time you approve a new configuration, the previous version is saved automatically. You can always go back.', badge: 'on', badgeType: 'on', section: 'Rules' },
-    { id: 'session-limit', icon: 'memory', name: 'Session Limit', desc: 'The maximum number of AI conversations that can run at the same time. Higher means more parallel work, but uses more memory.', badge: '20', badgeType: 'value', section: 'Limits' },
-    { id: 'idle-timeout', icon: 'timer', name: 'Idle Timeout', desc: 'How long an inactive conversation stays open before Open Robin pauses it. The conversation can be resumed anytime.', badge: '9m', badgeType: 'value', section: 'Limits' },
-    { id: 'event-log', icon: 'event_log', name: 'Activity Log', desc: 'Records everything that happens in the system — file changes, agent actions, trigger fires. Useful for understanding what happened and when.', badge: 'on', badgeType: 'on', section: 'Logging' },
-    { id: 'notifications', icon: 'notifications', name: 'Notifications', desc: 'Shows brief pop-up messages when something completes — an agent finishes a task, a scheduled job runs, or a trigger fires.', badge: 'on', badgeType: 'on', section: 'Logging' },
-  ],
-};
+interface ConfigItem {
+  key: string;
+  value: string;
+  tab: string;
+  section: string;
+  icon: string;
+  description: string;
+  wiki_slug?: string;
+  sort_order: number;
+}
 
-// Available CLIs that can be added — will come from a registry/server
-interface RegistryCLI {
+interface CliItem {
   id: string;
   name: string;
-  by: string;
-  desc: string;
-  version: string;
-  installed: boolean;
+  author: string;
+  description: string;
+  version?: string;
+  pricing_url?: string;
+  docs_url?: string;
+  installed: number;
+  active: number;
+  sort_order: number;
 }
 
-const CLI_REGISTRY: RegistryCLI[] = [
-  { id: 'qwen', name: 'Qwen Code', by: 'Alibaba / QwenLM', desc: 'Open-source agent with free tier (2,000 requests/day). Supports ACP wire protocol for IDE embedding. Uses Qwen3-Coder models.', version: '2026', installed: false },
-  { id: 'claude', name: 'Claude Code', by: 'Anthropic', desc: 'Deep reasoning and careful analysis. 1M token context window. Supports hooks, plan mode, and the Agent Client Protocol.', version: '2.1', installed: false },
-  { id: 'opencode', name: 'OpenCode', by: 'SST', desc: 'Fastest-growing open-source alternative. Go-based, polished UI, 75+ model providers. Works offline with local models.', version: '2026', installed: false },
-  { id: 'codex', name: 'Codex CLI', by: 'OpenAI', desc: 'Fast, lightweight Rust-based agent. Full-auto mode for hands-off execution. Cloud mode for async tasks.', version: '0.116', installed: false },
-  { id: 'gemini', name: 'Gemini CLI', by: 'Google', desc: 'Free tier with 1,000 requests/day. Built-in Google Search grounding. Open source.', version: '2026', installed: false },
-];
+// --- Chat messages (placeholder until Robin's wire is connected) ---
 
 const CHAT_MESSAGES = [
   { type: 'system' as const, text: 'Session started' },
@@ -96,11 +73,22 @@ const CHAT_MESSAGES = [
   { type: 'system' as const, text: 'Viewing: Settings Protection' },
 ];
 
-export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
-  const [activeTab, setActiveTab] = useState('clis');
-  const [selectedSetting, setSelectedSetting] = useState(SETTINGS_BY_TAB['clis']?.[0]?.id || '');
-  const [showRegistry, setShowRegistry] = useState(false);
+// --- Main component ---
 
+export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
+  // Data from robin.db
+  const [tabs, setTabs] = useState<Tab[]>([]);
+  const [items, setItems] = useState<(ConfigItem | CliItem)[]>([]);
+  const [wikiPage, setWikiPage] = useState<WikiPage | null>(null);
+  const [registryItems, setRegistryItems] = useState<CliItem[]>([]);
+
+  // UI state
+  const [activeTab, setActiveTab] = useState('');
+  const [selectedItemId, setSelectedItemId] = useState('');
+  const [showRegistry, setShowRegistry] = useState(false);
+  const initializedRef = useRef(false);
+
+  // Escape key
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') onClose();
   }, [onClose]);
@@ -112,11 +100,79 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
     }
   }, [open, handleKeyDown]);
 
+  // Subscribe to robin: messages
+  useEffect(() => {
+    const unsubs = [
+      onRobinMessage('robin:tabs', (msg: any) => {
+        setTabs(msg.tabs || []);
+        // On first load, activate the first tab
+        if (!initializedRef.current && msg.tabs?.length > 0) {
+          initializedRef.current = true;
+          const firstTab = msg.tabs[0].id;
+          setActiveTab(firstTab);
+          sendRobinMessage({ type: 'robin:tab-items', tab: firstTab });
+          sendRobinMessage({ type: 'robin:wiki-page', slug: firstTab });
+        }
+      }),
+      onRobinMessage('robin:items', (msg: any) => {
+        setItems(msg.items || []);
+        // For CLIs tab, separate installed from registry
+        if (msg.tab === 'clis') {
+          const installed = (msg.items || []).filter((i: CliItem) => i.installed);
+          const notInstalled = (msg.items || []).filter((i: CliItem) => !i.installed);
+          setItems(installed);
+          setRegistryItems(notInstalled);
+        }
+      }),
+      onRobinMessage('robin:wiki', (msg: any) => {
+        if (!msg.error) {
+          setWikiPage(msg as WikiPage);
+        }
+      }),
+    ];
+    return () => unsubs.forEach(fn => fn());
+  }, []);
+
+  // Fetch tabs when panel opens
+  useEffect(() => {
+    if (open) {
+      initializedRef.current = false;
+      sendRobinMessage({ type: 'robin:tabs' });
+    }
+  }, [open]);
+
   if (!open) return null;
 
-  const items = SETTINGS_BY_TAB[activeTab] || [];
-  const sections = [...new Set(items.map(s => s.section))];
-  const selected = items.find(s => s.id === selectedSetting);
+  // Derive sections from config items (non-CLI tabs)
+  const configItems = items as ConfigItem[];
+  const sectionNames = [...new Set(configItems.map(s => s.section).filter(Boolean))];
+
+  const currentTab = tabs.find(t => t.id === activeTab);
+
+  // Determine right panel content
+  const selectedItem = items.find((s: any) => (s.key || s.id) === selectedItemId);
+
+  function switchTab(tabId: string) {
+    setActiveTab(tabId);
+    setSelectedItemId('');
+    setShowRegistry(false);
+    setWikiPage(null);
+    setItems([]);
+    sendRobinMessage({ type: 'robin:tab-items', tab: tabId });
+    sendRobinMessage({ type: 'robin:wiki-page', slug: tabId });
+    sendRobinMessage({ type: 'robin:context', tab: tabId, item: null });
+  }
+
+  function selectItem(id: string) {
+    setSelectedItemId(id);
+    setShowRegistry(false);
+    sendRobinMessage({ type: 'robin:context', tab: activeTab, item: id });
+  }
+
+  function openRegistry() {
+    setShowRegistry(true);
+    setSelectedItemId('');
+  }
 
   return (
     <div className="robin-overlay">
@@ -168,42 +224,27 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
         <div className="robin-settings">
 
           {/* Tab header */}
-          {(() => {
-            const tab = TABS.find(t => t.id === activeTab);
-            return (
-              <div className="robin-settings-header">
-                <div className="robin-settings-header-info">
-                  <div className="robin-settings-header-title">
-                    <span className="material-symbols-outlined">{tab?.icon}</span>
-                    {tab?.label}
-                  </div>
-                  <div className="robin-settings-header-desc">
-                    {tab?.desc}
-                  </div>
+          {currentTab && (
+            <div className="robin-settings-header">
+              <div className="robin-settings-header-info">
+                <div className="robin-settings-header-title">
+                  <span className="material-symbols-outlined">{currentTab.icon}</span>
+                  {currentTab.label}
                 </div>
-                {tab?.faqs && tab.faqs.length > 0 && (
-                  <div className="robin-settings-header-faqs">
-                    {tab.faqs.map((faq, i) => (
-                      <span key={i} className="robin-faq-link">{faq}</span>
-                    ))}
-                  </div>
-                )}
+                <div className="robin-settings-header-desc">
+                  {currentTab.description}
+                </div>
               </div>
-            );
-          })()}
+            </div>
+          )}
 
           {/* Tab bar */}
           <div className="robin-settings-tabs">
-            {TABS.map(tab => (
+            {tabs.map(tab => (
               <button
                 key={tab.id}
                 className={`robin-settings-tab ${activeTab === tab.id ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  const tabItems = SETTINGS_BY_TAB[tab.id] || [];
-                  setSelectedSetting(tabItems[0]?.id || '');
-                  setShowRegistry(false);
-                }}
+                onClick={() => switchTab(tab.id)}
               >
                 <span className="material-symbols-outlined">{tab.icon}</span>
                 {tab.label}
@@ -216,46 +257,102 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
 
             {/* Settings list */}
             <div className="robin-settings-list">
-              {sections.map(section => (
-                <div key={section}>
-                  <div className="robin-settings-section-divider">{section}</div>
-                  {items.filter(s => s.section === section).map(item => (
+
+              {/* Guide link — always at top, returns right panel to wiki */}
+              <div
+                className={`robin-guide-link ${!selectedItemId && !showRegistry ? 'active' : ''}`}
+                onClick={() => { setSelectedItemId(''); setShowRegistry(false); }}
+              >
+                <span className="material-symbols-outlined">menu_book</span>
+                {currentTab?.label} Guide
+              </div>
+
+              <div className="robin-list-separator" />
+
+              {activeTab === 'clis' ? (
+                // CLIs tab: show installed CLIs as flat list
+                <>
+                  {(items as CliItem[]).map(cli => (
                     <div
-                      key={item.id}
-                      className={`robin-setting-item ${selectedSetting === item.id && !showRegistry ? 'active' : ''}`}
-                      onClick={() => { setSelectedSetting(item.id); setShowRegistry(false); }}
+                      key={cli.id}
+                      className={`robin-setting-item ${selectedItemId === cli.id && !showRegistry ? 'active' : ''}`}
+                      onClick={() => selectItem(cli.id)}
                     >
                       <div className="robin-setting-item-icon">
-                        <span className="material-symbols-outlined">{item.icon}</span>
+                        <span className="material-symbols-outlined">terminal</span>
                       </div>
                       <div className="robin-setting-item-text">
-                        <div className="robin-setting-item-name">{item.name}</div>
-                        <div className="robin-setting-item-desc">{item.desc}</div>
+                        <div className="robin-setting-item-name">{cli.name}</div>
+                        <div className="robin-setting-item-desc">{cli.description}</div>
                       </div>
-                      <span className={`robin-setting-item-badge ${item.badgeType}`}>{item.badge}</span>
+                      <span className={`robin-setting-item-badge ${cli.active ? 'on' : 'off'}`}>
+                        {cli.active ? 'active' : 'installed'}
+                      </span>
                     </div>
                   ))}
-                </div>
-              ))}
+                </>
+              ) : (
+                // Other tabs: group by section
+                sectionNames.map(section => (
+                  <div key={section}>
+                    <div className="robin-settings-section-divider">{section}</div>
+                    {configItems.filter(s => s.section === section).map(item => (
+                      <div
+                        key={item.key}
+                        className={`robin-setting-item ${selectedItemId === item.key && !showRegistry ? 'active' : ''}`}
+                        onClick={() => selectItem(item.key)}
+                      >
+                        <div className="robin-setting-item-icon">
+                          <span className="material-symbols-outlined">{item.icon}</span>
+                        </div>
+                        <div className="robin-setting-item-text">
+                          <div className="robin-setting-item-name">{item.key.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</div>
+                          <div className="robin-setting-item-desc">{item.description}</div>
+                        </div>
+                        <span className={`robin-setting-item-badge ${item.value === 'true' ? 'on' : 'value'}`}>
+                          {item.value === 'true' ? 'on' : item.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ))
+              )}
+
+              {/* Add button — CLIs and LLM Providers tabs */}
               {activeTab === 'clis' && (
                 <button
                   className={`robin-add-btn ${showRegistry ? 'active' : ''}`}
-                  onClick={() => setShowRegistry(true)}
+                  onClick={openRegistry}
                 >
                   <span className="material-symbols-outlined">add</span>
                   Add CLI
                 </button>
               )}
+              {activeTab === 'llm-providers' && (
+                <button
+                  className={`robin-add-btn ${showRegistry ? 'active' : ''}`}
+                  onClick={openRegistry}
+                >
+                  <span className="material-symbols-outlined">add</span>
+                  Add Provider
+                </button>
+              )}
             </div>
 
-            {/* Right panel: wiki detail or registry */}
+            {/* Right panel: wiki, item detail, or registry */}
             <div className="robin-detail">
               <div className="robin-detail-scroll">
                 {showRegistry && activeTab === 'clis' ? (
-                  <CLIRegistry />
-                ) : (
-                  selected && <SettingDetail setting={selected} tabLabel={TABS.find(t => t.id === activeTab)?.label || ''} items={items} />
-                )}
+                  <CLIRegistry items={registryItems} />
+                ) : selectedItem ? (
+                  activeTab === 'clis' ? (
+                    <CLIDetail cli={selectedItem as CliItem} />
+                  ) : (
+                    <ConfigDetail item={selectedItem as ConfigItem} tabLabel={currentTab?.label || ''} />
+                  )
+                ) : wikiPage ? (
+                  <WikiDetail page={wikiPage} />
+                ) : null}
               </div>
             </div>
           </div>
@@ -265,33 +362,48 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
   );
 }
 
-function SettingDetail({ setting, tabLabel, items }: { setting: SettingItem; tabLabel: string; items: SettingItem[] }) {
+// --- Wiki detail (default right panel) ---
+
+function WikiDetail({ page }: { page: WikiPage }) {
+  return (
+    <div className="robin-detail-body robin-wiki-content">
+      <div dangerouslySetInnerHTML={{ __html: markdownToHtml(page.content) }} />
+    </div>
+  );
+}
+
+// --- Config item detail (non-CLI tabs) ---
+
+function ConfigDetail({ item, tabLabel }: { item: ConfigItem; tabLabel: string }) {
+  const displayName = item.key.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const isBoolean = item.value === 'true' || item.value === 'false';
+
   return (
     <>
       <div className="robin-detail-header">
         <div className="robin-detail-breadcrumb">
-          <span>{tabLabel}</span> / <span>{setting.section}</span> / {setting.name}
+          <span>{tabLabel}</span> / <span>{item.section}</span> / {displayName}
         </div>
 
         <div className="robin-detail-title">
-          <span className="material-symbols-outlined">{setting.icon}</span>
-          {setting.name}
+          <span className="material-symbols-outlined">{item.icon}</span>
+          {displayName}
         </div>
 
         <div className="robin-detail-subtitle">
-          {setting.desc}. This page describes how the setting works, its current state, and configuration options.
+          {item.description}
         </div>
 
         <div className="robin-detail-meta">
           <div className="robin-detail-meta-item">
             <span className="robin-detail-meta-label">Status</span>
-            <span className={`robin-detail-meta-value ${setting.badgeType === 'on' ? 'highlight' : ''}`}>
-              {setting.badgeType === 'on' ? 'Active' : setting.badgeType === 'off' ? 'Inactive' : setting.badge}
+            <span className={`robin-detail-meta-value ${isBoolean && item.value === 'true' ? 'highlight' : ''}`}>
+              {isBoolean ? (item.value === 'true' ? 'Active' : 'Inactive') : item.value}
             </span>
           </div>
           <div className="robin-detail-meta-item">
             <span className="robin-detail-meta-label">Section</span>
-            <span className="robin-detail-meta-value">{setting.section}</span>
+            <span className="robin-detail-meta-value">{item.section}</span>
           </div>
           <div className="robin-detail-meta-item">
             <span className="robin-detail-meta-label">Source</span>
@@ -299,57 +411,77 @@ function SettingDetail({ setting, tabLabel, items }: { setting: SettingItem; tab
           </div>
         </div>
 
-        {setting.badgeType === 'on' && (
+        {isBoolean && (
           <div className="robin-detail-toggle-row">
             <div>
-              <div className="robin-detail-toggle-label">{setting.name}</div>
+              <div className="robin-detail-toggle-label">{displayName}</div>
               <div className="robin-detail-toggle-desc">Toggle this setting on or off</div>
             </div>
-            <div className="robin-toggle on" />
+            <div className={`robin-toggle ${item.value === 'true' ? 'on' : ''}`} />
           </div>
         )}
-      </div>
-
-      <div className="robin-detail-body">
-        <h2>What is this?</h2>
-        <p>
-          {setting.desc}
-        </p>
-
-        <h2>How does it work?</h2>
-        <p>
-          This page will be populated from Open Robin's system knowledge base.
-          In the live system, Open Robin reads this same content — so when you ask her
-          about {setting.name.toLowerCase()}, she's looking at exactly what you see here.
-        </p>
-
-        {setting.badgeType === 'value' && (
-          <>
-            <h2>Current value</h2>
-            <p>
-              This is currently set to <strong>{setting.badge}</strong>. You can change it in
-              the settings panel or ask Open Robin to walk you through the options.
-            </p>
-          </>
-        )}
-
-        <div className="robin-detail-related">
-          <div className="robin-detail-related-title">See also</div>
-          <div className="robin-detail-related-links">
-            {items.filter(s => s.section === setting.section && s.id !== setting.id).slice(0, 3).map(s => (
-              <span key={s.id} className="robin-detail-related-link">
-                <span className="material-symbols-outlined">{s.icon}</span>
-                {s.name}
-              </span>
-            ))}
-          </div>
-        </div>
       </div>
     </>
   );
 }
 
-function CLIRegistry() {
+// --- CLI detail (when a CLI is selected from the list) ---
+
+function CLIDetail({ cli }: { cli: CliItem }) {
+  return (
+    <div className="robin-detail-header">
+      <div className="robin-detail-title">
+        <span className="material-symbols-outlined">terminal</span>
+        {cli.name}
+      </div>
+
+      <div className="robin-detail-subtitle">
+        {cli.description}
+      </div>
+
+      <div className="robin-detail-meta">
+        <div className="robin-detail-meta-item">
+          <span className="robin-detail-meta-label">Author</span>
+          <span className="robin-detail-meta-value">{cli.author}</span>
+        </div>
+        {cli.version && (
+          <div className="robin-detail-meta-item">
+            <span className="robin-detail-meta-label">Version</span>
+            <span className="robin-detail-meta-value">{cli.version}</span>
+          </div>
+        )}
+        <div className="robin-detail-meta-item">
+          <span className="robin-detail-meta-label">Status</span>
+          <span className={`robin-detail-meta-value ${cli.active ? 'highlight' : ''}`}>
+            {cli.active ? 'Active' : 'Installed'}
+          </span>
+        </div>
+      </div>
+
+      {cli.pricing_url && (
+        <div className="robin-detail-meta-item" style={{ marginTop: '12px' }}>
+          <span className="robin-detail-meta-label">Pricing</span>
+          <a href={cli.pricing_url} target="_blank" rel="noopener noreferrer" className="robin-detail-meta-value highlight">
+            View plans →
+          </a>
+        </div>
+      )}
+
+      {cli.docs_url && (
+        <div className="robin-detail-meta-item" style={{ marginTop: '4px' }}>
+          <span className="robin-detail-meta-label">Docs</span>
+          <a href={cli.docs_url} target="_blank" rel="noopener noreferrer" className="robin-detail-meta-value highlight">
+            Documentation →
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- CLI registry (available CLIs to add) ---
+
+function CLIRegistry({ items }: { items: CliItem[] }) {
   return (
     <div className="robin-registry">
       <div className="robin-detail-header">
@@ -364,15 +496,15 @@ function CLIRegistry() {
       </div>
 
       <div className="robin-registry-list">
-        {CLI_REGISTRY.map(cli => (
+        {items.map(cli => (
           <div key={cli.id} className="robin-registry-item">
             <div className="robin-registry-item-info">
               <div className="robin-registry-item-top">
                 <span className="robin-registry-item-name">{cli.name}</span>
-                <span className="robin-registry-item-version">v{cli.version}</span>
+                {cli.version && <span className="robin-registry-item-version">v{cli.version}</span>}
               </div>
-              <div className="robin-registry-item-by">by {cli.by}</div>
-              <div className="robin-registry-item-desc">{cli.desc}</div>
+              <div className="robin-registry-item-by">by {cli.author}</div>
+              <div className="robin-registry-item-desc">{cli.description}</div>
             </div>
             <button className="robin-registry-add-btn">
               <span className="material-symbols-outlined">download</span>

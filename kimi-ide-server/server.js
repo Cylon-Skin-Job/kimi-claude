@@ -19,7 +19,10 @@ const fsPromises = require('fs').promises;
 // Thread management
 const { ThreadWebSocketHandler } = require('./lib/thread');
 const { HistoryFile } = require('./lib/thread/HistoryFile');
-const { initDb } = require('./lib/db');
+const { initDb, getDb } = require('./lib/db');
+
+// Robin system panel
+const createRobinHandlers = require('./lib/robin/ws-handlers');
 
 // Wiki hooks
 const wikiHooks = require('./lib/wiki/hooks');
@@ -1222,6 +1225,16 @@ wss.on('connection', (ws) => {
         return;
       }
 
+      // ---- Robin system panel (delegated to lib/robin/ws-handlers.js) ----
+
+      if (clientMsg.type.startsWith('robin:')) {
+        const handler = robinHandlers[clientMsg.type];
+        if (handler) {
+          await handler(ws, clientMsg);
+          return;
+        }
+      }
+
       // Unknown message type
       console.log('[WS] Unknown message type:', clientMsg.type);
       
@@ -1277,10 +1290,14 @@ wss.on('connection', (ws) => {
 
 const PORT = process.env.PORT || 3001;
 
+// Robin handlers — initialized after DB is ready
+let robinHandlers = {};
+
 // Initialize SQLite, then start the server
 initDb(getDefaultProjectRoot())
   .then(() => {
     console.log('[DB] robin.db initialized');
+    robinHandlers = createRobinHandlers({ getDb, sessions });
     startServer();
   })
   .catch(err => {
@@ -1330,6 +1347,7 @@ function startServer() {
       createTicket: wrappedCreateTicket,
       projectRoot: getDefaultProjectRoot(),
       getModalDefinition,
+      db: getDb(),
       sendChatMessage(target, message, role) {
         for (const [ws, sess] of sessions) {
           if (ws.readyState === 1) {
