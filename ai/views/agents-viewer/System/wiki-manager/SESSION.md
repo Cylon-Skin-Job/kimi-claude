@@ -14,8 +14,8 @@ endpoint: https://api.anthropic.com/v1/messages
 tools:
   allowed: [read_file, glob, grep, git_log, git_diff, git_show, list_directory, todo_read, todo_write]
   restricted:
-    write_file: ["ai/wiki-data/project/**", "ai/views/wiki-viewer/runs/**", "ai/STATE.md"]
-    edit_file: ["ai/wiki-data/project/**"]
+    write_file: ["ai/views/wiki-viewer/content/project/**", "ai/views/wiki-viewer/runs/**", "ai/STATE.md"]
+    edit_file: ["ai/views/wiki-viewer/content/project/**"]
   denied: [shell_exec, git_commit, git_push]
 
 # DB access

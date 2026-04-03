@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { usePanelStore } from '../state/panelStore';
 import { applyPanelTheme } from '../lib/panels';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -10,6 +10,32 @@ import { Toast } from './Toast';
 import { ModalOverlay } from './Modal/ModalOverlay';
 import { RobinOverlay } from './Robin/RobinOverlay';
 import './App.css';
+
+/**
+ * Memoized panel content — only re-renders when its own panel prop changes,
+ * NOT when currentPanel changes in the parent. This prevents all 7 panels
+ * from re-rendering on every panel switch.
+ */
+const PanelContent = memo(function PanelContent({ panel, layout }: { panel: string; layout: string }) {
+  if (layout === 'full') {
+    return <ContentArea panel={panel} />;
+  }
+  if (layout === 'chat-content') {
+    return (
+      <>
+        <ChatArea panel={panel} />
+        <ContentArea panel={panel} />
+      </>
+    );
+  }
+  return (
+    <>
+      <Sidebar panel={panel} />
+      <ChatArea panel={panel} />
+      <ContentArea panel={panel} />
+    </>
+  );
+});
 
 function App() {
   // WebSocket connection — must run BEFORE the loading gate
@@ -50,6 +76,35 @@ function App() {
       setCurrentPanel(configs[0].id);
     }
   }, [configs, currentPanel, setCurrentPanel]);
+
+  // Keyboard: Escape defocuses content, Option+Up/Down cycles panels
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      (document.activeElement as HTMLElement)?.blur();
+      return;
+    }
+
+    if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+
+    // Skip when typing in an input
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return;
+
+    e.preventDefault();
+    const ids = configs.map((c) => c.id);
+    const idx = ids.indexOf(currentPanel);
+    if (idx < 0) return;
+
+    const next = e.key === 'ArrowDown'
+      ? ids[(idx + 1) % ids.length]
+      : ids[(idx - 1 + ids.length) % ids.length];
+    setCurrentPanel(next);
+  }, [configs, currentPanel, setCurrentPanel]);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   if (loading) {
     return (
@@ -118,20 +173,7 @@ function App() {
               key={config.id}
               className={`panel layout-${layout} ${currentPanel === config.id ? 'active' : ''}`}
             >
-              {layout === 'full' ? (
-                <ContentArea panel={config.id} />
-              ) : layout === 'chat-content' ? (
-                <>
-                  <ChatArea panel={config.id} />
-                  <ContentArea panel={config.id} />
-                </>
-              ) : (
-                <>
-                  <Sidebar panel={config.id} />
-                  <ChatArea panel={config.id} />
-                  <ContentArea panel={config.id} />
-                </>
-              )}
+              <PanelContent panel={config.id} layout={layout} />
             </div>
           );
         })}

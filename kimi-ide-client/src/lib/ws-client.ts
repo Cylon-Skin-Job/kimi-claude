@@ -19,6 +19,7 @@ import { setLoggerWs, captureConsoleLogs } from '../lib/logger';
 import { loadRootTree } from '../lib/file-tree';
 import { showToast } from '../lib/toast';
 import { useActiveResourceStore } from '../state/activeResourceStore';
+import { useFileDataStore } from '../state/fileDataStore';
 import { showModal } from '../lib/modal';
 import { loadAllPanels } from '../lib/panels';
 import type { WebSocketMessage, ExchangeData, AssistantPart, StreamSegment, SegmentType } from '../types';
@@ -398,8 +399,17 @@ function handleMessage(msg: WebSocketMessage) {
       break;
 
     case 'file_changed': {
+      // Invalidate central cache — triggers re-fetch for affected entries
+      const fileData = useFileDataStore.getState();
+      const changedPath = (msg as any).filePath || '';
+      const changedPanel = (msg as any).panel;
+      if (changedPanel && changedPath) {
+        fileData.invalidate(changedPanel, changedPath);
+      }
+
+      // Also re-fetch if the active resource matches (page view live update)
       const activeRes = useActiveResourceStore.getState().activeResource;
-      if (activeRes && (msg as any).filePath?.endsWith(activeRes.relativePath)) {
+      if (activeRes && changedPath.endsWith(activeRes.relativePath)) {
         const ws = store.ws;
         if (ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({
@@ -408,6 +418,23 @@ function handleMessage(msg: WebSocketMessage) {
             path: activeRes.relativePath,
           }));
         }
+      }
+      break;
+    }
+
+    // --- Central file data cache population ---
+    case 'file_tree_response': {
+      const m = msg as any;
+      if (m.panel && m.path) {
+        useFileDataStore.getState().handleTreeResponse(m.panel, m.path, m.nodes || []);
+      }
+      break;
+    }
+
+    case 'file_content_response': {
+      const m = msg as any;
+      if (m.panel && m.path && m.success) {
+        useFileDataStore.getState().handleContentResponse(m.panel, m.path, m.content || '');
       }
       break;
     }

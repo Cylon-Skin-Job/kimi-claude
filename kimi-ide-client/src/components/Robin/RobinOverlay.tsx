@@ -63,6 +63,33 @@ interface CliItem {
   sort_order: number;
 }
 
+interface SystemTheme {
+  preset: string;
+  primary_color: string;
+  primary_rgb: string;
+  theme_css: string;
+}
+
+interface WorkspaceItem {
+  id: string;
+  label: string;
+  icon: string;
+  description: string;
+  themeState: 'inheriting' | 'custom' | 'diverged';
+  primary_color: string;
+}
+
+const COLOR_SWATCHES = [
+  { name: 'Sky',      hex: '#4fc3f7' },
+  { name: 'Teal',     hex: '#4dd0c7' },
+  { name: 'Lavender', hex: '#9fa8da' },
+  { name: 'Sage',     hex: '#81c784' },
+  { name: 'Peach',    hex: '#f0a07a' },
+  { name: 'Steel',    hex: '#90a4ae' },
+  { name: 'Lilac',    hex: '#b39ddb' },
+  { name: 'Ice',      hex: '#80deea' },
+];
+
 // --- Chat messages (placeholder until Robin's wire is connected) ---
 
 const CHAT_MESSAGES = [
@@ -87,6 +114,11 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
   const [selectedItemId, setSelectedItemId] = useState('');
   const [showRegistry, setShowRegistry] = useState(false);
   const initializedRef = useRef(false);
+
+  // Customization state
+  const [systemTheme, setSystemTheme] = useState<SystemTheme | null>(null);
+  const [workspacesList, setWorkspacesList] = useState<WorkspaceItem[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('');
 
   // Escape key
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -129,6 +161,12 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
           setWikiPage(msg as WikiPage);
         }
       }),
+      onRobinMessage('robin:theme-data', (msg: any) => {
+        if (!msg.error) {
+          setSystemTheme(msg.systemTheme || null);
+          setWorkspacesList(msg.workspaces || []);
+        }
+      }),
     ];
     return () => unsubs.forEach(fn => fn());
   }, []);
@@ -155,11 +193,17 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
   function switchTab(tabId: string) {
     setActiveTab(tabId);
     setSelectedItemId('');
+    setSelectedWorkspaceId('');
     setShowRegistry(false);
     setWikiPage(null);
     setItems([]);
-    sendRobinMessage({ type: 'robin:tab-items', tab: tabId });
-    sendRobinMessage({ type: 'robin:wiki-page', slug: tabId });
+    if (tabId === 'customization') {
+      sendRobinMessage({ type: 'robin:theme-load' });
+      sendRobinMessage({ type: 'robin:wiki-page', slug: tabId });
+    } else {
+      sendRobinMessage({ type: 'robin:tab-items', tab: tabId });
+      sendRobinMessage({ type: 'robin:wiki-page', slug: tabId });
+    }
     sendRobinMessage({ type: 'robin:context', tab: tabId, item: null });
   }
 
@@ -260,8 +304,8 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
 
               {/* Guide link — always at top, returns right panel to wiki */}
               <div
-                className={`robin-guide-link ${!selectedItemId && !showRegistry ? 'active' : ''}`}
-                onClick={() => { setSelectedItemId(''); setShowRegistry(false); }}
+                className={`robin-guide-link ${!selectedItemId && !selectedWorkspaceId && !showRegistry ? 'active' : ''}`}
+                onClick={() => { setSelectedItemId(''); setSelectedWorkspaceId(''); setShowRegistry(false); }}
               >
                 <span className="material-symbols-outlined">menu_book</span>
                 {currentTab?.label} Guide
@@ -269,7 +313,50 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
 
               <div className="robin-list-separator" />
 
-              {activeTab === 'clis' ? (
+              {activeTab === 'customization' ? (
+                // Customization tab: system theme + workspace list
+                <>
+                  <div className="robin-settings-section-divider">System</div>
+                  <div
+                    className={`robin-setting-item ${selectedWorkspaceId === 'system' ? 'active' : ''}`}
+                    onClick={() => { setSelectedWorkspaceId('system'); setSelectedItemId(''); }}
+                  >
+                    <div className="robin-setting-item-icon">
+                      <span className="material-symbols-outlined">settings</span>
+                    </div>
+                    <div className="robin-setting-item-text">
+                      <div className="robin-setting-item-name">System Theme</div>
+                      <div className="robin-setting-item-desc">Baseline for all workspaces</div>
+                    </div>
+                    {systemTheme && (
+                      <div className="robin-workspace-dot" style={{ background: systemTheme.primary_color }} />
+                    )}
+                  </div>
+
+                  <div className="robin-settings-section-divider">Workspaces</div>
+                  {workspacesList.filter(w => w.id !== 'system').map(ws => (
+                    <div
+                      key={ws.id}
+                      className={`robin-setting-item ${selectedWorkspaceId === ws.id ? 'active' : ''}`}
+                      onClick={() => { setSelectedWorkspaceId(ws.id); setSelectedItemId(''); }}
+                    >
+                      <div className="robin-setting-item-icon">
+                        <span className="material-symbols-outlined">{ws.icon}</span>
+                      </div>
+                      <div className="robin-setting-item-text">
+                        <div className="robin-setting-item-name">{ws.label}</div>
+                        <div className="robin-setting-item-desc">{ws.description}</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div className="robin-workspace-dot" style={{ background: ws.primary_color }} />
+                        <span className={`robin-setting-item-badge ${ws.themeState === 'diverged' ? 'value' : 'off'}`}>
+                          {ws.themeState}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              ) : activeTab === 'clis' ? (
                 // CLIs tab: show installed CLIs as flat list
                 <>
                   {(items as CliItem[]).map(cli => (
@@ -339,10 +426,24 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
               )}
             </div>
 
-            {/* Right panel: wiki, item detail, or registry */}
+            {/* Right panel: wiki, item detail, registry, or customization */}
             <div className="robin-detail">
               <div className="robin-detail-scroll">
-                {showRegistry && activeTab === 'clis' ? (
+                {activeTab === 'customization' && selectedWorkspaceId ? (
+                  selectedWorkspaceId === 'system' ? (
+                    <SystemThemeDetail
+                      theme={systemTheme}
+                      onUpdate={(preset, color) => sendRobinMessage({ type: 'robin:theme-update-system', preset, primary_color: color })}
+                    />
+                  ) : (
+                    <WorkspaceThemeDetail
+                      workspace={workspacesList.find(w => w.id === selectedWorkspaceId)!}
+                      onUpdateColor={(color) => sendRobinMessage({ type: 'robin:theme-update-workspace', workspace_id: selectedWorkspaceId, primary_color: color })}
+                      onInherit={() => sendRobinMessage({ type: 'robin:theme-inherit', workspace_id: selectedWorkspaceId })}
+                      onApply={() => sendRobinMessage({ type: 'robin:theme-apply-diverged', workspace_id: selectedWorkspaceId })}
+                    />
+                  )
+                ) : showRegistry && activeTab === 'clis' ? (
                   <CLIRegistry items={registryItems} />
                 ) : selectedItem ? (
                   activeTab === 'clis' ? (
@@ -365,9 +466,30 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
 // --- Wiki detail (default right panel) ---
 
 function WikiDetail({ page }: { page: WikiPage }) {
+  const [showContext, setShowContext] = useState(false);
+
   return (
-    <div className="robin-detail-body robin-wiki-content">
-      <div dangerouslySetInnerHTML={{ __html: markdownToHtml(page.content) }} />
+    <div className={`robin-detail-body robin-wiki-content ${showContext ? 'robin-wiki-context-view' : ''}`}>
+      {page.context && (
+        <button
+          className={`robin-wiki-context-toggle ${showContext ? 'active' : ''}`}
+          onClick={() => setShowContext(!showContext)}
+          title={showContext ? 'Show user guide' : 'Show agent system message'}
+        >
+          <span className="material-symbols-outlined">text_compare</span>
+        </button>
+      )}
+      {showContext ? (
+        <div className="robin-wiki-context-content">
+          <div className="robin-wiki-context-label">
+            <span className="material-symbols-outlined">smart_toy</span>
+            Agent System Message
+          </div>
+          <div dangerouslySetInnerHTML={{ __html: markdownToHtml(page.context || '') }} />
+        </div>
+      ) : (
+        <div dangerouslySetInnerHTML={{ __html: markdownToHtml(page.content) }} />
+      )}
     </div>
   );
 }
@@ -476,6 +598,202 @@ function CLIDetail({ cli }: { cli: CliItem }) {
         </div>
       )}
     </div>
+  );
+}
+
+// --- CLI registry (available CLIs to add) ---
+
+// --- Color picker (reusable) ---
+
+function ColorPicker({ value, onChange, disabled }: { value: string; onChange: (hex: string) => void; disabled?: boolean }) {
+  const [inputValue, setInputValue] = useState(value);
+
+  useEffect(() => { setInputValue(value); }, [value]);
+
+  function handleHexSubmit() {
+    const cleaned = inputValue.replace('#', '').trim();
+    if (/^[0-9a-fA-F]{6}$/.test(cleaned)) {
+      onChange(`#${cleaned}`);
+    } else {
+      setInputValue(value);
+    }
+  }
+
+  return (
+    <div className={`robin-color-picker ${disabled ? 'disabled' : ''}`}>
+      <div className="robin-color-picker-label">Primary Color</div>
+      <div className="robin-color-swatches">
+        {COLOR_SWATCHES.map(s => (
+          <div
+            key={s.hex}
+            className={`robin-color-swatch ${value === s.hex ? 'active' : ''}`}
+            style={{ background: s.hex }}
+            title={s.name}
+            onClick={() => onChange(s.hex)}
+          />
+        ))}
+      </div>
+      <div className="robin-color-current">
+        <div className="robin-color-current-dot" style={{ background: value }} />
+        <input
+          className="robin-color-hex-input"
+          value={inputValue}
+          onChange={e => setInputValue(e.target.value)}
+          onBlur={handleHexSubmit}
+          onKeyDown={e => { if (e.key === 'Enter') handleHexSubmit(); }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// --- System theme detail ---
+
+function SystemThemeDetail({ theme, onUpdate }: {
+  theme: SystemTheme | null;
+  onUpdate: (preset: string, color: string) => void;
+}) {
+  if (!theme) return null;
+
+  return (
+    <>
+      <div className="robin-detail-header">
+        <div className="robin-detail-breadcrumb">
+          <span>Customization</span> / System Theme
+        </div>
+        <div className="robin-detail-title">
+          <span className="material-symbols-outlined">palette</span>
+          System Theme
+        </div>
+        <div className="robin-detail-subtitle">
+          The baseline look for all workspaces. Workspaces inherit this unless they have custom overrides.
+        </div>
+
+        <div className="robin-detail-meta">
+          <div className="robin-detail-meta-item">
+            <span className="robin-detail-meta-label">Preset</span>
+            <span className="robin-detail-meta-value highlight">
+              {theme.preset.charAt(0).toUpperCase() + theme.preset.slice(1)}
+            </span>
+          </div>
+          <div className="robin-detail-meta-item">
+            <span className="robin-detail-meta-label">Accent</span>
+            <span className="robin-detail-meta-value" style={{ color: theme.primary_color }}>
+              {theme.primary_color}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="robin-color-picker-label" style={{ marginTop: '24px' }}>Theme Preset</div>
+      <div className="robin-preset-selector">
+        {['dark', 'oled', 'medium', 'light'].map(p => (
+          <button
+            key={p}
+            className={`robin-preset-btn ${theme.preset === p ? 'active' : ''}`}
+            onClick={() => onUpdate(p, theme.primary_color)}
+          >
+            {p.charAt(0).toUpperCase() + p.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      <ColorPicker
+        value={theme.primary_color}
+        onChange={(hex) => onUpdate(theme.preset, hex)}
+      />
+    </>
+  );
+}
+
+// --- Workspace theme detail ---
+
+function WorkspaceThemeDetail({ workspace, onUpdateColor, onInherit, onApply }: {
+  workspace: WorkspaceItem;
+  onUpdateColor: (hex: string) => void;
+  onInherit: () => void;
+  onApply: () => void;
+}) {
+  if (!workspace) return null;
+
+  return (
+    <>
+      <div className="robin-detail-header">
+        <div className="robin-detail-breadcrumb">
+          <span>Customization</span> / {workspace.label}
+        </div>
+        <div className="robin-detail-title">
+          <span className="material-symbols-outlined">{workspace.icon}</span>
+          {workspace.label}
+        </div>
+        <div className="robin-detail-subtitle">
+          {workspace.themeState === 'inheriting'
+            ? 'This workspace uses the system theme.'
+            : workspace.themeState === 'custom'
+            ? 'This workspace has a custom accent color.'
+            : 'CSS has been modified outside the system panel.'}
+        </div>
+      </div>
+
+      {workspace.themeState === 'diverged' ? (
+        <div className="robin-diverged-card">
+          <div className="robin-diverged-card-text">
+            The CSS file has been edited directly and no longer matches what's saved here.
+            Click Apply to absorb your changes into the system.
+          </div>
+          <button className="robin-apply-btn" onClick={onApply}>
+            <span className="material-symbols-outlined">sync</span>
+            Apply Changes
+          </button>
+        </div>
+      ) : (
+        <div className="robin-inherit-row">
+          <div
+            className={`robin-toggle ${workspace.themeState === 'inheriting' ? 'on' : ''}`}
+            onClick={() => {
+              if (workspace.themeState === 'inheriting') {
+                onUpdateColor(workspace.primary_color);
+              } else {
+                onInherit();
+              }
+            }}
+          />
+          <span className="robin-inherit-label">Inherit system theme</span>
+        </div>
+      )}
+
+      <ColorPicker
+        value={workspace.primary_color}
+        onChange={onUpdateColor}
+        disabled={workspace.themeState === 'inheriting'}
+      />
+
+      <div className="robin-detail-body" style={{ marginTop: '16px' }}>
+        <h2>Customizing by hand</h2>
+        <p>
+          You can edit the workspace CSS directly at: <code>ai/views/settings/themes.css</code>
+        </p>
+        <p>
+          After editing, come back here and click Apply to save your changes to the system.
+          This ensures your edits are preserved and won't be lost if you switch themes later.
+        </p>
+        <h2>Per-view overrides</h2>
+        <p>
+          To give a single view its own accent color, add a <code>themes.css</code> to
+          that view's settings folder:
+        </p>
+        <p>
+          <code>ai/views/&#123;viewer-name&#125;/settings/themes.css</code>
+        </p>
+        <p>
+          Each view folder has three siblings: <code>chat/</code>, <code>content/</code>,
+          and <code>settings/</code>. The theme override goes in <code>settings/</code>.
+          Only include the variables you want to change — everything else flows down
+          from the workspace, which flows from the system. Remove the file to go back
+          to inheriting.
+        </p>
+      </div>
+    </>
   );
 }
 

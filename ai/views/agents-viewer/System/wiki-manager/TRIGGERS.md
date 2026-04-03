@@ -16,7 +16,7 @@ message: |
 name: wiki-page-changed
 type: file-change
 events: [modify]
-match: "ai/wiki-data/project/**/PAGE.md"
+match: "ai/views/wiki-viewer/content/project/**/PAGE.md"
 prompt: PROMPT_03.md
 message: |
   Wiki page changed: {{filePath}}

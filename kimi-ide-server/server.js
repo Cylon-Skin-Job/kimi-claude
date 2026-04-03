@@ -194,9 +194,9 @@ function getPanelPath(panel, ws) {
     if (fs.existsSync(viewsRoot)) return viewsRoot;
     return null;
   }
-  // Wiki panel resolves to ai/wiki-data/ (the unified wiki tree)
+  // Wiki panel resolves to ai/views/wiki-viewer/content/
   if (panel === 'wiki-viewer') {
-    const wikiRoot = path.join(getDefaultProjectRoot(), 'ai', 'wiki-data');
+    const wikiRoot = path.join(getDefaultProjectRoot(), 'ai', 'views', 'wiki-viewer', 'content');
     if (fs.existsSync(wikiRoot)) return wikiRoot;
     return null;
   }
@@ -1297,7 +1297,7 @@ let robinHandlers = {};
 initDb(getDefaultProjectRoot())
   .then(() => {
     console.log('[DB] robin.db initialized');
-    robinHandlers = createRobinHandlers({ getDb, sessions });
+    robinHandlers = createRobinHandlers({ getDb, sessions, getDefaultProjectRoot });
     startServer();
   })
   .catch(err => {
@@ -1311,8 +1311,8 @@ function startServer() {
     console.log(`[Server] Kimi path: ${process.env.KIMI_PATH || 'kimi'}`);
     console.log(`[Server] Thread storage: ${AI_PANELS_PATH}`);
 
-    // Start wiki hooks — watches ai/wiki-data/ tree (collections with topics)
-    const wikiPath = path.join(getDefaultProjectRoot(), 'ai', 'wiki-data');
+    // Start wiki hooks — watches ai/views/wiki-viewer/content/ tree (collections with topics)
+    const wikiPath = path.join(getDefaultProjectRoot(), 'ai', 'views', 'wiki-viewer', 'content');
     wikiHooks.start(wikiPath);
 
     // Start project-wide file watcher

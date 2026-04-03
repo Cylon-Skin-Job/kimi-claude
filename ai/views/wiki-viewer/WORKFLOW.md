@@ -18,14 +18,14 @@ TICKET → CREATE RUN → GATHER → PROPOSE → CHECK EDGES → EXECUTE → FOL
 
 ## Path Layout
 
-Topic content lives in `ai/wiki-data/project/`. Run folders live in `ai/views/wiki-viewer/runs/`.
+Topic content lives in `ai/views/wiki-viewer/content/project/`. Run folders live in `ai/views/wiki-viewer/runs/`.
 
-- Topic pages: `ai/wiki-data/project/{topic}/PAGE.md`
-- Topic logs: `ai/wiki-data/project/{topic}/LOG.md`
-- Topic indexes: `ai/wiki-data/project/{topic}/index.json`
-- Collection index: `ai/wiki-data/project/index.json`
+- Topic pages: `ai/views/wiki-viewer/content/project/{topic}/PAGE.md`
+- Topic logs: `ai/views/wiki-viewer/content/project/{topic}/LOG.md`
+- Topic indexes: `ai/views/wiki-viewer/content/project/{topic}/index.json`
+- Collection index: `ai/views/wiki-viewer/content/project/index.json`
 - Run folders: `ai/views/wiki-viewer/runs/{run-id}/`
-- System wiki (read-only): `ai/wiki-data/system/`
+- System wiki (read-only): `ai/views/wiki-viewer/content/system/`
 
 ## Run Folder Structure
 

@@ -893,3 +893,237 @@
 .robin-icon-btn .material-symbols-outlined {
   font-size: 24px;
 }
+
+/* ==========================================================
+   CUSTOMIZATION TAB
+   ========================================================== */
+
+.robin-color-picker {
+  background: var(--robin-card-bg, #161616);
+  border: 1px solid var(--robin-border, #282828);
+  border-radius: 10px;
+  padding: 20px;
+  margin: 16px 0;
+}
+
+.robin-color-picker.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.robin-color-picker-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim, #666);
+  margin-bottom: 12px;
+}
+
+.robin-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.robin-color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 150ms;
+}
+
+.robin-color-swatch:hover {
+  transform: scale(1.15);
+}
+
+.robin-color-swatch.active {
+  border-color: var(--text-primary, #e0e0e0);
+  box-shadow: 0 0 0 2px var(--robin-card-bg, #161616), 0 0 0 4px rgba(255, 255, 255, 0.3);
+}
+
+.robin-color-current {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.robin-color-current-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--robin-border, #282828);
+  flex-shrink: 0;
+}
+
+.robin-color-hex-input {
+  width: 90px;
+  padding: 6px 10px;
+  background: var(--robin-input-bg, #0d0d0d);
+  border: 1px solid var(--robin-border, #282828);
+  border-radius: 6px;
+  color: var(--text-primary, #e0e0e0);
+  font-size: 0.8125rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  outline: none;
+}
+
+.robin-color-hex-input:focus {
+  border-color: rgba(79, 195, 247, 0.25);
+}
+
+.robin-workspace-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.robin-apply-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  background: rgba(79, 195, 247, 0.12);
+  border: 1px solid rgba(79, 195, 247, 0.25);
+  border-radius: 10px;
+  color: var(--robin-primary, #4fc3f7);
+  font-size: 0.8125rem;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 150ms;
+}
+
+.robin-apply-btn:hover {
+  background: rgba(79, 195, 247, 0.2);
+}
+
+.robin-inherit-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.robin-inherit-label {
+  font-size: 0.8125rem;
+  color: var(--text-primary, #e0e0e0);
+  font-weight: 500;
+}
+
+.robin-diverged-card {
+  background: var(--robin-card-bg, #161616);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  border-radius: 10px;
+  padding: 16px;
+  margin: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.robin-diverged-card-text {
+  font-size: 0.8125rem;
+  color: var(--text-secondary, #aaa);
+  line-height: 1.5;
+}
+
+.robin-preset-selector {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.robin-preset-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--robin-border, #282828);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-dim, #666);
+  cursor: pointer;
+  transition: all 150ms;
+  font-family: inherit;
+}
+
+.robin-preset-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary, #aaa);
+}
+
+.robin-preset-btn.active {
+  background: rgba(79, 195, 247, 0.12);
+  border-color: rgba(79, 195, 247, 0.25);
+  color: var(--robin-primary, #4fc3f7);
+  font-weight: 600;
+}
+
+/* ==========================================================
+   WIKI CONTEXT TOGGLE
+   ========================================================== */
+
+.robin-wiki-content {
+  position: relative;
+}
+
+.robin-wiki-context-toggle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-dim, #666);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 150ms;
+  opacity: 0.4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.robin-wiki-context-toggle:hover {
+  opacity: 0.8;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.robin-wiki-context-toggle.active {
+  opacity: 1;
+  color: var(--robin-primary, #4fc3f7);
+}
+
+.robin-wiki-context-toggle .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.robin-wiki-context-view {
+  border-left: 2px solid rgba(79, 195, 247, 0.2);
+  padding-left: 16px;
+}
+
+.robin-wiki-context-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--robin-primary, #4fc3f7);
+  opacity: 0.6;
+  margin-bottom: 16px;
+}
+
+.robin-wiki-context-label .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.robin-wiki-context-content {
+  opacity: 0.85;
+}

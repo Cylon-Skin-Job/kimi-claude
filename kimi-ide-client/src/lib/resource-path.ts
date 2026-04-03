@@ -9,7 +9,7 @@ import { showToast } from './toast';
 
 const PANEL_PREFIX: Record<string, string> = {
   'capture-viewer': 'ai/views/capture-viewer',
-  'wiki-viewer': 'ai/wiki-data',
+  'wiki-viewer': 'ai/views/wiki-viewer/content',
   'agents-viewer': 'ai/views/agents-viewer',
   'code-viewer': '',
   'issues-viewer': 'ai/views/issues-viewer',

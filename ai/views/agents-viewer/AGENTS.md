@@ -48,7 +48,7 @@ agents/{agent-id}/
 
 ## Key Resources
 
-- **Wiki:** `ai/wiki-data/` — browse topics via `topics.json`, read `{collection}/{topic}/PAGE.md`
+- **Wiki:** `ai/views/wiki-viewer/content/` — browse topics via `topics.json`, read `{collection}/{topic}/PAGE.md`
 - **Tickets:** `ai/views/issues-viewer/` — board state via `tickets.json`, individual tickets as `KIMI-NNNN.md`
 - **Cross-panel state:** `ai/STATE.md` — recent activity from all views
 - **Secrets:** macOS Keychain, account `kimi-ide` — access via `security find-generic-password -a "kimi-ide" -s "KEY_NAME" -w`
