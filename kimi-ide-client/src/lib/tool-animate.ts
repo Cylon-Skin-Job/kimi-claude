@@ -105,7 +105,7 @@ function createAdapter(
       return result;
     },
 
-    flush(content: string): ParsedChunk[] {
+    flush(_content: string): ParsedChunk[] {
       // Feed any remaining content
       strategy.onContent('');
       const flushed = strategy.flush();
@@ -120,7 +120,7 @@ function createAdapter(
 /**
  * Convert a tagged chunk to display text using the entry's renderer.
  */
-function renderChunkToText(chunk: TaggedChunk, entry: CatalogEntry): string {
+function renderChunkToText(chunk: TaggedChunk, _entry: CatalogEntry): string {
   // For line-by-line rendering, each chunk is one line
   return chunk.content;
 }
@@ -138,7 +138,7 @@ async function runWithResultHolding(
   completeRef: { current: boolean },
   cancelRef: { current: boolean },
   strategy: ActiveChunkStrategy,
-  adapter: ChunkParser,
+  _adapter: ChunkParser,
   entry: CatalogEntry,
   setDisplayedContent: (html: string) => void,
   getTimingProfile: () => TimingProfile,

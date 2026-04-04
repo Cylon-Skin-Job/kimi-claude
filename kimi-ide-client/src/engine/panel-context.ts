@@ -9,6 +9,7 @@
 
 import { usePanelStore } from '../state/panelStore';
 import { fetchPanelFile } from '../lib/panels';
+import { scopePanelCss } from '../lib/scopePanelCss';
 import type { PanelConfig, PanelTheme } from '../lib/panels';
 
 // --- Public types ---
@@ -171,17 +172,7 @@ export function createContext(config: PanelConfig): PanelContext {
       // Remove existing style with same id
       const existing = document.getElementById(styleId);
       if (existing) existing.remove();
-      // Scope CSS to this panel's container
-      const scoped = css.replace(
-        /(^|\})\s*([^@{}][^{]*)\{/g,
-        (match, before, selector) => {
-          // Don't scope @-rules or already-scoped selectors
-          if (selector.trim().startsWith('@') || selector.includes(`[data-panel="${config.id}"]`)) {
-            return match;
-          }
-          return `${before} [data-panel="${config.id}"] ${selector.trim()} {`;
-        }
-      );
+      const scoped = scopePanelCss(css, config.id);
       const style = document.createElement('style');
       style.id = styleId;
       style.textContent = scoped;

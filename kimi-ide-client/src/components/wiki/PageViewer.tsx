@@ -179,20 +179,20 @@ export function PageViewer() {
 
       {activeTab === 'page' && !pageLoading && (
         <div
-          className="wiki-page-content"
+          className="wiki-page-content document-surface"
           dangerouslySetInnerHTML={{ __html: renderedPage as string }}
         />
       )}
 
       {activeTab === 'log' && (
         <div
-          className="wiki-page-content"
+          className="wiki-page-content document-surface"
           dangerouslySetInnerHTML={{ __html: renderedLog as string }}
         />
       )}
 
       {activeTab === 'runs' && (
-        <div className="wiki-page-content">
+        <div className="wiki-page-content document-surface">
           <p style={{ color: 'var(--text-dim)' }}>Run history — coming soon</p>
         </div>
       )}

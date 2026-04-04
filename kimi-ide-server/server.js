@@ -42,6 +42,9 @@ const { moveFileWithArchive } = require('./lib/file-ops');
 // Config system for persistence
 const config = require('./config');
 
+// View discovery and resolution (filesystem-driven, no database)
+const views = require('./lib/views');
+
 // Logging
 const WIRE_LOG_FILE = path.join(__dirname, 'wire-debug.log');
 const SERVER_LOG_FILE = path.join(__dirname, 'server-live.log');
@@ -77,7 +80,20 @@ const wss = new WebSocket.Server({ server });
 
 // Serve static files from the React client dist folder
 const clientDistPath = path.join(__dirname, '..', 'kimi-ide-client', 'dist');
-app.use(express.static(clientDistPath));
+app.use(
+  express.static(clientDistPath, {
+    setHeaders(res, filePath) {
+      // Always revalidate HTML so new builds (new hashed JS/CSS names) load after refresh
+      if (path.basename(filePath) === 'index.html') {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    },
+  })
+);
 
 // Serve panel files (images, etc.) via HTTP
 // Uses fuzzy filename matching to handle macOS Unicode spaces in screenshot names
@@ -184,25 +200,25 @@ function clearSessionRoot(ws) {
 }
 
 function getPanelPath(panel, ws) {
-  // explorer gets the project root (file explorer browses the whole project)
-  if (panel === 'code-viewer') {
-    return getSessionRoot(ws, panel);
-  }
-  // __panels__ pseudo-panel: resolves to ai/views/ (for discovery)
+  const projectRoot = getDefaultProjectRoot();
+
+  // __panels__ pseudo-panel: resolves to ai/views/ (for client discovery)
   if (panel === '__panels__') {
-    const viewsRoot = path.join(getDefaultProjectRoot(), 'ai', 'views');
+    const viewsRoot = views.getViewsRoot(projectRoot);
     if (fs.existsSync(viewsRoot)) return viewsRoot;
     return null;
   }
-  // Wiki panel resolves to ai/views/wiki-viewer/content/
-  if (panel === 'wiki-viewer') {
-    const wikiRoot = path.join(getDefaultProjectRoot(), 'ai', 'views', 'wiki-viewer', 'content');
-    if (fs.existsSync(wikiRoot)) return wikiRoot;
-    return null;
-  }
-  // All other panels resolve to their ai/views/{id}/ folder
-  const panelPath = path.join(getDefaultProjectRoot(), 'ai', 'views', panel);
-  if (fs.existsSync(panelPath)) return panelPath;
+
+  // Delegate to the view resolver system.
+  // Each display type has its own resolver module that knows where
+  // the content root is for that view type.
+  const context = { sessionRoot: getSessionRoot(ws, panel) };
+  const resolved = views.resolveContentPath(projectRoot, panel, context);
+  if (resolved && fs.existsSync(resolved)) return resolved;
+
+  // Fallback: raw ai/views/{id}/ folder (for views not yet in the system)
+  const fallback = path.join(views.getViewsRoot(projectRoot), panel);
+  if (fs.existsSync(fallback)) return fallback;
   return null;
 }
 
@@ -559,17 +575,19 @@ wss.on('connection', (ws) => {
   };
   sessions.set(ws, session);
   
-  // Set up code panel for thread management
-  // Must match frontend panel ID ('code-viewer')
-  ThreadWebSocketHandler.setPanel(ws, 'code-viewer', {
-    panelPath: path.join(AI_PANELS_PATH, 'code-viewer'),
-    projectRoot: getDefaultProjectRoot(),
-  });
-
-  // Send thread list on connect (async but don't block)
-  ThreadWebSocketHandler.sendThreadList(ws).catch(err => {
-    console.error('[WS] Failed to send thread list:', err);
-  });
+  // Set up a default panel so ThreadManager exists for wire spawning.
+  // Don't send the thread list yet — wait for the client's set_panel message
+  // to avoid cross-contamination (e.g., issues-viewer seeing code-viewer threads).
+  // Only set up threads if the default view has chat.
+  // panelId = absolute chat folder path (stable key for SQLite, survives renames)
+  const defaultChatConfig = views.resolveChatConfig(projectRoot, 'code-viewer');
+  if (defaultChatConfig) {
+    ThreadWebSocketHandler.setPanel(ws, defaultChatConfig.chatPath, {
+      panelPath: path.join(AI_PANELS_PATH, 'code-viewer'),
+      projectRoot,
+      viewName: 'code-viewer',
+    });
+  }
   
   // ==========================================================================
   // Wire Process Handlers
@@ -992,10 +1010,12 @@ wss.on('connection', (ws) => {
         }
 
         // Get or create ThreadManager for this agent (single instance, cached)
-        const containerKey = `agent:${agentPath}`;
-        ThreadWebSocketHandler.setPanel(ws, containerKey, {
+        // Use absolute path to agent's chat folder as the stable DB key
+        const agentChatPath = path.join(agentFolderPath, 'chat');
+        ThreadWebSocketHandler.setPanel(ws, agentChatPath, {
           panelPath: agentFolderPath,
           projectRoot: getDefaultProjectRoot(),
+          viewName: `agent:${agentPath}`,
         });
         const agentThreadManager = ThreadWebSocketHandler.getState(ws).threadManager;
         await agentThreadManager.init();
@@ -1076,6 +1096,11 @@ wss.on('connection', (ws) => {
         return;
       }
       
+      if (clientMsg.type === 'thread:copyLink') {
+        await ThreadWebSocketHandler.handleThreadCopyLink(ws, clientMsg);
+        return;
+      }
+      
       if (clientMsg.type === 'thread:list') {
         await ThreadWebSocketHandler.sendThreadList(ws);
         return;
@@ -1100,21 +1125,33 @@ wss.on('connection', (ws) => {
       if (clientMsg.type === 'set_panel') {
         const { panel, rootFolder } = clientMsg;
         if (panel) {
+          const projectRoot = getDefaultProjectRoot();
           setSessionRoot(ws, panel, rootFolder || null);
 
-          // Update thread panel
-          ThreadWebSocketHandler.setPanel(ws, panel, {
-            panelPath: path.join(AI_PANELS_PATH, panel),
-            projectRoot: getDefaultProjectRoot(),
-          });
+          // Check if this view has chat before setting up threads
+          const chatConfig = views.resolveChatConfig(projectRoot, panel);
 
-          // Send thread list for new panel
-          await ThreadWebSocketHandler.sendThreadList(ws);
+          if (chatConfig) {
+            // View has chat — use absolute chat folder path as the stable DB key
+            ThreadWebSocketHandler.setPanel(ws, chatConfig.chatPath, {
+              panelPath: path.join(AI_PANELS_PATH, panel),
+              projectRoot,
+              viewName: panel,
+            });
+            await ThreadWebSocketHandler.sendThreadList(ws);
+          }
 
+          // Send view config to client (includes content.json + layout.json)
+          const viewConfig = views.loadView(projectRoot, panel);
           ws.send(JSON.stringify({
             type: 'panel_changed',
             panel,
-            rootFolder: rootFolder || getDefaultProjectRoot()
+            rootFolder: rootFolder || projectRoot,
+            contentConfig: viewConfig?.content || null,
+            layoutConfig: viewConfig?.layout || null,
+            hasChat: !!chatConfig,
+            chatType: chatConfig?.chatType || null,
+            chatPosition: chatConfig?.chatPosition || null,
           }));
 
           if (rootFolder) {
@@ -1275,10 +1312,11 @@ wss.on('connection', (ws) => {
     message: 'Thread-enabled connection established'
   }));
   
+  // Send project root info without assuming a panel — the client will
+  // send set_panel to identify itself.
   const initialProjectName = path.basename(projectRoot);
   ws.send(JSON.stringify({
     type: 'panel_config',
-    panel: 'code-viewer',
     projectRoot,
     projectName: initialProjectName
   }));

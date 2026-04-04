@@ -15,7 +15,13 @@
     "terminal-viewer",
     "issues-viewer",
     "wiki-viewer",
-    "agents-viewer"
+    "agents-viewer",
+    "settings-viewer",
+    "browser-viewer",
+    "calendar-viewer",
+    "email-viewer",
+    "docs-viewer",
+    "library-viewer"
   ],
   "settings": {}
 }

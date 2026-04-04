@@ -85,7 +85,15 @@ export type WebSocketMessageType =
   // Modal messages
   | 'modal:show'
   | 'file:moved'
-  | 'file:move_error';
+  | 'file:move_error'
+  | 'panel_config'
+  | 'file_changed'
+  | 'file_tree_response'
+  | 'file_content_response'
+  | 'robin:tabs'
+  | 'robin:items'
+  | 'robin:wiki'
+  | 'robin:theme-data';
 
 export interface WebSocketMessage {
   type: WebSocketMessageType;

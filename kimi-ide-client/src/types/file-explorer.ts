@@ -17,6 +17,14 @@ export interface FileInfo {
   extension?: string;
 }
 
+/** One open file tab in the code viewer (path is unique per tab). */
+export interface EditorTab {
+  file: FileInfo;
+  content: string;
+  size: number;
+  loading: boolean;
+}
+
 export type FileErrorCode =
   | 'ENOENT'
   | 'EACCES'

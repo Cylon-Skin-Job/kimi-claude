@@ -2,35 +2,26 @@
 
 > Agent-focused documentation for the Kimi IDE project — a web-based IDE using Kimi CLI in wire mode as the agent backend.
 
-## ⚠️ CRITICAL PREREQUISITE: Two Servers Required
+## ⚠️ CRITICAL PREREQUISITE: One Server
 
-**The Kimi IDE requires BOTH servers running simultaneously:**
+**One Node process** serves the React app from `kimi-ide-client/dist/`, HTTP, and the WebSocket bridge to Kimi CLI (default **port 3001**, or `PORT`).
 
-| Server | Port | Command | Purpose |
-|--------|------|---------|---------|
-| **Backend** | 3001 | `cd kimi-ide-server && node server.js` | WebSocket bridge to Kimi CLI |
-| **Frontend** | 5173 | `cd kimi-ide-client && npm run dev` | React development server |
+The client is **not** hot-reloaded by the server: after UI changes, run **`npm run build`** in `kimi-ide-client/` (or **`./restart-kimi.sh`**, which builds then starts the server).
 
-**The connection indicator stays RED until both are running.**
-
-### Quick Start (Both Servers)
+### Quick start
 ```bash
-# From project root
+# From project root — rebuild client and restart server
 ./restart-kimi.sh
+# Open http://localhost:3001
 ```
 
-### Or Start Separately
+### Or manually
 ```bash
-# Terminal 1 - Backend
-cd kimi-ide-server
-node server.js
-
-# Terminal 2 - Frontend  
-cd kimi-ide-client
-npm run dev
+cd kimi-ide-client && npm run build
+cd ../kimi-ide-server && node server.js
 ```
 
----
+**Optional:** `npm run dev` in `kimi-ide-client` runs Vite’s dev server for local HMR; that is separate from production-like testing on port 3001. Day-to-day testing uses **3001** + **`dist/`**.
 
 ---
 
@@ -244,66 +235,51 @@ Components MUST NOT:
 
 ## Development Workflow
 
-### 1. Start the Server
+### 1. Install (once)
 
 ```bash
-cd kimi-ide-server
-node server.js
-# Server runs on http://localhost:3001
+cd kimi-ide-client && npm install
 ```
 
-### 2. Start the Client (Development)
-
-```bash
-cd kimi-ide-client
-npm install
-npm run dev
-# Dev server runs on http://localhost:5173
-```
-
-### 3. Build for Production
+### 2. Build the client
 
 ```bash
 cd kimi-ide-client
 npm run build
-# Output goes to dist/, served by server
+# Output: dist/ — this is what the server serves
 ```
 
-### 4. Testing & Restart Workflow (CRITICAL)
+### 3. Start the server
 
-**For development testing, you MUST restart both servers after every code change.**
+```bash
+cd kimi-ide-server
+node server.js
+# App + WebSocket: http://localhost:3001
+```
 
-**Quick Restart Script:**
+### 4. Testing & restart (CRITICAL)
+
+**After client (`kimi-ide-client/src/`) or bundle-affecting changes:** rebuild and restart the Node process so `dist/` is current.
+
+**Quick restart (recommended):**
 ```bash
 # From project root
 ./restart-kimi.sh
 ```
 
-**Manual Steps:**
+**Manual:**
 ```bash
-# 1. Kill existing servers
-lsof -ti:3001 | xargs kill -9
-lsof -ti:5173 | xargs kill -9
-
-# 2. Rebuild frontend
+lsof -ti:3001 | xargs kill -9 2>/dev/null || true
 cd kimi-ide-client && npm run build
-
-# 3. Start backend
-cd ../kimi-ide-server && node server-with-threads.js &
-
-# 4. Start frontend
-cd ../kimi-ide-client/dist && python3 -m http.server 5173 &
-
-# 5. Tell user to refresh browser
+cd ../kimi-ide-server && node server.js &
 ```
 
-**⚠️ AGENT RULE: After making ANY code changes:**
-1. Run the restart script (or manual steps)
-2. Wait for "✅ READY" message
-3. **THEN** tell user to refresh browser
-4. Never tell user to refresh before restarting
+**⚠️ AGENT RULE after UI changes:**
+1. Run `./restart-kimi.sh` (or build + `node server.js`)
+2. Wait until the server is listening
+3. **Then** tell the user to refresh the browser (hard refresh if assets look stale)
 
-**Why:** The frontend serves static files from `dist/` which only update after `npm run build`. The backend Node.js process doesn't hot-reload. Both must restart to see changes.
+**Why:** The server only serves **`kimi-ide-client/dist/`**. There is no separate frontend port in the default workflow; `npm run build` is required for changes to appear on **3001**.
 
 ---
 

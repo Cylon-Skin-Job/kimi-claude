@@ -171,6 +171,7 @@ function App() {
           return (
             <div
               key={config.id}
+              data-panel={config.id}
               className={`panel layout-${layout} ${currentPanel === config.id ? 'active' : ''}`}
             >
               <PanelContent panel={config.id} layout={layout} />

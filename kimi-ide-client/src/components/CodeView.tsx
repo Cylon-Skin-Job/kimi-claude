@@ -6,8 +6,8 @@
  *   - 'code' (default): syntax-highlighted raw text with line gutter
  *   - 'markdown': rendered HTML via markdownToHtml
  *
- * Used by: FileContentRenderer, FilePageView, PromptCardView, and
- * anywhere a file's content needs to be displayed.
+ * Used by: FileContentRenderer, FilePageView (code ↔ rendered MD toggle), PromptCardView, etc.
+ * Shared styles: src/styles/document.css (.code-editor, .wiki-page-content).
  */
 
 import { useMemo } from 'react';

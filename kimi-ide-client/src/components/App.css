@@ -179,6 +179,8 @@
   inset: 0;
   display: grid;
   grid-template-columns: var(--sidebar-width) var(--chat-width) 1fr;
+  /* One row fills the panel so content-area / chat / sidebar get a definite height */
+  grid-template-rows: minmax(0, 1fr);
   opacity: 0;
   visibility: hidden;
   min-height: 0; /* children must not blow out the grid */
@@ -250,12 +252,20 @@
   gap: 12px;
 }
 
-/* Content Area */
+/* Content Area — flex column so the active panel (file explorer, wiki, etc.) can fill height */
 .content-area {
   background: var(--bg-solid);
   padding: 24px;
-  overflow-y: auto;
-  min-height: 0; /* prevent grid blowout */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.content-area > * {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
 }
 
 /* Content area in full layout gets no padding (explorer/viewer fills it) */
@@ -279,6 +289,10 @@
 
 .layout-sidebar-chat-content {
   /* default grid already has 3 columns */
+}
+
+.layout-sidebar-chat-content .content-area {
+  padding: 0;
 }
 
 /* --- Floating Chat --- */

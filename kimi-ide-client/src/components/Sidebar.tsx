@@ -1,6 +1,109 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { usePanelStore } from '../state/panelStore';
 import { logger } from '../lib/logger';
+
+// FLIP animation for thread reordering
+function useThreadAnimation(threads: { threadId: string }[]) {
+  const threadRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const prevOrder = useRef<string[]>([]);
+  const isAnimating = useRef(false);
+
+  const setThreadRef = useCallback((threadId: string, el: HTMLElement | null) => {
+    if (el) {
+      threadRefs.current.set(threadId, el);
+    } else {
+      threadRefs.current.delete(threadId);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAnimating.current) return;
+    
+    const currentOrder = threads.map(t => t.threadId);
+    const prev = prevOrder.current;
+    
+    // Skip first render or if order hasn't changed
+    if (prev.length === 0 || JSON.stringify(prev) === JSON.stringify(currentOrder)) {
+      prevOrder.current = currentOrder;
+      return;
+    }
+
+    // Capture initial positions (First)
+    const positions = new Map<string, { top: number; left: number }>();
+    threadRefs.current.forEach((el, threadId) => {
+      const rect = el.getBoundingClientRect();
+      positions.set(threadId, { top: rect.top, left: rect.left });
+    });
+
+    // Store previous order and let React update DOM (Last happens after this effect)
+    prevOrder.current = currentOrder;
+    
+    // Next frame: calculate differences and animate (Invert + Play)
+    requestAnimationFrame(() => {
+      const animations: { el: HTMLElement; dy: number }[] = [];
+      
+      threadRefs.current.forEach((el, threadId) => {
+        const oldPos = positions.get(threadId);
+        if (!oldPos) return;
+        
+        const newRect = el.getBoundingClientRect();
+        const dy = oldPos.top - newRect.top;
+        
+        if (Math.abs(dy) > 1) {
+          animations.push({ el, dy });
+        }
+      });
+
+      if (animations.length === 0) return;
+
+      isAnimating.current = true;
+
+      // Find the thread moving to top (highest upward movement)
+      const topMover = animations.reduce((max, curr) => 
+        curr.dy > max.dy ? curr : max, animations[0]
+      );
+
+      // Apply initial offset (Invert)
+      animations.forEach(({ el, dy }) => {
+        el.style.transform = `translateY(${dy}px)`;
+        el.style.transition = 'none';
+        el.style.zIndex = '1';
+      });
+
+      // Highlight the thread being promoted to top
+      if (topMover && topMover.dy > 50) {
+        topMover.el.style.zIndex = '20';
+        topMover.el.style.boxShadow = '0 8px 32px rgba(var(--theme-primary-rgb), 0.15), 0 0 0 1px rgba(var(--theme-primary-rgb), 0.3)';
+        topMover.el.style.background = 'rgba(var(--theme-primary-rgb), 0.05)';
+      }
+
+      // Force reflow
+      document.body.offsetHeight;
+
+      // Animate to final position (Play)
+      requestAnimationFrame(() => {
+        animations.forEach(({ el }) => {
+          el.style.transition = 'transform 400ms cubic-bezier(0.2, 0, 0.2, 1), box-shadow 400ms ease, background 400ms ease';
+          el.style.transform = 'translateY(0)';
+        });
+
+        // Cleanup after animation
+        setTimeout(() => {
+          animations.forEach(({ el }) => {
+            el.style.transition = '';
+            el.style.transform = '';
+            el.style.zIndex = '';
+            el.style.boxShadow = '';
+            el.style.background = '';
+          });
+          isAnimating.current = false;
+        }, 400);
+      });
+    });
+  }, [threads]);
+
+  return { setThreadRef };
+}
 
 interface SidebarProps {
   panel: string;
@@ -18,6 +121,7 @@ export function Sidebar({ panel }: SidebarProps) {
   const ws = usePanelStore((state) => state.ws);
   const threads = usePanelStore((state) => state.threads);
   const currentThreadId = usePanelStore((state) => state.currentThreadId);
+  const { setThreadRef } = useThreadAnimation(threads);
   
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -36,7 +140,7 @@ export function Sidebar({ panel }: SidebarProps) {
     }
   }, [ws, panel]);
 
-  // Handle WebSocket messages for confirmation modal
+  // Handle WebSocket messages for confirmation modal and copy link
   useEffect(() => {
     if (!ws) return;
 
@@ -56,6 +160,16 @@ export function Sidebar({ panel }: SidebarProps) {
               setConfirmModal(prev => ({ ...prev, show: false }));
             }
           });
+        } else if (msg.type === 'thread:link') {
+          // Copy the file path to clipboard
+          if (msg.filePath) {
+            navigator.clipboard.writeText(msg.filePath).then(() => {
+              // Show a brief success indicator (could be enhanced with a toast)
+              console.log('[Sidebar] Copied link to clipboard:', msg.filePath);
+            }).catch(err => {
+              console.error('[Sidebar] Failed to copy link:', err);
+            });
+          }
         }
       } catch (e) {
         // Ignore non-JSON messages
@@ -126,6 +240,10 @@ export function Sidebar({ panel }: SidebarProps) {
     }
   };
   
+  const handleCopyLink = (threadId: string) => {
+    sendMessage({ type: 'thread:copyLink', threadId });
+  };
+  
   const formatDate = (dateStr: string) => {
     if (!dateStr) return 'unknown';
     try {
@@ -168,6 +286,7 @@ export function Sidebar({ panel }: SidebarProps) {
           threads.filter(t => t && t.threadId && t.entry).map((thread) => (
             <div 
               key={thread.threadId}
+              ref={(el) => setThreadRef(thread.threadId, el)}
               className={`chat-item ${currentThreadId === thread.threadId ? 'active' : ''}`}
               onClick={() => handleOpenThread(thread.threadId)}
             >
@@ -221,6 +340,14 @@ export function Sidebar({ panel }: SidebarProps) {
                           }}
                         >
                           ✎ Rename
+                        </button>
+                        <button 
+                          onClick={() => {
+                            handleCopyLink(thread.threadId);
+                            setMenuOpenId(null);
+                          }}
+                        >
+                          ⎘ Copy Link
                         </button>
                         <button 
                           onClick={() => {

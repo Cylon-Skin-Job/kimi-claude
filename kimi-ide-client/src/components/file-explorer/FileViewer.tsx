@@ -1,5 +1,7 @@
+import type { KeyboardEvent, MouseEvent } from 'react';
 import { useFileStore } from '../../state/fileStore';
 import { FileContentRenderer } from './FileContentRenderer';
+import type { EditorTab } from '../../types/file-explorer';
 
 // File extension to icon mapping
 const FILE_ICONS: Record<string, string> = {
@@ -82,62 +84,131 @@ function formatFileSize(bytes: number): string {
 }
 
 function formatFilePath(path: string): string {
-  // Show last 2 parts of path, or full path if short
   const parts = path.split('/');
   if (parts.length <= 2) return path;
   return '.../' + parts.slice(-2).join('/');
 }
 
+function TabRow({
+  tab,
+  active,
+  onClose,
+}: {
+  tab: EditorTab;
+  active: boolean;
+  onClose: (e: MouseEvent) => void;
+}) {
+  const fileIcon = getFileIcon(tab.file.extension);
+  const path = tab.file.path;
+  return (
+    <div
+      role="tab"
+      aria-selected={active}
+      data-tab-path={path}
+      tabIndex={active ? 0 : -1}
+      className={`file-viewer-tab${active ? ' active' : ''}`}
+      onKeyDown={(e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          useFileStore.getState().setActiveTab(path);
+        }
+      }}
+    >
+      <span className={`material-symbols-outlined tab-icon file-icon-${tab.file.extension}`}>
+        {fileIcon}
+      </span>
+      <span className="tab-name">{tab.file.name}</span>
+      <button
+        type="button"
+        className="tab-close"
+        onClick={onClose}
+        disabled={tab.loading}
+        title="Close tab"
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+          close
+        </span>
+      </button>
+    </div>
+  );
+}
+
 export function FileViewer() {
-  const selectedFile = useFileStore((s) => s.selectedFile);
-  const fileContent = useFileStore((s) => s.fileContent);
-  const isLoading = useFileStore((s) => s.isLoading);
-  const fileSize = useFileStore((s) => s.fileSize);
-  const closeFile = useFileStore((s) => s.closeFile);
+  const tabs = useFileStore((s) => s.tabs);
+  const activeTabPath = useFileStore((s) => s.activeTabPath);
+  const activateAdjacentTab = useFileStore((s) => s.activateAdjacentTab);
+  const closeTab = useFileStore((s) => s.closeTab);
+  const closeActiveTab = useFileStore((s) => s.closeActiveTab);
 
-  if (!selectedFile) return null;
+  const activeTab = tabs.find((t) => t.file.path === activeTabPath) ?? null;
 
-  const fileIcon = getFileIcon(selectedFile.extension);
+  if (!activeTab || !activeTabPath) return null;
+
+  const selectedFile = activeTab.file;
+  const fileContent = activeTab.content;
+  const isLoading = activeTab.loading;
+  const fileSize = activeTab.size;
+
   const languageName = getLanguageName(selectedFile.extension);
-  const displaySize = fileSize ? formatFileSize(fileSize) : 'Loading...';
+  const displaySize = fileSize ? formatFileSize(fileSize) : isLoading ? 'Loading...' : '—';
   const lineCount = fileContent.split('\n').length;
 
+  const activeIdx = tabs.findIndex((t) => t.file.path === activeTabPath);
+  const canGoPrev = tabs.length > 1 && activeIdx > 0;
+  const canGoNext = tabs.length > 1 && activeIdx >= 0 && activeIdx < tabs.length - 1;
+
+  function handleTabStripClick(e: MouseEvent<HTMLDivElement>) {
+    if ((e.target as HTMLElement).closest('button.tab-close')) return;
+    const row = (e.target as HTMLElement).closest('[data-tab-path]');
+    if (!row) return;
+    const path = row.getAttribute('data-tab-path');
+    if (!path) return;
+    e.stopPropagation();
+    useFileStore.getState().setActiveTab(path);
+  }
+
   return (
-    <div className={`file-viewer${isLoading ? ' loading' : ''}`}>
-      {/* File Header - Tab Bar */}
+    <div className="file-viewer">
       <div className="file-viewer-header">
-        <div className="file-viewer-tabs">
-          <div className="file-viewer-tab">
-            <span className={`material-symbols-outlined tab-icon file-icon-${selectedFile.extension}`}>
-              {fileIcon}
-            </span>
-            <span className="tab-name">{selectedFile.name}</span>
-            <button 
-              className="tab-close"
-              onClick={closeFile}
-              disabled={isLoading}
-              title="Close file"
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
-                close
-              </span>
-            </button>
-          </div>
-        </div>
-        
-        <div className="file-viewer-actions">
-          <button 
-            className="action-btn"
-            onClick={() => navigator.clipboard.writeText(fileContent)}
-            title="Copy content"
+        <div className="file-viewer-nav">
+          <button
+            type="button"
+            className="nav-btn"
+            title="Previous tab"
+            disabled={!canGoPrev}
+            onClick={() => activateAdjacentTab(-1)}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
-              content_copy
-            </span>
+            <span className="material-symbols-outlined">chevron_left</span>
           </button>
-          <button 
+          <button
+            type="button"
+            className="nav-btn"
+            title="Next tab"
+            disabled={!canGoNext}
+            onClick={() => activateAdjacentTab(1)}
+          >
+            <span className="material-symbols-outlined">chevron_right</span>
+          </button>
+        </div>
+        <div className="file-viewer-tabs" onClick={handleTabStripClick}>
+          {tabs.map((tab) => (
+            <TabRow
+              key={tab.file.path}
+              tab={tab}
+              active={tab.file.path === activeTabPath}
+              onClose={(e) => {
+                e.stopPropagation();
+                closeTab(tab.file.path);
+              }}
+            />
+          ))}
+        </div>
+
+        <div className="file-viewer-actions">
+          <button
+            type="button"
             className="action-btn"
-            onClick={closeFile}
+            onClick={closeActiveTab}
             disabled={isLoading}
             title="Back to explorer"
           >
@@ -148,10 +219,8 @@ export function FileViewer() {
         </div>
       </div>
 
-      {/* File Info Bar */}
       <div className="file-viewer-info">
         <div className="info-item">
-          <span className="material-symbols-outlined">folder</span>
           <span>{formatFilePath(selectedFile.path)}</span>
         </div>
         <div className="info-item" style={{ marginLeft: 'auto' }}>
@@ -168,8 +237,7 @@ export function FileViewer() {
         </div>
       </div>
 
-      {/* File Content */}
-      <div className="file-viewer-content">
+      <div className={`file-viewer-content${isLoading ? ' loading' : ''}`}>
         <FileContentRenderer
           content={fileContent}
           extension={selectedFile.extension}

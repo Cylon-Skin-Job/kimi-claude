@@ -120,6 +120,9 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
   const [workspacesList, setWorkspacesList] = useState<WorkspaceItem[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('');
 
+  // Wiki context toggle
+  const [showContext, setShowContext] = useState(false);
+
   // Escape key
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') onClose();
@@ -195,6 +198,7 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
     setSelectedItemId('');
     setSelectedWorkspaceId('');
     setShowRegistry(false);
+    setShowContext(false);
     setWikiPage(null);
     setItems([]);
     if (tabId === 'customization') {
@@ -210,6 +214,7 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
   function selectItem(id: string) {
     setSelectedItemId(id);
     setShowRegistry(false);
+    setShowContext(false);
     sendRobinMessage({ type: 'robin:context', tab: activeTab, item: id });
   }
 
@@ -428,6 +433,13 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
 
             {/* Right panel: wiki, item detail, registry, or customization */}
             <div className="robin-detail">
+              {/* Context toggle — positioned in robin-detail, not inside scroll */}
+              {wikiPage?.context && !selectedItem && !showRegistry && !(activeTab === 'customization' && selectedWorkspaceId) && (
+                <WikiContextToggle
+                  active={showContext}
+                  onClick={() => setShowContext(!showContext)}
+                />
+              )}
               <div className="robin-detail-scroll">
                 {activeTab === 'customization' && selectedWorkspaceId ? (
                   selectedWorkspaceId === 'system' ? (
@@ -452,7 +464,7 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
                     <ConfigDetail item={selectedItem as ConfigItem} tabLabel={currentTab?.label || ''} />
                   )
                 ) : wikiPage ? (
-                  <WikiDetail page={wikiPage} />
+                  <WikiDetail page={wikiPage} showContext={showContext} />
                 ) : null}
               </div>
             </div>
@@ -463,22 +475,25 @@ export function RobinOverlay({ open, onClose }: RobinOverlayProps) {
   );
 }
 
+// --- Wiki context toggle (positioned in robin-detail, outside scroll) ---
+
+function WikiContextToggle({ active, onClick }: { active: boolean; onClick: () => void }) {
+  return (
+    <button
+      className={`robin-wiki-context-toggle ${active ? 'active' : ''}`}
+      onClick={onClick}
+      title={active ? 'Show user guide' : 'Show agent system message'}
+    >
+      <span className="material-symbols-outlined">text_compare</span>
+    </button>
+  );
+}
+
 // --- Wiki detail (default right panel) ---
 
-function WikiDetail({ page }: { page: WikiPage }) {
-  const [showContext, setShowContext] = useState(false);
-
+function WikiDetail({ page, showContext }: { page: WikiPage; showContext: boolean }) {
   return (
     <div className={`robin-detail-body robin-wiki-content ${showContext ? 'robin-wiki-context-view' : ''}`}>
-      {page.context && (
-        <button
-          className={`robin-wiki-context-toggle ${showContext ? 'active' : ''}`}
-          onClick={() => setShowContext(!showContext)}
-          title={showContext ? 'Show user guide' : 'Show agent system message'}
-        >
-          <span className="material-symbols-outlined">text_compare</span>
-        </button>
-      )}
       {showContext ? (
         <div className="robin-wiki-context-content">
           <div className="robin-wiki-context-label">

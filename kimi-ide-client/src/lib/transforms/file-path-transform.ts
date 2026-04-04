@@ -14,9 +14,9 @@ import type { TaggedChunk } from '../../types/tagged-chunk';
 
 /**
  * Extract the file path from a tagged chunk.
- * Looks in toolArgs for common path fields, falls back to content.
+ * Looks in toolArgs for common path fields.
  */
-function extractPath(chunk: TaggedChunk, toolArgs?: Record<string, unknown>): string | null {
+function extractPath(_chunk: TaggedChunk, toolArgs?: Record<string, unknown>): string | null {
   if (toolArgs) {
     // Wire protocol uses 'path' for ReadFile, 'file_path' for Write/Edit
     const p = toolArgs.path ?? toolArgs.file_path;

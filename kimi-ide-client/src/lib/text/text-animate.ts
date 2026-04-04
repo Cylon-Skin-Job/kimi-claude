@@ -18,7 +18,7 @@
  *   - Display state is HTML, not raw markdown.
  */
 
-import { parseTextChunks, type ParsedBlock } from './index';
+import { parseTextChunks } from './index';
 import { createChunkBuffer } from './chunk-buffer';
 import { truncateHtmlToChars, getVisibleTextLength } from './html-utils';
 import { textStrategy } from '../chunk-strategies/text';
@@ -50,7 +50,7 @@ export interface AnimateTextOptions {
 
 export async function animateText(opts: AnimateTextOptions): Promise<void> {
   const {
-    contentRef, completeRef, cancelRef, segmentType,
+    contentRef, completeRef, cancelRef,
     setDisplayedHtml, setTyping, getTimingProfile, onDone,
   } = opts;
 

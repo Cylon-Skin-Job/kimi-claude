@@ -19,6 +19,10 @@ const threadManagers = new Map();
 // Per-WS state: ws -> { panelId, threadId, threadManager }
 const wsState = new Map();
 
+// Pending reorder timers: ws -> timeoutId (for delayed thread list refresh)
+const pendingReorderTimers = new Map();
+const REORDER_DELAY_MS = 3000;
+
 /**
  * Get or create ThreadManager for a panel.
  * If the manager already exists but panelPath changed, replace it.
@@ -44,8 +48,9 @@ function getThreadManager(panelId, config = {}) {
 /**
  * Set panel for a WebSocket connection
  * @param {import('ws').WebSocket} ws
- * @param {string} panelId
+ * @param {string} panelId - Absolute chat folder path (stable DB key)
  * @param {object} [config] - Config including panelPath for ChatFile
+ * @param {string} [config.viewName] - View name for client messages (e.g., 'code-viewer')
  */
 function setPanel(ws, panelId, config = {}) {
   const existing = wsState.get(ws);
@@ -59,6 +64,7 @@ function setPanel(ws, panelId, config = {}) {
 
   wsState.set(ws, {
     panelId,
+    viewName: config.viewName || panelId,
     threadId: null,
     threadManager: manager,
   });
@@ -82,6 +88,13 @@ function cleanup(ws) {
     closeCurrentThread(ws);
   }
   wsState.delete(ws);
+  
+  // Clear any pending reorder timer
+  const timer = pendingReorderTimers.get(ws);
+  if (timer) {
+    clearTimeout(timer);
+    pendingReorderTimers.delete(ws);
+  }
 }
 
 /**
@@ -178,7 +191,7 @@ async function handleThreadCreate(ws, msg) {
     ws.send(JSON.stringify({
       type: 'thread:created',
       threadId: createdId,
-      panel: state.panelId,
+      panel: state.viewName,
       thread: entry
     }));
     
@@ -237,17 +250,32 @@ async function handleThreadOpen(ws, msg) {
   ws.send(JSON.stringify({
     type: 'thread:opened',
     threadId,
-    panel: state.panelId,
+    panel: state.viewName,
     thread: thread.entry,
     history: history?.messages || [],  // Legacy format
     exchanges: richHistory?.exchanges || []  // Rich format with tool calls
   }));
 
-  // Update MRU order
+  // Update MRU order immediately (so other views see it as recently used)
   await threadManager.index.touch(threadId);
-  await sendThreadList(ws);
+  
+  // Delay the thread list reorder by 3 seconds when just clicking a thread
+  // (This gives the user time to see the thread before the list reorders)
+  const existingTimer = pendingReorderTimers.get(ws);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+  }
+  
+  const timer = setTimeout(() => {
+    pendingReorderTimers.delete(ws);
+    sendThreadList(ws).catch(err => {
+      console.error('[ThreadWS] Delayed sendThreadList failed:', err);
+    });
+  }, REORDER_DELAY_MS);
+  
+  pendingReorderTimers.set(ws, timer);
 
-  console.log(`[ThreadWS] Opened thread ${threadId} (panel: ${state.panelId})`);
+  console.log(`[ThreadWS] Opened thread ${threadId} (panel: ${state.panelId}) - reorder in ${REORDER_DELAY_MS}ms`);
 }
 
 /**
@@ -271,10 +299,10 @@ async function handleThreadOpenDaily(ws, msg) {
   const { threadManager } = state;
   // Preserve the requesting panel so thread:opened is routed correctly.
   // If the message includes a panel (e.g., 'issues'), temporarily override
-  // the wsState panelId so handleThreadOpen includes the right panel.
-  const originalPanelId = state.panelId;
+  // the viewName so handleThreadOpen sends the right panel name to the client.
+  const originalViewName = state.viewName;
   if (msg.panel) {
-    state.panelId = msg.panel;
+    state.viewName = msg.panel;
   }
 
   // Today's date in local time as the thread ID
@@ -296,7 +324,7 @@ async function handleThreadOpenDaily(ws, msg) {
       ws.send(JSON.stringify({
         type: 'thread:created',
         threadId: todayId,
-        panel: state.panelId,
+        panel: state.viewName,
         thread: { name: todayId, createdAt: now.toISOString(), messageCount: 0, status: 'active' }
       }));
 
@@ -307,9 +335,9 @@ async function handleThreadOpenDaily(ws, msg) {
     }
   }
 
-  // Restore original panel context
+  // Restore original view name context
   if (msg.panel) {
-    state.panelId = originalPanelId;
+    state.viewName = originalViewName;
   }
 }
 
@@ -388,6 +416,40 @@ async function handleThreadDelete(ws, msg) {
     
   } catch (err) {
     console.error('[ThreadWS] Delete failed:', err);
+    ws.send(JSON.stringify({ type: 'error', message: err.message }));
+  }
+}
+
+/**
+ * Handle thread:copyLink message
+ * @param {import('ws').WebSocket} ws
+ * @param {object} msg
+ * @param {string} msg.threadId
+ */
+async function handleThreadCopyLink(ws, msg) {
+  const state = wsState.get(ws);
+  if (!state) {
+    ws.send(JSON.stringify({ type: 'error', message: 'No panel set' }));
+    return;
+  }
+  
+  const { threadId } = msg;
+  
+  try {
+    const thread = await state.threadManager.getThread(threadId);
+    if (!thread) {
+      ws.send(JSON.stringify({ type: 'error', message: `Thread not found: ${threadId}` }));
+      return;
+    }
+    
+    ws.send(JSON.stringify({
+      type: 'thread:link',
+      threadId,
+      filePath: thread.filePath
+    }));
+    
+  } catch (err) {
+    console.error('[ThreadWS] Copy link failed:', err);
     ws.send(JSON.stringify({ type: 'error', message: err.message }));
   }
 }
@@ -490,6 +552,7 @@ module.exports = {
   handleThreadOpenDaily,
   handleThreadRename,
   handleThreadDelete,
+  handleThreadCopyLink,
   handleMessageSend,
   
   // Assistant message handling

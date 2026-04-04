@@ -9,7 +9,7 @@
  */
 
 import { useFolderFiles } from '../../hooks/useFolderFiles';
-import { DocumentTile, isImageFile } from './DocumentTile';
+import { DocumentTile } from './DocumentTile';
 import type { FileWithContent } from '../../state/fileDataStore';
 
 // Re-export for consumers that import from here

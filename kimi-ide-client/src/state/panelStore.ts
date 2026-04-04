@@ -115,6 +115,11 @@ export const usePanelStore = create<AppState>((set, get) => ({
     } else {
       set({ currentPanel: id });
     }
+    // Tell the server so ThreadManager scopes to this panel's threads
+    const ws = state.ws;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'set_panel', panel: id }));
+    }
   },
 
   addMessage: (panel, message) => set((state) => {

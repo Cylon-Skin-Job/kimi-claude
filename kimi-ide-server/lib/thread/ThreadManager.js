@@ -136,7 +136,11 @@ class ThreadManager {
   async getThread(threadId) {
     const entry = await this.index.get(threadId);
     if (!entry) return null;
-    return { threadId, entry };
+    
+    // Get the chat file path for this thread
+    const chatFile = this._createChatFile(threadId, entry.name);
+    
+    return { threadId, entry, filePath: chatFile.filePath };
   }
 
   /**

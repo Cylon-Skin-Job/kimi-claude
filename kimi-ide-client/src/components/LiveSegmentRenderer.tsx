@@ -235,7 +235,7 @@ interface LiveTextSegmentProps {
  */
 function LiveTextSegment({ segment, index, skipAnimation, getTimingProfile, onDone }: LiveTextSegmentProps) {
   const [displayedHtml, setDisplayedHtml] = useState('');
-  const [typing, setTyping] = useState(true);
+  const [, setTyping] = useState(true);
   const animatingRef = useRef(false);
   const contentRef = useRef(segment.content);
   const completeRef = useRef(segment.complete ?? false);

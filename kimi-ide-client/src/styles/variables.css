@@ -1,6 +1,10 @@
 :root {
   /* Core Colors - Cyan Tron-inspired */
   --bg-solid: #000000;
+
+  /* Shared document / code canvas (see document.css) — not pure black so “page” reads clearly */
+  --document-surface-bg: #0d0d0d;
+  --document-code-bg: #161616;
   --color-primary: #00d4ff;
   --color-secondary: #00a8cc;
   --border-primary: rgba(0, 212, 255, 0.3);

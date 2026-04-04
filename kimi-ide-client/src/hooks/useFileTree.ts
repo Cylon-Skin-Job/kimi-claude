@@ -40,16 +40,14 @@ export function useFileTreeListener() {
           }
         }
 
-        if (msg.type === 'file_content_response') {
-          useFileStore.getState().setLoading(false);
+        if (msg.type === 'file_content_response' && msg.panel === 'code-viewer') {
           if (msg.success) {
-            const pending = useFileStore.getState().pendingFile;
-            if (pending) {
-              useFileStore.getState().openFile(pending, msg.content, msg.size);
-              useFileStore.getState().setPendingFile(null);
-            }
+            useFileStore.getState().applyFileContent(msg.path, msg.content, msg.size);
           } else {
-            useFileStore.getState().setError(msg.error || 'Failed to load file');
+            useFileStore.getState().removeTabAfterError(
+              msg.path,
+              msg.error || 'Failed to load file',
+            );
           }
         }
       } catch (_) {

@@ -65,7 +65,7 @@ these stall the UI so content is buffered ahead of display. NOT decorative.
 
 ### Development Workflow
 
-1. **Client changes require rebuild**: `npm run build` in `kimi-ide-client/`
-2. **Server may need restart**: `node server.js` in `kimi-ide-server/`
+1. **After ANY edit under `kimi-ide-client/src/`** (or anything that affects the bundle): run **`npm run build`** in `kimi-ide-client/` **before ending the task**. The server only serves `dist/`; there is no hot reload. Skipping the build is why changes “don’t show up.”
+2. **Server may need restart** (only if server code changed): `node server.js` in `kimi-ide-server/`
 3. **Verify after every edit**: Read the file back to confirm changes applied
 4. **Server serves static files**: From `kimi-ide-client/dist/` — not auto-updating

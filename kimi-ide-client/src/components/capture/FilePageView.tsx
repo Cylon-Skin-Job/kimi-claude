@@ -72,8 +72,10 @@ export function FilePageView({
         </div>
       </div>
 
-      {/* Content area — fills remaining space */}
-      <div className={`file-page-content${!isImage && !(isMarkdown && viewMode === 'markdown') ? ' file-page-document' : ''}`}>
+      {/* Content area — fills remaining space; document-surface unifies padding with file explorer + wiki */}
+      <div
+        className={`file-page-content${!isImage ? ' document-surface' : ''}${!isImage && !(isMarkdown && viewMode === 'markdown') ? ' file-page-document' : ''}`}
+      >
         {isImage ? (
           <img
             src={`/api/panel-file/${panel}/${folder}/${encodeURIComponent(file.name)}`}

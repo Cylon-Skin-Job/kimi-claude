@@ -93,9 +93,9 @@ export async function loadExpandedFolders(): Promise<void> {
 export function loadFileContent(file: FileInfo) {
   const ws = usePanelStore.getState().ws;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  useFileStore.getState().setLoading(true);
   useFileStore.getState().setError(null);
-  useFileStore.getState().setPendingFile(file);
+  const { shouldFetch } = useFileStore.getState().openFileTab(file);
+  if (!shouldFetch) return;
   ws.send(JSON.stringify({
     type: 'file_content_request',
     panel: 'code-viewer',

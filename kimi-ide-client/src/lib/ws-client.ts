@@ -8,7 +8,7 @@
 
 import { usePanelStore } from '../state/panelStore';
 import { toolNameToSegmentType, SEGMENT_ICONS } from '../lib/instructions';
-import { isGroupable, getSummaryField } from '../lib/catalog-visual';
+import { getSummaryField } from '../lib/catalog-visual';
 import {
   onToolCall,
   getGroupForResult,
@@ -22,7 +22,7 @@ import { useActiveResourceStore } from '../state/activeResourceStore';
 import { useFileDataStore } from '../state/fileDataStore';
 import { showModal } from '../lib/modal';
 import { loadAllPanels } from '../lib/panels';
-import type { WebSocketMessage, ExchangeData, AssistantPart, StreamSegment, SegmentType } from '../types';
+import type { WebSocketMessage, ExchangeData, AssistantPart, StreamSegment } from '../types';
 
 // --- Module state ---
 
@@ -451,6 +451,7 @@ function handleMessage(msg: WebSocketMessage) {
     case 'robin:tabs':
     case 'robin:items':
     case 'robin:wiki':
+    case 'robin:theme-data':
       emitRobin(msg.type, msg);
       break;
 
