@@ -65,8 +65,8 @@ function App() {
       const g = parseInt(hex.slice(3, 5), 16);
       const b = parseInt(hex.slice(5, 7), 16);
       containerRef.current.style.setProperty('--theme-primary-rgb', `${r}, ${g}, ${b}`);
-      containerRef.current.style.setProperty('--theme-border', `rgba(${r}, ${g}, ${b}, 0.3)`);
-      containerRef.current.style.setProperty('--theme-border-glow', `rgba(${r}, ${g}, ${b}, 0.6)`);
+      containerRef.current.style.setProperty('--theme-border', `rgba(${r}, ${g}, ${b}, 0.38)`);
+      containerRef.current.style.setProperty('--theme-border-glow', `rgba(${r}, ${g}, ${b}, 0.68)`);
     }
   }, [currentPanel, getConfig, configs]);
 

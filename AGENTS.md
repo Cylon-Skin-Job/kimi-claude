@@ -116,10 +116,17 @@ kimi-claude/
 │   ├── pipeline/             # Job pipeline folders
 │   └── archive/              # Legacy code (NOT served)
 │
+├── ai/
+│   ├── system/                  # Local runtime state (gitignored)
+│   │   ├── robin.db             # SQLite — all persistent data
+│   │   └── README.md            # Scope, git policy, migration path
+│   └── views/                   # Workspace view assets + injected CSS
+│
 ├── docs/                     # Documentation
 │   ├── RENDER_ENGINE_ARCHITECTURE.md  # Pulse-driven render engine
 │   ├── TYPESCRIPT_REACT_SPEC.md       # Code spec & patterns
-│   ├── STYLE_GUIDE.md                 # Visual patterns
+│   ├── STYLE_GUIDE.md                 # Toolbar/menu chrome; see UI_THEME_SURFACE for tokens
+│   ├── UI_THEME_SURFACE.md            # Shell/chat tokens & surfaces (current)
 │   ├── WIRE_PROTOCOL.md               # JSON-RPC protocol
 │   ├── STREAMING_CONTENT.md           # Streaming content handling
 │   └── ...
@@ -353,7 +360,10 @@ Message types:
 |----------|---------|----------------|
 | `docs/RENDER_ENGINE_ARCHITECTURE.md` | Pulse, queue, state machine | Touching orchestration code |
 | `docs/TYPESCRIPT_REACT_SPEC.md` | Code spec, forbidden patterns | Writing components |
-| `docs/STYLE_GUIDE.md` | Visual patterns, theming | Styling components |
+| `docs/STYLE_GUIDE.md` | Toolbar/menu chrome (see UI_THEME_SURFACE for tokens) | Styling components |
+| `docs/UI_THEME_SURFACE.md` | Tokens, neutral vs accent borders, CSS file map | Shell/chat/explorer chrome |
+| `docs/HANDOFF_PROMPT_UI_SESSION.md` | Pasteable context for a fresh session | After UI theme work |
+| `ai/system/README.md` | DB scope, git policy, Electron migration path | Adding tables, questioning DB location |
 | `docs/WIRE_PROTOCOL.md` | JSON-RPC protocol | Protocol changes |
 | `docs/STREAMING_CONTENT.md` | Streaming content handling | Content rendering |
 | `docs/VISION_CLONE_PIPELINE.md` | Future: multi-agent pipeline | Architecture planning |
@@ -510,6 +520,39 @@ NOT at:
 
 ---
 
+## Database (`ai/system/robin.db`)
+
+The server uses **SQLite** (Knex + better-sqlite3) for all persistent state. The database file lives at **`{projectRoot}/ai/system/robin.db`** — inside the workspace, not in a global app-data directory.
+
+### Why it is workspace-scoped
+
+`initDb(projectRoot)` receives the **project root** and opens `ai/system/robin.db` relative to it. Each project the IDE opens gets its own database. This is intentional:
+
+- Chat history, threads, wiki pages, and workspace config are **per-project** — they travel with the repo folder (but are `.gitignore`d).
+- The server runs one Node process per project. There is no multi-project session.
+- Features added to the database (clipboard, metadata, etc.) are contextual to the workspace session.
+
+### What is in the database
+
+Threads, exchanges (chat history), `system_config`, `system_wiki`, `system_tabs`, `cli_registry`, `system_theme`, `workspaces`, `workspace_themes` — and any tables added by future migrations.
+
+### Adding a new table
+
+1. Create a migration file in `kimi-ide-server/lib/db/migrations/` (e.g. `005_clipboard.js`).
+2. Follow the existing pattern: `exports.up` / `exports.down`, receive `knex`, create/seed/drop.
+3. Migrations run automatically on server startup (`initDb` calls `migrate.latest()`).
+4. Write a query module in `kimi-ide-server/lib/` (pattern: every function takes `db` as the first argument, no global DB reference inside the module).
+
+### Git policy
+
+`ai/system/` should be in `.gitignore`. The `.db` file is binary and may contain sensitive data. Do not commit it. See `ai/system/README.md` for full details.
+
+### Electron migration path
+
+When this app is packaged as Electron, the **only** change is **who calls `initDb` and with what path**. Electron's main process calls `initDb(electronChosenPath)` instead of `server.js` doing it. The Knex instance, migrations, query modules, and table schemas are unchanged. Do not propose a separate "host-level" database unless the product explicitly requires cross-workspace data that persists without a server restart.
+
+---
+
 ## Common Tasks
 
 ### Adding a New Component
@@ -553,6 +596,8 @@ NOT at:
 7. **Build required.** Client changes require `npm run build` to be served by the server.
 
 8. **Type safety matters.** TypeScript catches many errors at compile time. Run `npm run build` to check.
+
+9. **The database is workspace-scoped.** `robin.db` lives at `{projectRoot}/ai/system/robin.db` — this is correct. Do not propose moving it to a global/host directory or creating a second database. The path is injected via `initDb(projectRoot)`; when Electron wraps this app, only the caller changes, not the DB layer. See `ai/system/README.md`.
 
 ---
 

@@ -5,6 +5,7 @@
  *        layout: ai/views/{id}/settings/layout.json (most panels) or
  *        ai/views/code-viewer/settings/styles/layout.json (code-viewer)
  * Workspace CSS: fetchPanelWorkspaceFile / fetchViewsRootFile (__panels__ → ai/views/…).
+ * Chat/thread styles: settings/styles/views.css (see VIEWS_SETTINGS_STYLES_VIEWS; bundled in client).
  *
  * Loads panel definitions from the repo filesystem via WebSocket.
  * Knows nothing about any specific panel type — content.json declares
@@ -75,6 +76,8 @@ export const PANEL_WORKSPACE_STYLES_FILENAME = 'settings/styles.css' as const;
 /** Under ai/views/ — shared across panels (pilot: code-viewer loads these + per-panel layout). */
 export const VIEWS_SETTINGS_STYLES_THEMES = 'settings/styles/themes.css' as const;
 export const VIEWS_SETTINGS_STYLES_COMPONENTS = 'settings/styles/components.css' as const;
+/** Chat + thread list + composer (bundled via main.tsx; same path over __panels__ for optional runtime fetch). */
+export const VIEWS_SETTINGS_STYLES_VIEWS = 'settings/styles/views.css' as const;
 
 /** Fetch a file under ai/views/ (same mechanism as panel discovery). */
 export function fetchViewsRootFile(ws: WebSocket, pathUnderViews: string): Promise<string> {

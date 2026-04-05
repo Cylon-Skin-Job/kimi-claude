@@ -24,6 +24,9 @@ const { initDb, getDb } = require('./lib/db');
 // Robin system panel
 const createRobinHandlers = require('./lib/robin/ws-handlers');
 
+// Clipboard manager
+const createClipboardHandlers = require('./lib/clipboard/ws-handlers');
+
 // Wiki hooks
 const wikiHooks = require('./lib/wiki/hooks');
 
@@ -94,6 +97,10 @@ app.use(
     },
   })
 );
+
+// Voice transcription API (Whisper V3)
+const transcription = require('./lib/transcription');
+app.use('/api', transcription.createRouter());
 
 // Serve panel files (images, etc.) via HTTP
 // Uses fuzzy filename matching to handle macOS Unicode spaces in screenshot names
@@ -489,6 +496,98 @@ async function handleFileContentRequest(ws, msg) {
       type: 'file_content_response',
       panel,
       path: requestPath,
+      success: false,
+      error: err.message,
+      code: mapFileErrorCode(err),
+    }));
+  }
+}
+
+async function handleRecentFilesRequest(ws, msg) {
+  const panel = msg.panel || 'code-viewer';
+  const limit = msg.limit || 30;
+  const panelPath = getPanelPath(panel, ws);
+
+  if (panelPath === null) {
+    ws.send(JSON.stringify({
+      type: 'recent_files_response',
+      panel,
+      success: false,
+      error: `Panel "${panel}" is not filesystem-backed`,
+      code: 'ENOTPANEL',
+    }));
+    return;
+  }
+
+  const basePath = path.resolve(panelPath);
+
+  if (!isPathAllowed(basePath, basePath)) {
+    ws.send(JSON.stringify({
+      type: 'recent_files_response',
+      panel,
+      success: false,
+      error: 'Invalid path',
+      code: 'ENOENT',
+    }));
+    return;
+  }
+
+  try {
+    const files = [];
+    
+    async function scanDir(dirPath, relativePath = '') {
+      const entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const entryRelativePath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+        const entryFullPath = path.join(dirPath, entry.name);
+        
+        // Skip excluded patterns
+        if (entry.name === 'node_modules' || entry.name === '.git' || 
+            entry.name === 'dist' || entry.name === '.kimi' ||
+            entry.name.startsWith('.')) {
+          continue;
+        }
+        
+        if (entry.isDirectory()) {
+          // Recurse into subdirectories (with depth limit)
+          if (entryRelativePath.split('/').length < 5) {
+            await scanDir(entryFullPath, entryRelativePath);
+          }
+        } else if (entry.isFile()) {
+          try {
+            const stat = await fsPromises.stat(entryFullPath);
+            files.push({
+              name: entry.name,
+              path: entryRelativePath,
+              mtime: stat.mtimeMs,
+              size: stat.size,
+            });
+          } catch {
+            // Skip files we can't stat
+          }
+        }
+      }
+    }
+    
+    await scanDir(basePath);
+    
+    // Sort by mtime descending (newest first), then take limit, then reverse so newest is at bottom
+    const sortedFiles = files
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, limit)
+      .reverse();
+    
+    ws.send(JSON.stringify({
+      type: 'recent_files_response',
+      panel,
+      success: true,
+      files: sortedFiles,
+    }));
+  } catch (err) {
+    ws.send(JSON.stringify({
+      type: 'recent_files_response',
+      panel,
       success: false,
       error: err.message,
       code: mapFileErrorCode(err),
@@ -1118,6 +1217,11 @@ wss.on('connection', (ws) => {
         await handleFileContentRequest(ws, clientMsg);
         return;
       }
+
+      if (clientMsg.type === 'recent_files_request') {
+        await handleRecentFilesRequest(ws, clientMsg);
+        return;
+      }
       
       // Panel Management
       // --------------------------------------------------
@@ -1272,6 +1376,16 @@ wss.on('connection', (ws) => {
         }
       }
 
+      // ---- Clipboard manager (delegated to lib/clipboard/ws-handlers.js) ----
+
+      if (clientMsg.type.startsWith('clipboard:')) {
+        const handler = clipboardHandlers[clientMsg.type];
+        if (handler) {
+          await handler(ws, clientMsg);
+          return;
+        }
+      }
+
       // Unknown message type
       console.log('[WS] Unknown message type:', clientMsg.type);
       
@@ -1330,12 +1444,14 @@ const PORT = process.env.PORT || 3001;
 
 // Robin handlers — initialized after DB is ready
 let robinHandlers = {};
+let clipboardHandlers = {};
 
 // Initialize SQLite, then start the server
 initDb(getDefaultProjectRoot())
   .then(() => {
     console.log('[DB] robin.db initialized');
     robinHandlers = createRobinHandlers({ getDb, sessions, getDefaultProjectRoot });
+    clipboardHandlers = createClipboardHandlers({ getDb });
     startServer();
   })
   .catch(err => {

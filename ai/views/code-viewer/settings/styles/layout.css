@@ -4,11 +4,16 @@
  *
  * Structural borders use neutral chrome (--file-viewer-chrome-border), not the
  * workspace accent (--theme-border), so splits match chat/workspace separators.
+ *
+ * File-picker column background: --sidebar-surface-bg (variables.css; default #161616),
+ * same paradigm as .sidebar / .chat-area in views.css.
  */
 
 /* Split layout: viewer left, tree right */
 .file-explorer-layout {
-  --file-viewer-chrome-border: rgba(255, 255, 255, 0.08);
+  --file-viewer-chrome-border: var(--neutral-chrome-border, rgba(255, 255, 255, 0.12));
+  /* Viewer header / tab strip / nav — same as --panel-chrome-bg (variables.css) */
+  --file-tree-sidebar-bg: var(--panel-chrome-bg, #1a1a1a);
   display: flex;
   height: 100%;
   overflow: hidden;
@@ -21,6 +26,11 @@
   flex-direction: column;
 }
 
+/* Viewer mode, no tab yet — FileViewer returns null; main has no children */
+.file-explorer-main:empty {
+  background: var(--bg-solid);
+}
+
 .file-explorer-empty {
   flex: 1;
   display: flex;
@@ -30,6 +40,7 @@
   gap: 8px;
   color: var(--text-dim);
   font-size: 13px;
+  background: var(--bg-solid);
 }
 
 .file-explorer-empty .material-symbols-outlined {
@@ -42,7 +53,7 @@
   flex-shrink: 0;
   border-left: 1px solid var(--file-viewer-chrome-border);
   overflow-y: auto;
-  background: var(--bg-solid);
+  background: var(--sidebar-surface-bg, #161616);
 }
 
 .file-explorer {
@@ -73,7 +84,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--bg-solid);
+  /* Open file: same as document code canvas (empty main uses --bg-solid) */
+  background: var(--document-code-bg, #161616);
 }
 
 .file-viewer-content.loading {
@@ -81,26 +93,15 @@
   pointer-events: none;
 }
 
+/* Full top row: same rail as file tree + tab strip (nav padding / actions gutter included) */
 .file-viewer-header {
   display: flex;
   align-items: stretch;
   justify-content: space-between;
-  background: var(--bg-solid);
+  background: var(--file-tree-sidebar-bg, #1a1a1a);
   border-bottom: none;
   position: relative;
   z-index: 0;
-}
-
-.file-viewer-header::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 1px;
-  background: var(--file-viewer-chrome-border);
-  z-index: 1;
-  pointer-events: none;
 }
 
 .file-viewer-nav {
@@ -116,7 +117,7 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  background: transparent;
+  background: var(--file-tree-sidebar-bg, #1a1a1a);
   border: none;
   border-radius: 4px;
   color: var(--text-dim);
@@ -129,14 +130,19 @@
 }
 
 .file-viewer-nav .nav-btn:disabled {
-  opacity: 0.3;
   cursor: default;
+}
+
+/* Dim glyph only — never opacity on the button (would wash out background) */
+.file-viewer-nav .nav-btn:disabled .material-symbols-outlined {
+  opacity: 0.35;
 }
 
 .file-viewer-nav .nav-btn .material-symbols-outlined {
   font-size: 20px;
 }
 
+/* Same rail as .file-viewer-header (redundant fill; keeps flex column explicit) */
 .file-viewer-tabs {
   display: flex;
   flex: 1;
@@ -144,8 +150,10 @@
   overflow: hidden;
   align-items: stretch;
   padding-left: 4px;
+  background: var(--file-tree-sidebar-bg, #1a1a1a);
 }
 
+/* Inactive = same rail as header; .active overrides below — do not change .active */
 .file-viewer-tab {
   display: flex;
   align-items: center;
@@ -156,7 +164,7 @@
   border-right: 1px solid var(--file-viewer-chrome-border);
   border-bottom: none;
   box-sizing: border-box;
-  background-color: var(--bg-solid);
+  background-color: var(--file-tree-sidebar-bg, #1a1a1a);
   cursor: pointer;
   transition: background-color 0.15s ease, transform 0.15s ease;
   max-width: 200px;
@@ -175,11 +183,7 @@
 
 .file-viewer-tab.active {
   transform: translateY(0);
-  background-color: rgba(255, 255, 255, 0.06);
-}
-
-.file-viewer-tab:not(.active):hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--document-code-bg, #161616);
 }
 
 .file-viewer-tab .tab-icon {
@@ -251,7 +255,7 @@
   align-items: center;
   gap: 12px;
   padding: 4px 16px;
-  background: var(--bg-solid);
+  background: var(--document-code-bg, #161616);
   border-top: none;
   border-bottom: 1px solid var(--file-viewer-chrome-border);
   font-size: 12px;
@@ -275,5 +279,5 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--bg-solid);
+  background: var(--document-code-bg, #161616);
 }

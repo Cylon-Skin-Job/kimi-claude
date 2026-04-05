@@ -5,6 +5,7 @@
  * - usePanelWorkspaceStyles: single file ai/views/{panelId}/settings/styles.css (other panels).
  * - useCodeViewerWorkspaceStyles: optional workspace themes + file-tree components + code-viewer layout.
  *   Shared code/markdown CSS is bundled in document.css.
+ * - Chat + threads: ai/views/settings/styles/views.css (bundled in main.tsx via @views alias).
  *
  * Requires an ancestor with data-panel={panelId} (see App panel wrapper).
  */

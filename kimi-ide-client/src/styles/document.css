@@ -58,7 +58,7 @@
 
 /* Code-viewer layout sets --file-viewer-chrome-border; neutral splits, not workspace accent */
 .file-viewer-content .code-gutter {
-  border-right-color: var(--file-viewer-chrome-border, rgba(255, 255, 255, 0.08));
+  border-right-color: var(--file-viewer-chrome-border, var(--neutral-chrome-border, rgba(255, 255, 255, 0.12)));
 }
 
 .file-viewer-content .code-editor::-webkit-scrollbar,

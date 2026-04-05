@@ -1,7 +1,12 @@
 import { useRef, useEffect, useState } from 'react';
 import { usePanelStore } from '../state/panelStore';
 import { MessageList } from './MessageList';
-import { ChatInput } from './ChatInput';
+import { ChatInput, type ChatInputRef } from './ChatInput';
+import { ClipboardTrigger } from '../clipboard';
+import { ScreenshotsTrigger } from '../screenshots';
+import { RecentFilesTrigger } from '../recent-files';
+import { EmojiTrigger } from '../emojis';
+import { MicTrigger } from '../mic';
 
 interface ChatAreaProps {
   panel: string;
@@ -10,8 +15,13 @@ interface ChatAreaProps {
 export function ChatArea({ panel }: ChatAreaProps) {
   const lastUserMsgRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<ChatInputRef>(null);
   const justSentRef = useRef(false);
   const [isSending, setIsSending] = useState(false);
+
+  const handleInsertText = (text: string) => {
+    chatInputRef.current?.insertText(text);
+  };
 
   // Store data
   const messages = usePanelStore((state) => state.panels[panel]?.messages || []);
@@ -82,32 +92,7 @@ export function ChatArea({ panel }: ChatAreaProps) {
   };
 
   return (
-    <section className="chat-area" style={{ position: 'relative' }}>
-      {/* Context Usage - Lower Right of Chat */}
-      <div
-        className="context-usage"
-        style={{
-          position: 'absolute',
-          bottom: '80px',
-          right: '12px',
-          zIndex: 10,
-          background: 'var(--bg-solid)',
-          padding: '4px 10px',
-          borderRadius: '6px',
-          border: '1px solid var(--theme-border)'
-        }}
-      >
-        <span className="context-usage-label">Context</span>
-        <div className="context-usage-bar">
-          <div
-            className="context-usage-fill"
-            style={{ width: `${Math.min(contextUsage, 100)}%` }}
-          />
-        </div>
-        <span>{contextUsage.toFixed(2)}%</span>
-      </div>
-
-      {/* Messages */}
+    <section className="chat-area">
       <div className="chat-messages" ref={chatContainerRef}>
         {messages.length === 0 && !currentTurn && !showOrb ? (
           <div className="message message-system">
@@ -129,13 +114,61 @@ export function ChatArea({ panel }: ChatAreaProps) {
         <div style={{ minHeight: '80vh' }} />
       </div>
 
-      <ChatInput
-        onSend={handleSend}
-        onStop={handleStop}
-        disabled={false}
-        panel={panel}
-        isTurnActive={isTurnActive}
-      />
+      <div className="chat-footer">
+        <ChatInput
+          ref={chatInputRef}
+          onSend={handleSend}
+          onStop={handleStop}
+          disabled={false}
+          panel={panel}
+          isTurnActive={isTurnActive}
+        />
+        <div className="chat-composer-meta-row">
+          <div style={{ display: 'flex', gap: '4px' }}>
+            <ClipboardTrigger onInsert={handleInsertText} />
+            <ScreenshotsTrigger onInsert={handleInsertText} />
+            <RecentFilesTrigger onInsert={handleInsertText} />
+            <EmojiTrigger onInsert={handleInsertText} />
+            <MicTrigger onInsert={handleInsertText} />
+          </div>
+          <div className="context-usage context-usage-below-input">
+            <div className="context-usage-bar">
+              <div
+                className="context-usage-fill"
+                style={{ width: `${Math.min(contextUsage, 100)}%` }}
+              />
+            </div>
+            <span>{Math.round(contextUsage)}%</span>
+          </div>
+          {isTurnActive ? (
+            <button
+              className="chat-footer-btn stop-btn"
+              onClick={handleStop}
+              title="Stop generating"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                stop
+              </span>
+            </button>
+          ) : (
+            <button
+              className="chat-footer-btn send-btn"
+              onClick={() => {
+                const text = chatInputRef.current?.getText();
+                if (text?.trim()) {
+                  handleSend(text.trim());
+                  chatInputRef.current?.clearText();
+                }
+              }}
+              title="Send message"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                arrow_upward
+              </span>
+            </button>
+          )}
+        </div>
+      </div>
     </section>
   );
 }

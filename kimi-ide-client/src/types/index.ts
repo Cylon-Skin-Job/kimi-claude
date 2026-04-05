@@ -93,7 +93,12 @@ export type WebSocketMessageType =
   | 'robin:tabs'
   | 'robin:items'
   | 'robin:wiki'
-  | 'robin:theme-data';
+  | 'robin:theme-data'
+  // Clipboard messages
+  | 'clipboard:list'
+  | 'clipboard:append'
+  | 'clipboard:touch'
+  | 'clipboard:clear';
 
 export interface WebSocketMessage {
   type: WebSocketMessageType;

@@ -10,8 +10,14 @@
  * the AI is working. Clicking it kills the turn cleanly.
  */
 
-import { useState, useRef } from 'react';
+import { useState, useRef, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { usePanelStore } from '../state/panelStore';
+
+export interface ChatInputRef {
+  insertText: (text: string) => void;
+  getText: () => string;
+  clearText: () => void;
+}
 
 interface ChatInputProps {
   onSend: (text: string) => void;
@@ -22,19 +28,59 @@ interface ChatInputProps {
   isTurnActive: boolean;
 }
 
-export function ChatInput({ onSend, onStop, disabled, panel, isTurnActive }: ChatInputProps) {
+export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatInput(
+  { onSend, onStop, disabled, panel, isTurnActive },
+  ref
+) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const config = usePanelStore((s) => s.getPanelConfig(panel));
 
-  const handleSend = () => {
+  useImperativeHandle(ref, () => ({
+    insertText: (newText: string) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const currentText = textarea.value;
+      
+      // Insert at cursor position, or append if no cursor
+      const before = currentText.substring(0, start);
+      const after = currentText.substring(end);
+      const updatedText = before + newText + after;
+      
+      setText(updatedText);
+      
+      // Set cursor position after inserted text
+      setTimeout(() => {
+        if (textarea) {
+          textarea.focus();
+          const newCursorPos = start + newText.length;
+          textarea.setSelectionRange(newCursorPos, newCursorPos);
+          // Adjust height
+          textarea.style.height = 'auto';
+          textarea.style.height = Math.min(textarea.scrollHeight, 140) + 'px';
+        }
+      }, 0);
+    },
+    getText: () => text,
+    clearText: () => {
+      setText('');
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+    }
+  }));
+
+  const handleSend = useCallback(() => {
     if (!text.trim() || disabled) return;
     onSend(text.trim());
     setText('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  };
+  }, [text, disabled, onSend]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -67,30 +113,10 @@ export function ChatInput({ onSend, onStop, disabled, panel, isTurnActive }: Cha
           onKeyDown={handleKeyDown}
           onInput={handleInput}
           disabled={disabled}
-          rows={1}
+          rows={5}
         />
-        {isTurnActive ? (
-          <button
-            className="stop-btn"
-            onClick={onStop}
-            title="Stop generating"
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
-              stop
-            </span>
-          </button>
-        ) : (
-          <button
-            className="send-btn"
-            onClick={handleSend}
-            disabled={disabled || !text.trim()}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-              arrow_upward
-            </span>
-          </button>
-        )}
+
       </div>
     </div>
   );
-}
+});

@@ -5,13 +5,20 @@
   /* Shared document / code canvas (see document.css) — not pure black so “page” reads clearly */
   --document-surface-bg: #0d0d0d;
   --document-code-bg: #161616;
+  /* Thread list, file-picker rail, and other typed sidebars — same default as document code canvas */
+  --sidebar-surface-bg: var(--document-code-bg);
+  /* Tab/header rail (code viewer) + main chat column — separate from sidebars */
+  --panel-chrome-bg: #1a1a1a;
+  --chat-surface-bg: var(--panel-chrome-bg);
   --color-primary: #00d4ff;
   --color-secondary: #00a8cc;
-  --border-primary: rgba(0, 212, 255, 0.3);
-  --border-glow: rgba(0, 212, 255, 0.6);
+  --border-primary: rgba(0, 212, 255, 0.38);
+  --border-glow: rgba(0, 212, 255, 0.68);
   --glass-bg: rgba(0, 212, 255, 0.05);
   --text-white: #ffffff;
   --text-dim: rgba(255, 255, 255, 0.6);
+  /* Neutral hairlines: tools↔threads, threads↔chat, explorer splits, composer top — not theme accent */
+  --neutral-chrome-border: rgba(255, 255, 255, 0.12);
   
   /* Layout */
   --header-height: 60px;
@@ -22,8 +29,8 @@
   /* Theme Variables (Dynamic per panel) */
   --theme-primary: #00d4ff;
   --theme-primary-rgb: 0, 212, 255;
-  --theme-border: rgba(0, 212, 255, 0.3);
-  --theme-border-glow: rgba(0, 212, 255, 0.6);
+  --theme-border: rgba(0, 212, 255, 0.38);
+  --theme-border-glow: rgba(0, 212, 255, 0.68);
 }
 
 /* Panel themes are now applied dynamically via JS (applyPanelTheme).

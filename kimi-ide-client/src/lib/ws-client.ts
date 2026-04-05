@@ -455,6 +455,14 @@ function handleMessage(msg: WebSocketMessage) {
       emitRobin(msg.type, msg);
       break;
 
+    // Clipboard manager responses
+    case 'clipboard:list':
+    case 'clipboard:append':
+    case 'clipboard:touch':
+    case 'clipboard:clear':
+      emitRobin(msg.type, msg);
+      break;
+
     default:
       break;
   }
