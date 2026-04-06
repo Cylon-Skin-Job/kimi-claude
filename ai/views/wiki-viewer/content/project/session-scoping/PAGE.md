@@ -1,17 +1,17 @@
 # Session Scoping
 
-Each workspace gets its own kimi `--wire` session. Sessions are isolated — different model configs, different system prompts, different tool restrictions. `ai/STATE.md` is the bridge between them.
+Each workspace gets its own CLI `--wire` session. Sessions are isolated — different model configs, different system prompts, different tool restrictions. `ai/STATE.md` is the bridge between them.
 
 ## One Session Per Workspace
 
-When a workspace tab opens (or a ticket triggers an agent), the server spawns a dedicated kimi process for that workspace. The process gets:
+When a workspace tab opens (or a ticket triggers an agent), the server spawns a dedicated CLI process for that workspace. The process gets:
 
 1. **Model config from api.json** — hot-swapped before spawn
 2. **System context from PROMPT.md** — who the agent is
 3. **Cross-workspace context from STATE.md** — what happened recently elsewhere
 4. **Tool filtering from TOOLS.md** — enforced server-side
 
-Two workspaces active at the same time = two separate kimi processes with different configs.
+Two workspaces active at the same time = two separate CLI processes with different configs.
 
 ## Session Lifecycle
 
@@ -19,7 +19,7 @@ Two workspaces active at the same time = two separate kimi processes with differ
 Tab opens (or ticket arrives)
   │
   ├─ Server reads api.json → creates temp config overlay
-  ├─ Server spawns kimi --wire with workspace config
+  ├─ Server spawns active CLI with --wire flag and workspace config
   ├─ Server loads PROMPT.md + STATE.md into system context
   ├─ Server holds TOOLS.md for server-side enforcement
   │
@@ -27,7 +27,7 @@ Tab opens (or ticket arrives)
   │
   ├─ Tab closes or idle timeout
   ├─ Agent's final WORKFLOW.md step: update STATE.md
-  ├─ kimi process enters grace period → suspends
+  ├─ CLI process enters grace period → suspends
   └─ Session state preserved for resume
 ```
 
@@ -68,7 +68,7 @@ Read access is intentionally shared. The wiki agent needs to read code. The codi
 ## Session Persistence
 
 When a session suspends:
-- Kimi CLI preserves session state in `~/.kimi/sessions/{session-id}/`
+- The active CLI preserves session state (location CLI-specific, e.g., `~/.kimi/sessions/` for Kimi)
 - The workspace's `workspace.json` tracks the session ID
 - Resuming the tab resumes the session with context intact
 
@@ -79,7 +79,7 @@ For the wiki workspace specifically, sessions are lightweight — each run is se
 The server can run multiple workspace sessions simultaneously. Limits:
 
 - Each workspace: max 1 active session
-- Total across project: governed by system resources and kimi CLI limits
+- Total across project: governed by system resources and active CLI limits
 - Idle timeout: per workspace.json settings (e.g., 30 minutes)
 
 When a session idles past its timeout, it suspends. The next interaction resumes it.

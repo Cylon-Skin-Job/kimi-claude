@@ -1,6 +1,6 @@
 # Screenshot Capture
 
-How Kimi accesses user screenshots for visual debugging and conversation context.
+How the active CLI accesses user screenshots for visual debugging and conversation context.
 
 ## How It Works
 
@@ -42,7 +42,7 @@ Already handled — `ai/.gitignore` excludes `screenshots/`.
 
 ## Multi-Project
 
-Currently one project (kimi-claude) uses this. When multiple projects exist, each will have its own `ai/screenshots/desktop` symlink pointing to the same `~/Desktop/Screenshots/` folder. The active project context determines which workspace the screenshot is relevant to — no routing needed since all projects see the same folder.
+Currently one project uses this. When multiple projects exist, each will have its own `ai/screenshots/desktop` symlink pointing to the same `~/Desktop/Screenshots/` folder. The active project context determines which workspace the screenshot is relevant to — no routing needed since all projects see the same folder.
 
 ## Status
 

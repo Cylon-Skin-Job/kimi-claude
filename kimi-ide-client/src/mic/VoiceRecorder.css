@@ -57,7 +57,7 @@
 
 .voice-recorder__ring-fill {
   fill: none;
-  stroke: var(--text-primary, #e0e0e0);
+  stroke: var(--theme-primary, #00d4ff);
   stroke-width: 4;
   stroke-linecap: round;
 }
@@ -75,7 +75,7 @@
 
 .voice-recorder__kitt-bar {
   width: 8px;
-  background: var(--text-primary, #e0e0e0);
+  background: var(--theme-primary, #00d4ff);
   border-radius: 2px;
   transition: height 0.05s ease-out;
   min-height: 4px;

@@ -18,7 +18,6 @@ const fsPromises = require('fs').promises;
 
 // Thread management
 const { ThreadWebSocketHandler } = require('./lib/thread');
-const { HistoryFile } = require('./lib/thread/HistoryFile');
 const { initDb, getDb } = require('./lib/db');
 
 // Robin system panel
@@ -32,6 +31,16 @@ const wikiHooks = require('./lib/wiki/hooks');
 
 // Event bus for TRIGGERS.md automations
 const { emit } = require('./lib/event-bus');
+
+// Phase 1 & 2: Robin Harness - compatibility layer for gradual migration
+const { spawnThreadWire } = require('./lib/harness/compat');
+const { getHarnessMode } = require('./lib/harness/feature-flags');
+
+// Log current harness mode on startup
+console.log('[Server] Harness mode:', getHarnessMode());
+
+// Audit subscriber for message ID tracking
+const { startAuditSubscriber } = require('./lib/audit/audit-subscriber');
 
 // Hardwired enforcement — settings/ folders are write-locked for AI
 const { checkSettingsBounce } = require('./lib/enforcement');
@@ -131,6 +140,31 @@ app.get('/api/panel-file/:panel/{*filePath}', (req, res) => {
     res.status(404).send('Not found');
   } catch {
     res.status(404).send('Not found');
+  }
+});
+
+// ---- External CLI harnesses API (Phase 3) ----
+
+app.get('/api/harnesses', async (req, res) => {
+  const { registry } = require('./lib/harness');
+  try {
+    const harnesses = await registry.getAvailableHarnesses();
+    res.json(harnesses);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/harnesses/:id/status', async (req, res) => {
+  const { registry } = require('./lib/harness');
+  try {
+    const status = await registry.getHarnessStatus(req.params.id);
+    if (!status) {
+      return res.status(404).json({ error: 'Harness not found' });
+    }
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -599,37 +633,8 @@ async function handleRecentFilesRequest(ws, msg) {
 // Wire Process Functions
 // ============================================================================
 
-function spawnThreadWire(threadId, projectRoot) {
-  const kimiPath = process.env.KIMI_PATH || 'kimi';
-  const args = ['--wire', '--yolo', '--session', threadId];
-  
-  if (projectRoot) {
-    args.push('--work-dir', projectRoot);
-  }
-  
-  console.log(`[Wire] Spawning thread session: ${kimiPath} ${args.join(' ')}`);
-  
-  const proc = spawn(kimiPath, args, {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, TERM: 'xterm-256color' }
-  });
-  
-  console.log(`[Wire] Spawned with pid: ${proc.pid}`);
-  
-  proc.on('error', (err) => {
-    console.error('[Wire] Failed to spawn:', err.message);
-  });
-  
-  proc.on('exit', (code) => {
-    console.log(`[Wire] Process ${proc.pid} exited with code ${code}`);
-  });
-  
-  proc.stderr.on('data', (data) => {
-    console.error('[Wire stderr]:', data.toString().trim());
-  });
-  
-  return proc;
-}
+// NOTE: spawnThreadWire is now imported from ./lib/harness/compat
+// The implementation has been moved there for gradual migration to RobinHarness
 
 function sendToWire(wire, method, params, id = null) {
   const message = {
@@ -670,7 +675,11 @@ wss.on('connection', (ws) => {
     activeToolId: null,
     hasToolCalls: false,
     currentThreadId: null,
-    assistantParts: []  // For exchange tracking (SQLite)
+    assistantParts: [],  // For exchange tracking (SQLite)
+    contextUsage: null,  // Latest context usage from wire (0-1 decimal)
+    tokenUsage: null,    // Latest token usage from wire
+    messageId: null,     // OpenAI message ID from StatusUpdate
+    planMode: false      // Whether turn was in plan mode
   };
   sessions.set(ws, session);
   
@@ -678,11 +687,12 @@ wss.on('connection', (ws) => {
   // Don't send the thread list yet — wait for the client's set_panel message
   // to avoid cross-contamination (e.g., issues-viewer seeing code-viewer threads).
   // Only set up threads if the default view has chat.
-  // panelId = absolute chat folder path (stable key for SQLite, survives renames)
+  // panelId = view name ('code-viewer'), panelPath = absolute chat folder path
   const defaultChatConfig = views.resolveChatConfig(projectRoot, 'code-viewer');
   if (defaultChatConfig) {
-    ThreadWebSocketHandler.setPanel(ws, defaultChatConfig.chatPath, {
-      panelPath: path.join(AI_PANELS_PATH, 'code-viewer'),
+    // panelId = view name ('code-viewer'), panelPath = full chat folder path
+    ThreadWebSocketHandler.setPanel(ws, 'code-viewer', {
+      panelPath: defaultChatConfig.chatPath,
       projectRoot,
       viewName: 'code-viewer',
     });
@@ -692,7 +702,25 @@ wss.on('connection', (ws) => {
   // Wire Process Handlers
   // ==========================================================================
   
+  /**
+   * If wire was spawned via the new harness (has _harnessPromise), wait for
+   * it to resolve before attaching stdout listeners. For legacy Kimi wires
+   * this is a no-op.
+   */
+  async function awaitHarnessReady(wire) {
+    if (wire._harnessPromise) {
+      console.log('[WS] Awaiting harness initialization...');
+      await wire._harnessPromise;
+      console.log('[WS] Harness ready');
+    }
+  }
+
   function initializeWire(wire) {
+    // Skip for new-harness wires — ACP session is already initialized inside the harness
+    if (wire._harnessPromise) {
+      console.log('[Wire] Skipping initialize for new harness (ACP already initialized)');
+      return;
+    }
     const id = generateId();
     console.log('[Wire] Initializing wire...');
     sendToWire(wire, 'initialize', {
@@ -728,7 +756,7 @@ wss.on('connection', (ws) => {
     
     wire.on('exit', (code) => {
       console.log(`[Wire] Session ${connectionId} exited with code ${code}`);
-      session.wire = null;
+      if (session.wire === wire) session.wire = null;
       if (threadId) unregisterWire(threadId);
       // Only notify if WebSocket is still open
       if (ws.readyState === 1) {
@@ -753,19 +781,25 @@ wss.on('connection', (ws) => {
       
       switch (eventType) {
         case 'TurnBegin':
+          // Ignore spurious startup turns (Gemini emits one on ACP session creation)
+          if (!payload?.user_input && !session.pendingUserInput) {
+            console.log('[Wire] Ignoring spurious TurnBegin (no user input)');
+            break;
+          }
           session.currentTurn = {
             id: generateId(),
             text: '',
-            userInput: payload?.user_input || ''
+            userInput: payload?.user_input || session.pendingUserInput || ''
           };
+          session.pendingUserInput = null;
           session.hasToolCalls = false;
           session.assistantParts = [];  // Reset parts for new exchange
           ws.send(JSON.stringify({
             type: 'turn_begin',
             turnId: session.currentTurn.id,
-            userInput: payload?.user_input || ''
+            userInput: session.currentTurn.userInput
           }));
-          emit('chat:turn_begin', { workspace: 'code-viewer', threadId: session.currentThreadId, turnId: session.currentTurn.id, userInput: payload?.user_input || '' });
+          emit('chat:turn_begin', { workspace: 'code-viewer', threadId: session.currentThreadId, turnId: session.currentTurn.id, userInput: session.currentTurn.userInput });
           break;
           
         case 'ContentPart':
@@ -900,25 +934,23 @@ wss.on('connection', (ws) => {
           
         case 'TurnEnd':
           if (session.currentTurn) {
-            // Save assistant message to CHAT.md
+            // Build metadata from tracked context/token usage
+            const metadata = {
+              contextUsage: session.contextUsage,
+              tokenUsage: session.tokenUsage,
+              messageId: session.messageId,
+              planMode: session.planMode,
+              capturedAt: Date.now()
+            };
+
+            // Save assistant message to CHAT.md (with metadata)
+            // Note: SQLite persistence is handled by audit-subscriber listening to chat:turn_end
             ThreadWebSocketHandler.addAssistantMessage(
               ws,
               session.currentTurn.text,
-              session.hasToolCalls
+              session.hasToolCalls,
+              metadata
             );
-            
-            // Save rich exchange to SQLite
-            const threadId = session.currentThreadId;
-            if (threadId) {
-              const historyFile = new HistoryFile(threadId);
-              historyFile.addExchange(
-                threadId,
-                session.currentTurn.userInput,
-                session.assistantParts
-              ).catch(err => {
-                console.error('[History] Failed to save exchange:', err);
-              });
-            }
             
             ws.send(JSON.stringify({
               type: 'turn_end',
@@ -926,11 +958,23 @@ wss.on('connection', (ws) => {
               fullText: session.currentTurn.text,
               hasToolCalls: session.hasToolCalls
             }));
-            emit('chat:turn_end', { workspace: 'code-viewer', threadId: session.currentThreadId, turnId: session.currentTurn.id, fullText: session.currentTurn.text, hasToolCalls: session.hasToolCalls });
+            emit('chat:turn_end', {
+              workspace: 'code-viewer',
+              threadId: session.currentThreadId,
+              turnId: session.currentTurn.id,
+              fullText: session.currentTurn.text,
+              hasToolCalls: session.hasToolCalls,
+              userInput: session.currentTurn.userInput,
+              parts: session.assistantParts
+            });
 
             // Reset turn tracking
             session.currentTurn = null;
             session.assistantParts = [];
+            session.contextUsage = null;
+            session.tokenUsage = null;
+            session.messageId = null;
+            session.planMode = false;
           }
           break;
           
@@ -939,6 +983,22 @@ wss.on('connection', (ws) => {
           break;
           
         case 'StatusUpdate':
+          // Track latest context/token usage for persistence
+          session.contextUsage = payload?.context_usage ?? null;
+          session.tokenUsage = payload?.token_usage ?? null;
+          session.messageId = payload?.message_id ?? null;
+          session.planMode = payload?.plan_mode ?? false;
+          
+          // Flow audit metadata through event bus (subscriber will filter/persist)
+          emit('chat:status_update', {
+            workspace: 'code-viewer',
+            threadId: session.currentThreadId,
+            contextUsage: payload?.context_usage,
+            tokenUsage: payload?.token_usage,
+            messageId: payload?.message_id,
+            planMode: payload?.plan_mode
+          });
+          
           ws.send(JSON.stringify({
             type: 'status_update',
             contextUsage: payload?.context_usage,
@@ -1009,18 +1069,23 @@ wss.on('connection', (ws) => {
         if (threadId) {
           console.log('[WS] Spawning wire for new thread:', threadId);
           session.currentThreadId = threadId;  // Track for history.json
-          session.wire = spawnThreadWire(threadId, projectRoot);
-          registerWire(threadId, session.wire, projectRoot);
-          console.log('[WS] Wire spawned, setting up handlers...');
-          setupWireHandlers(session.wire, threadId);
+          const wire = spawnThreadWire(threadId, projectRoot);
+          session.wire = wire;
+          registerWire(threadId, wire, projectRoot);
+          console.log('[WS] Wire spawned, awaiting harness ready...');
+          await awaitHarnessReady(wire);
+          console.log('[WS] Setting up handlers...');
+          setupWireHandlers(wire, threadId);
+          session.wire = wire;  // Re-assign in case exit handler cleared it
           console.log('[WS] Handlers set up, initializing wire...');
-          initializeWire(session.wire);
+          initializeWire(wire);
           console.log('[WS] Wire initialization complete');
-          
+          ws.send(JSON.stringify({ type: 'wire_ready', threadId }));
+
           // Register with ThreadManager
           if (state?.threadManager) {
             console.log('[WS] Registering with ThreadManager...');
-            await state.threadManager.openSession(threadId, session.wire, ws);
+            await state.threadManager.openSession(threadId, wire, ws);
             console.log('[WS] ThreadManager registration complete');
           }
         } else {
@@ -1049,7 +1114,9 @@ wss.on('connection', (ws) => {
         console.log('[WS] Spawning wire for opened thread:', threadId);
         session.wire = spawnThreadWire(threadId, projectRoot);
         registerWire(threadId, session.wire, projectRoot);
-        console.log('[WS] Wire spawned, setting up handlers...');
+        console.log('[WS] Wire spawned, awaiting harness ready...');
+        await awaitHarnessReady(session.wire);
+        console.log('[WS] Setting up handlers...');
         setupWireHandlers(session.wire, threadId);
         console.log('[WS] Handlers set up, initializing wire...');
         initializeWire(session.wire);
@@ -1075,6 +1142,7 @@ wss.on('connection', (ws) => {
           session.currentThreadId = dailyThreadId;
           session.wire = spawnThreadWire(dailyThreadId, projectRoot);
           registerWire(dailyThreadId, session.wire, projectRoot);
+          await awaitHarnessReady(session.wire);
           setupWireHandlers(session.wire, dailyThreadId);
           initializeWire(session.wire);
           const dailyState = ThreadWebSocketHandler.getState(ws);
@@ -1153,12 +1221,19 @@ wss.on('connection', (ws) => {
         // Send thread history to client
         const history = await agentThreadManager.getHistory(threadId);
         const richHistory = await agentThreadManager.getRichHistory(threadId);
+        
+        // Extract context usage from the last exchange's metadata
+        const exchanges = richHistory?.exchanges || [];
+        const lastExchange = exchanges.length > 0 ? exchanges[exchanges.length - 1] : null;
+        const contextUsage = lastExchange?.metadata?.contextUsage ?? null;
+        
         ws.send(JSON.stringify({
           type: 'thread:opened',
           threadId,
           thread: await agentThreadManager.index.get(threadId),
           history: history?.messages || [],
-          exchanges: richHistory?.exchanges || [],
+          exchanges: exchanges,
+          contextUsage,  // Restore context usage from last exchange
           agentPath,
           strategy: { canBrowseOld: strategy.canBrowseOld, canCreateNew: strategy.canCreateNew },
         }));
@@ -1167,6 +1242,7 @@ wss.on('connection', (ws) => {
         console.log(`[WS] Spawning wire for agent persona: ${agentPath}, thread: ${threadId}`);
         session.wire = spawnThreadWire(threadId, projectRoot);
         registerWire(threadId, session.wire, projectRoot);
+        await awaitHarnessReady(session.wire);
         setupWireHandlers(session.wire, threadId);
         initializeWire(session.wire);
 
@@ -1236,9 +1312,9 @@ wss.on('connection', (ws) => {
           const chatConfig = views.resolveChatConfig(projectRoot, panel);
 
           if (chatConfig) {
-            // View has chat — use absolute chat folder path as the stable DB key
-            ThreadWebSocketHandler.setPanel(ws, chatConfig.chatPath, {
-              panelPath: path.join(AI_PANELS_PATH, panel),
+            // panelId = view name (panel), panelPath = full chat folder path
+            ThreadWebSocketHandler.setPanel(ws, panel, {
+              panelPath: chatConfig.chatPath,
               projectRoot,
               viewName: panel,
             });
@@ -1317,17 +1393,31 @@ wss.on('connection', (ws) => {
         });
         console.log('[WS] Message tracked in thread');
         
-        // Send to wire — inject system context on first prompt if pending
-        const id = generateId();
-        const promptParams = { user_input: clientMsg.user_input };
-        if (session.pendingSystemContext) {
-          promptParams.system = session.pendingSystemContext;
-          session.pendingSystemContext = null;
-          console.log('[WS] Injecting system context on first prompt');
+        // Send to wire — new harness wires use ACP sendMessage, legacy uses Kimi-wire format
+        session.pendingUserInput = clientMsg.user_input;
+        if (wire._sendMessage) {
+          console.log('[WS] Sending via harness ACP sendMessage');
+          (async () => {
+            try {
+              for await (const _ of wire._sendMessage(clientMsg.user_input, {})) {
+                // Events flow via compatibleStdout → setupWireHandlers; just drain the iterator
+              }
+            } catch (err) {
+              console.error('[WS] Harness sendMessage failed:', err);
+            }
+          })();
+        } else {
+          const id = generateId();
+          const promptParams = { user_input: clientMsg.user_input };
+          if (session.pendingSystemContext) {
+            promptParams.system = session.pendingSystemContext;
+            session.pendingSystemContext = null;
+            console.log('[WS] Injecting system context on first prompt');
+          }
+          console.log('[WS] Sending to wire with id:', id);
+          sendToWire(wire, 'prompt', promptParams, id);
+          console.log('[WS] Prompt sent to wire');
         }
-        console.log('[WS] Sending to wire with id:', id);
-        sendToWire(wire, 'prompt', promptParams, id);
-        console.log('[WS] Prompt sent to wire');
         return;
       }
       
@@ -1384,6 +1474,89 @@ wss.on('connection', (ws) => {
           await handler(ws, clientMsg);
           return;
         }
+      }
+
+      // ---- Harness mode management (Phase 2 compatibility layer) ----
+
+      if (clientMsg.type === 'harness:get_mode') {
+        const { getModeStatus } = require('./lib/harness/compat');
+        const { getHarnessMode } = require('./lib/harness/feature-flags');
+        ws.send(JSON.stringify({
+          type: 'harness:mode_status',
+          threadId: clientMsg.threadId,
+          data: getModeStatus(clientMsg.threadId),
+          mode: getHarnessMode(clientMsg.threadId)
+        }));
+        return;
+      }
+
+      if (clientMsg.type === 'harness:set_mode') {
+        const { setThreadMode } = require('./lib/harness/feature-flags');
+        try {
+          setThreadMode(clientMsg.threadId, clientMsg.mode);
+          ws.send(JSON.stringify({
+            type: 'harness:mode_changed',
+            threadId: clientMsg.threadId,
+            mode: clientMsg.mode
+          }));
+          console.log(`[Harness] Mode changed for thread ${clientMsg.threadId?.slice(0, 8)}... to ${clientMsg.mode}`);
+        } catch (err) {
+          ws.send(JSON.stringify({
+            type: 'harness:mode_error',
+            threadId: clientMsg.threadId,
+            error: err.message
+          }));
+        }
+        return;
+      }
+
+      if (clientMsg.type === 'harness:rollback') {
+        const { emergencyRollback } = require('./lib/harness/compat');
+        emergencyRollback();
+        ws.send(JSON.stringify({
+          type: 'harness:rollback_complete',
+          message: 'Emergency rollback triggered. All threads now use legacy mode.'
+        }));
+        console.log('[Harness] Emergency rollback triggered via WebSocket');
+        return;
+      }
+
+      // ---- External CLI harnesses (Phase 3) ----
+
+      if (clientMsg.type === 'harness:list') {
+        const { registry } = require('./lib/harness');
+        try {
+          const harnesses = await registry.getAvailableHarnesses();
+          ws.send(JSON.stringify({
+            type: 'harness:list_result',
+            harnesses
+          }));
+        } catch (err) {
+          ws.send(JSON.stringify({
+            type: 'harness:list_error',
+            error: err.message
+          }));
+        }
+        return;
+      }
+
+      if (clientMsg.type === 'harness:check_install') {
+        const { registry } = require('./lib/harness');
+        try {
+          const status = await registry.getHarnessStatus(clientMsg.harnessId);
+          ws.send(JSON.stringify({
+            type: 'harness:install_status',
+            harnessId: clientMsg.harnessId,
+            status
+          }));
+        } catch (err) {
+          ws.send(JSON.stringify({
+            type: 'harness:check_error',
+            harnessId: clientMsg.harnessId,
+            error: err.message
+          }));
+        }
+        return;
       }
 
       // Unknown message type
@@ -1452,6 +1625,10 @@ initDb(getDefaultProjectRoot())
     console.log('[DB] robin.db initialized');
     robinHandlers = createRobinHandlers({ getDb, sessions, getDefaultProjectRoot });
     clipboardHandlers = createClipboardHandlers({ getDb });
+    
+    // Start audit subscriber (listens to event bus, persists exchange metadata)
+    startAuditSubscriber();
+    
     startServer();
   })
   .catch(err => {

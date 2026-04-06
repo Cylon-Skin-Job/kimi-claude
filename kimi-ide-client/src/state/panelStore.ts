@@ -64,8 +64,10 @@ interface AppState {
   // Thread management
   threads: Thread[];
   currentThreadId: string | null;
+  wireReady: boolean;
   setThreads: (threads: Thread[]) => void;
   setCurrentThreadId: (threadId: string | null) => void;
+  setWireReady: (ready: boolean) => void;
   addThread: (thread: Thread) => void;
   updateThread: (threadId: string, updates: Partial<Thread['entry']>) => void;
   removeThread: (threadId: string) => void;
@@ -102,6 +104,7 @@ export const usePanelStore = create<AppState>((set, get) => ({
   contextUsage: 0,
   threads: [],
   currentThreadId: null,
+  wireReady: false,
 
   // Actions
   setCurrentPanel: (id) => {
@@ -320,6 +323,7 @@ export const usePanelStore = create<AppState>((set, get) => ({
   // Thread actions
   setThreads: (threads) => set({ threads }),
   setCurrentThreadId: (threadId) => set({ currentThreadId: threadId }),
+  setWireReady: (ready) => set({ wireReady: ready }),
   addThread: (thread) => set((state) => ({
     threads: [thread, ...state.threads]
   })),

@@ -51,12 +51,17 @@ class ThreadIndex {
    * Create a new thread entry
    * @param {string} threadId
    * @param {string} [name='New Chat']
+   * @param {object} [options]
+   * @param {string} [options.harnessId='kimi']
+   * @param {object} [options.harnessConfig]
    * @returns {Promise<object>}
    */
-  async create(threadId, name = 'New Chat') {
+  async create(threadId, name = 'New Chat', options = {}) {
     const db = getDb();
     const now = Date.now();
     const createdAt = new Date().toISOString();
+    const harnessId = options.harnessId || 'kimi';
+    const harnessConfig = options.harnessConfig ? JSON.stringify(options.harnessConfig) : null;
 
     await db('threads').insert({
       thread_id: threadId,
@@ -66,9 +71,11 @@ class ThreadIndex {
       message_count: 0,
       status: 'suspended',
       updated_at: now,
+      harness_id: harnessId,
+      harness_config: harnessConfig,
     });
 
-    return { name, createdAt, messageCount: 0, status: 'suspended' };
+    return { name, createdAt, messageCount: 0, status: 'suspended', harnessId };
   }
 
   /**
@@ -192,6 +199,14 @@ class ThreadIndex {
     };
     if (row.resumed_at) entry.resumedAt = row.resumed_at;
     if (row.date) entry.date = row.date;
+    if (row.harness_id) entry.harnessId = row.harness_id;
+    if (row.harness_config) {
+      try {
+        entry.harnessConfig = JSON.parse(row.harness_config);
+      } catch {
+        entry.harnessConfig = null;
+      }
+    }
     return entry;
   }
 }

@@ -98,7 +98,11 @@ export type WebSocketMessageType =
   | 'clipboard:list'
   | 'clipboard:append'
   | 'clipboard:touch'
-  | 'clipboard:clear';
+  | 'clipboard:clear'
+  | 'wire_ready'
+  | 'wire_disconnected'
+  | 'parse_error'
+  | 'thread:create:confirm';
 
 export interface WebSocketMessage {
   type: WebSocketMessageType;

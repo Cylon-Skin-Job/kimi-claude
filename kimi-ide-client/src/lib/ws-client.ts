@@ -81,6 +81,13 @@ export function connectWs() {
     captureConsoleLogs();
     ws.send(JSON.stringify({ type: 'initialize' }));
 
+    // Tell server which panel we're using
+    const currentPanel = store.currentPanel;
+    if (currentPanel) {
+      console.log('[WS] Sending set_panel for:', currentPanel);
+      ws.send(JSON.stringify({ type: 'set_panel', panel: currentPanel }));
+    }
+
     // Discover panels
     loadAllPanels(ws).then((configs) => {
       console.log(`[WS] Discovered ${configs.length} panels`);
@@ -353,7 +360,7 @@ function handleMessage(msg: WebSocketMessage) {
       // Use the panel from the message if available, otherwise fall back to currentPanel.
       // This prevents cross-panel pollution (e.g., issues daily thread writing to explorer).
       const targetPanel = msg.panel || panel;
-      console.log('[WS] thread:opened:', msg.threadId?.slice(0, 8), 'panel:', targetPanel, 'exchanges:', msg.exchanges?.length, 'history:', msg.history?.length);
+      console.log('[WS] thread:opened:', msg.threadId?.slice(0, 8), 'panel:', targetPanel, 'exchanges:', msg.exchanges?.length, 'history:', msg.history?.length, 'contextUsage:', msg.contextUsage);
       if (msg.threadId && msg.thread) {
         // Only update current thread if this is the active panel
         if (targetPanel === panel) {
@@ -368,9 +375,21 @@ function handleMessage(msg: WebSocketMessage) {
           console.log('[WS] Loading', msg.history.length, 'messages (legacy format)');
           convertHistoryToMessages(targetPanel, msg.history);
         }
+
+        // Restore context usage from last exchange if available
+        if (msg.contextUsage !== undefined && msg.contextUsage !== null) {
+          console.log('[WS] Restoring context usage:', msg.contextUsage);
+          store.setContextUsage(msg.contextUsage);
+        } else {
+          console.log('[WS] No contextUsage to restore - msg.contextUsage:', msg.contextUsage);
+        }
       }
       break;
     }
+
+    case 'wire_ready':
+      store.setWireReady(true);
+      break;
 
     case 'thread:renamed':
       if (msg.threadId && msg.name) {

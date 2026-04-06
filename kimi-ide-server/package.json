@@ -5,13 +5,16 @@
   "main": "index.js",
   "scripts": {
     "setup-transcription": "node lib/transcription/setup.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.66",
+    "@ai-sdk/openai": "^3.0.50",
+    "ai": "^6.0.146",
     "better-sqlite3": "^12.8.0",
     "express": "^5.2.1",
     "gpt-tokenizer": "^3.4.0",
@@ -20,5 +23,8 @@
     "nodejs-whisper": "^0.2.9",
     "uuid": "^13.0.0",
     "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "jest": "^30.3.0"
   }
 }

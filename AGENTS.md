@@ -1,10 +1,10 @@
 # AGENTS.md - kimi-claude
 
-> Agent-focused documentation for the Kimi IDE project — a web-based IDE using Kimi CLI in wire mode as the agent backend.
+> Agent-focused documentation for the Open Robin project — a web-based IDE that reads CLI wire protocols (RPC) and renders AI output in a visual interface. The CLI handles all AI inference; Open Robin is a harness/display layer, not an AI itself.
 
 ## ⚠️ CRITICAL PREREQUISITE: One Server
 
-**One Node process** serves the React app from `kimi-ide-client/dist/`, HTTP, and the WebSocket bridge to Kimi CLI (default **port 3001**, or `PORT`).
+**One Node process** serves the React app from `kimi-ide-client/dist/`, HTTP, and the WebSocket bridge to the active CLI (default **port 3001**, or `PORT`).
 
 The client is **not** hot-reloaded by the server: after UI changes, run **`npm run build`** in `kimi-ide-client/` (or **`./restart-kimi.sh`**, which builds then starts the server).
 
@@ -27,7 +27,7 @@ cd ../kimi-ide-server && node server.js
 
 ## Project Overview
 
-This is a **web-based IDE** that integrates with Kimi CLI's wire mode (`kimi --wire --yolo`) to provide an AI-powered development environment. It uses a thin-client architecture where the backend handles all state and intelligence, and the frontend is purely for rendering.
+This is a **web-based IDE** that integrates with command-line AI assistants via their wire protocols to provide an AI-powered development environment. Multiple CLIs supported: kimi, claude, qwen, codex, gemini, opencode. It uses a thin-client architecture where the backend handles all state and intelligence, and the frontend is purely for rendering.
 
 ### Key Technologies
 - **Frontend:** React 19 + TypeScript + Vite
@@ -65,8 +65,9 @@ This is a **web-based IDE** that integrates with Kimi CLI's wire mode (`kimi --w
 │                          stdin/stdout (JSON-RPC)                            │
 │                                    │                                        │
 │                           ┌────────┴────────┐                               │
-│                           │  Kimi CLI Wire  │                               │
-│                           │  (--wire --yolo) │                               │
+│                           │   Active CLI    │                               │
+│                           │  (kimi/claude/  │                               │
+│                           │  qwen/codex/etc)│                               │
 │                           └─────────────────┘                               │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -186,7 +187,7 @@ Seven workspace tabs with distinct colors:
 | `rocket` | Orange | `rocket` | Deployments, builds |
 | `issues` | Yellow | `business_messages` | Tasks, processes |
 | `wiki` | Pink | `full_coverage` | Documentation |
-| `claw` | Red | `robot_2` | Direct Kimi chat |
+| `claw` | Red | `robot_2` | Direct CLI chat |
 | `skills` | Purple | `wand_shine` | Commands, prompts |
 
 ### 4. User Modes
@@ -324,16 +325,16 @@ cd ../kimi-ide-server && node server.js &
 
 ---
 
-## Wire Protocol (Server ↔ Kimi CLI)
+## Wire Protocol (Server ↔ Active CLI)
 
 JSON-RPC 2.0 over STDIO (newline-delimited):
 
-**Server → Kimi:**
+**Server → CLI:**
 ```json
 {"jsonrpc":"2.0","method":"prompt","id":"uuid","params":{"user_input":"Hello"}}
 ```
 
-**Kimi → Server (Event):**
+**CLI → Server (Event):**
 ```json
 {"jsonrpc":"2.0","method":"event","params":{"type":"ContentPart","payload":{"type":"text","text":"Hello"}}}
 ```
@@ -346,7 +347,7 @@ See `docs/WIRE_PROTOCOL.md` for complete specification.
 
 Message types:
 - `initialize` — Handshake on connection
-- `prompt` — Send user input to Kimi
+- `prompt` — Send user input to active CLI
 - `turn_begin` / `turn_end` — Turn lifecycle
 - `content` / `thinking` — Streaming content
 - `tool_call` / `tool_result` — Tool execution
@@ -457,7 +458,15 @@ The `ai/` folder is portable. When Kimi IDE opens a different project, it reads 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `PORT` | `3001` | HTTP server port |
-| `KIMI_PATH` | `kimi` | Path to Kimi CLI executable |
+| `KIMI_PATH` | `kimi` | Path to default CLI executable (kimi, claude, etc.) |
+
+### CLI Registry
+
+Available CLIs: `kimi`, `claude`, `qwen`, `codex`, `gemini`, `opencode`. User must have at least one installed. The **active CLI** is set per-system in `robin.db` (`cli_registry` table). Multiple CLIs can be installed simultaneously; switching the active CLI does not affect project state, chat history, triggers, or settings.
+
+**Switching CLIs:** Changing the active CLI starts a fresh session bound to that CLI. Sessions do not transfer between CLIs—each session remains tied to the CLI that created it. Users can fork conversations across CLIs via message ID + `/fork` command.
+
+**Payment:** Open Robin is free. Token costs go to the CLI provider. Two modes: (1) CLI sign-in = metered plan from provider, often cheaper than raw API. (2) BYO API key = user provides own key via LLM Providers tab or Secrets. Free tiers exist (Qwen, Gemini offer generous daily limits).
 
 ---
 
@@ -581,7 +590,7 @@ When this app is packaged as Electron, the **only** change is **who calls `initD
 
 ## Notes for AI Agents
 
-1. **This is a BRIDGE architecture.** The server translates between WebSocket and Kimi CLI wire protocol. The client is a pure renderer.
+1. **This is a BRIDGE architecture.** The server translates between WebSocket and CLI wire protocol (Kimi, Claude, Qwen, etc.). The client is a pure renderer.
 
 2. **The engine owns timing.** Components never use `setTimeout` or `setInterval`. All timing flows through the pulse-driven engine.
 

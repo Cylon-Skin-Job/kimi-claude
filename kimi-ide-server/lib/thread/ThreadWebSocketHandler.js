@@ -48,7 +48,7 @@ function getThreadManager(panelId, config = {}) {
 /**
  * Set panel for a WebSocket connection
  * @param {import('ws').WebSocket} ws
- * @param {string} panelId - Absolute chat folder path (stable DB key)
+ * @param {string} panelId - Panel identifier (e.g., 'code-viewer', 'agent:bot-name')
  * @param {object} [config] - Config including panelPath for ChatFile
  * @param {string} [config.viewName] - View name for client messages (e.g., 'code-viewer')
  */
@@ -140,17 +140,20 @@ async function sendThreadList(ws) {
 }
 
 /**
- * Check if a 'New Chat' already exists
- * @param {import('ws').WebSocket} ws
- * @returns {Promise<{threadId: string, entry: object}|null>}
+ * Generate a timestamped default thread name.
+ * e.g. "New Chat 04/06 2:34 PM"
+ * @returns {string}
  */
-async function findExistingNewChat(ws) {
-  const state = wsState.get(ws);
-  if (!state) return null;
-  
-  const threads = await state.threadManager.listThreads();
-  // Find first thread named exactly 'New Chat'
-  return threads.find(t => t.entry?.name === 'New Chat') || null;
+function newChatName() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  let hours = now.getHours();
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  return `New Chat ${month}/${day} ${hours}:${minutes}:${seconds} ${ampm}`;
 }
 
 /**
@@ -158,7 +161,8 @@ async function findExistingNewChat(ws) {
  * @param {import('ws').WebSocket} ws
  * @param {object} msg
  * @param {string} [msg.name]
- * @param {boolean} [msg.confirmed] - True if user confirmed duplicate
+ * @param {string} [msg.harnessId] - Harness selection ('kimi' | 'robin')
+ * @param {object} [msg.harnessConfig] - BYOK configuration
  */
 async function handleThreadCreate(ws, msg) {
   const state = wsState.get(ws);
@@ -166,27 +170,23 @@ async function handleThreadCreate(ws, msg) {
     ws.send(JSON.stringify({ type: 'error', message: 'No panel set' }));
     return;
   }
-  
-  // Check for existing 'New Chat' if not already confirmed
-  if (!msg.confirmed) {
-    const existing = await findExistingNewChat(ws);
-    if (existing) {
-      ws.send(JSON.stringify({
-        type: 'thread:create:confirm',
-        message: `A chat named "New Chat" already exists. Create anyway?`,
-        existingThreadId: existing.threadId,
-        existingThreadName: existing.entry?.name
-      }));
-      return;
-    }
-  }
-  
+
   // Generate thread ID (will be Kimi session ID)
   const threadId = uuidv4();
-  const name = msg.name || 'New Chat';
+  const name = msg.name || newChatName();
+  const harnessId = msg.harnessId || 'kimi';
   
   try {
-    const { threadId: createdId, entry } = await state.threadManager.createThread(threadId, name);
+    // Create thread with harness selection
+    const { threadId: createdId, entry } = await state.threadManager.createThread(threadId, name, {
+      harnessId,
+      harnessConfig: msg.harnessConfig
+    });
+    
+    // Set the harness mode for this thread
+    const { setThreadMode } = require('../harness/feature-flags');
+    const mode = harnessId === 'kimi' ? 'legacy' : 'new';
+    setThreadMode(threadId, mode);
     
     ws.send(JSON.stringify({
       type: 'thread:created',
@@ -240,6 +240,12 @@ async function handleThreadOpen(ws, msg) {
   
   state.threadId = threadId;
   
+  // Set harness mode based on thread's stored preference
+  const { setThreadMode } = require('../harness/feature-flags');
+  const harnessId = thread.entry?.harnessId || 'kimi';
+  const mode = harnessId === 'kimi' ? 'legacy' : 'new';
+  setThreadMode(threadId, mode);
+  
   // Mark as resumed in index
   await threadManager.index.markResumed(threadId);
   
@@ -247,13 +253,22 @@ async function handleThreadOpen(ws, msg) {
   const history = await threadManager.getHistory(threadId);
   const richHistory = await threadManager.getRichHistory(threadId);
   
+  // Extract context usage from the last exchange's metadata
+  const exchanges = richHistory?.exchanges || [];
+  const lastExchange = exchanges.length > 0 ? exchanges[exchanges.length - 1] : null;
+  const contextUsage = lastExchange?.metadata?.contextUsage ?? null;
+  
+  console.log(`[ThreadWS] Opening thread ${threadId.slice(0,8)}, exchanges: ${exchanges.length}, lastExchange metadata:`, lastExchange?.metadata);
+  console.log(`[ThreadWS] Sending contextUsage:`, contextUsage);
+  
   ws.send(JSON.stringify({
     type: 'thread:opened',
     threadId,
     panel: state.viewName,
     thread: thread.entry,
     history: history?.messages || [],  // Legacy format
-    exchanges: richHistory?.exchanges || []  // Rich format with tool calls
+    exchanges: exchanges,  // Rich format with tool calls
+    contextUsage  // Restore context usage from last exchange
   }));
 
   // Update MRU order immediately (so other views see it as recently used)
@@ -275,7 +290,7 @@ async function handleThreadOpen(ws, msg) {
   
   pendingReorderTimers.set(ws, timer);
 
-  console.log(`[ThreadWS] Opened thread ${threadId} (panel: ${state.panelId}) - reorder in ${REORDER_DELAY_MS}ms`);
+  console.log(`[ThreadWS] Opened thread ${threadId} (panel: ${state.panelId}, harness: ${harnessId}) - reorder in ${REORDER_DELAY_MS}ms`);
 }
 
 /**
@@ -498,18 +513,25 @@ async function handleMessageSend(ws, msg) {
  * @param {import('ws').WebSocket} ws
  * @param {string} content
  * @param {boolean} hasToolCalls
+ * @param {object} [metadata] - Optional metadata (contextUsage, tokenUsage, etc.)
  */
-async function addAssistantMessage(ws, content, hasToolCalls = false) {
+async function addAssistantMessage(ws, content, hasToolCalls = false, metadata = null) {
   const state = wsState.get(ws);
   if (!state || !state.threadId) return;
   
   const { threadManager, threadId } = state;
   
-  await threadManager.addMessage(threadId, {
+  const message = {
     role: 'assistant',
     content,
     hasToolCalls
-  });
+  };
+  
+  if (metadata && Object.keys(metadata).length > 0) {
+    await threadManager.addMessageWithMetadata(threadId, message, metadata);
+  } else {
+    await threadManager.addMessage(threadId, message);
+  }
   
   // Trigger auto-naming after first assistant response
   const entry = await threadManager.index.get(threadId);

@@ -98,17 +98,23 @@ class ChatFile {
     let currentRole = null;
     let currentContent = [];
     let currentHasToolCalls = false;
+    let currentMetadata = null;
 
     const flushMessage = () => {
       if (currentRole && currentContent.length > 0) {
-        messages.push({
+        const msg = {
           role: currentRole,
           content: currentContent.join('\n').trim(),
           hasToolCalls: currentHasToolCalls
-        });
+        };
+        if (currentMetadata) {
+          msg.metadata = currentMetadata;
+        }
+        messages.push(msg);
       }
       currentContent = [];
       currentHasToolCalls = false;
+      currentMetadata = null;
     };
 
     for (let i = startIdx; i < lines.length; i++) {
@@ -122,6 +128,17 @@ class ChatFile {
         currentRole = 'assistant';
       } else if (line === TOOL_CALL_MARKER) {
         currentHasToolCalls = true;
+      } else if (line.startsWith('<!-- metadata:') && line.endsWith('-->')) {
+        // Parse metadata HTML comment
+        try {
+          const jsonStart = line.indexOf('{');
+          const jsonEnd = line.lastIndexOf('}');
+          if (jsonStart !== -1 && jsonEnd !== -1) {
+            currentMetadata = JSON.parse(line.slice(jsonStart, jsonEnd + 1));
+          }
+        } catch {
+          // Ignore parse errors for malformed metadata
+        }
       } else if (currentRole) {
         currentContent.push(line);
       }
@@ -148,6 +165,12 @@ class ChatFile {
 
       if (msg.hasToolCalls) {
         lines.push(TOOL_CALL_MARKER);
+        lines.push('');
+      }
+
+      // Add metadata as HTML comment after assistant messages
+      if (msg.role === 'assistant' && msg.metadata && Object.keys(msg.metadata).length > 0) {
+        lines.push(`<!-- metadata: ${JSON.stringify(msg.metadata)} -->`);
         lines.push('');
       }
     }

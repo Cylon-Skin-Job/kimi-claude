@@ -62,9 +62,10 @@ class HistoryFile {
    * @param {string} threadId
    * @param {string} userInput
    * @param {Array} parts - Assistant response parts
+   * @param {object} [metadata] - Optional metadata (contextUsage, tokenUsage, etc.)
    * @returns {Promise<object>} Exchange object
    */
-  async addExchange(threadId, userInput, parts) {
+  async addExchange(threadId, userInput, parts, metadata = null) {
     const db = getDb();
     const seq = (await this.countExchanges()) + 1;
     const ts = Date.now();
@@ -76,7 +77,7 @@ class HistoryFile {
       ts,
       user_input: userInput,
       assistant,
-      metadata: '[]',
+      metadata: JSON.stringify(metadata || {}),
     });
 
     return {
@@ -84,7 +85,7 @@ class HistoryFile {
       ts,
       user: userInput,
       assistant: { parts: parts.map((p) => ({ ...p })) },
-      metadata: [],
+      metadata: metadata || {},
     };
   }
 
@@ -132,12 +133,24 @@ class HistoryFile {
    * @private
    */
   _toExchange(row) {
+    // Parse metadata - handle both old array format '[]' and new object format '{}'
+    let parsedMetadata;
+    try {
+      parsedMetadata = JSON.parse(row.metadata || '{}');
+      // Handle legacy array format
+      if (Array.isArray(parsedMetadata)) {
+        parsedMetadata = {};
+      }
+    } catch {
+      parsedMetadata = {};
+    }
+
     return {
       seq: row.seq,
       ts: row.ts,
       user: row.user_input,
       assistant: JSON.parse(row.assistant),
-      metadata: JSON.parse(row.metadata || '[]'),
+      metadata: parsedMetadata,
     };
   }
 }

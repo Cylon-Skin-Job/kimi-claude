@@ -132,6 +132,7 @@ export function Sidebar({ panel }: SidebarProps) {
     onConfirm: () => {},
     onCancel: () => {}
   });
+  const setCurrentThreadId = usePanelStore((state) => state.setCurrentThreadId);
   
   // Request thread list when connected
   useEffect(() => {
@@ -152,7 +153,6 @@ export function Sidebar({ panel }: SidebarProps) {
             show: true,
             message: msg.message,
             onConfirm: () => {
-              // Send confirmed creation
               sendMessage({ type: 'thread:create', confirmed: true });
               setConfirmModal(prev => ({ ...prev, show: false }));
             },
@@ -190,22 +190,8 @@ export function Sidebar({ panel }: SidebarProps) {
   }, [ws]);
   
   const handleCreateThread = () => {
-    logger.info('[Sidebar] BUTTON CLICKED: New Thread');
-    
-    if (!ws) {
-      logger.error('[Sidebar] WebSocket is NULL - not initialized');
-      return;
-    }
-    
-    if (ws.readyState !== WebSocket.OPEN) {
-      logger.error('[Sidebar] WebSocket not OPEN. State:', ws.readyState);
-      logger.error('[Sidebar] State 0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED');
-      return;
-    }
-    
-    logger.info('[Sidebar] WebSocket is OPEN - sending thread:create');
-    sendMessage({ type: 'thread:create' });
-    logger.info('[Sidebar] Message sent');
+    logger.info('[Sidebar] New Thread — clearing thread to show harness picker');
+    setCurrentThreadId(null);
   };
   
   const handleOpenThread = (threadId: string) => {
@@ -388,6 +374,7 @@ export function Sidebar({ panel }: SidebarProps) {
           </div>
         </div>
       )}
+
     </aside>
   );
 }

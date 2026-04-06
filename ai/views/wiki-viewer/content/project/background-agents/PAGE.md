@@ -174,7 +174,7 @@ Owned by `runner.js` in this workspace. This is the core engine.
 4. Read ai/STATE.md → cross-workspace context
 5. Create run folder: agents/{id}/runs/{timestamp}/
 6. Freeze: copy ticket.md, AGENT.md, WORKFLOW.md into run folder
-7. Spawn kimi --wire with agent model config
+7. Spawn active CLI with `--wire` flag and agent model config
 8. For each prompt in prompts/ (sorted numerically):
    a. Read prompt template
    b. Substitute {{ticket_body}}, {{step_NN_output}} vars

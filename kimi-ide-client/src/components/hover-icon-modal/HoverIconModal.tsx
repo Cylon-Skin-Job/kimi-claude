@@ -287,6 +287,7 @@ interface HoverIconModalContainerProps {
     onMouseEnter: () => void;
     onMouseLeave: () => void;
   };
+  className?: string;
 }
 
 export function HoverIconModalContainer({
@@ -296,13 +297,14 @@ export function HoverIconModalContainer({
   position,
   popoverRef,
   popoverProps,
+  className = '',
 }: HoverIconModalContainerProps) {
   if (!isOpen) return null;
 
   return (
     <div
       ref={popoverRef}
-      className={`hover-icon-modal ${isOpen ? 'open' : ''} ${state === 'LOCKED' ? 'locked' : ''}`}
+      className={`hover-icon-modal ${isOpen ? 'open' : ''} ${state === 'LOCKED' ? 'locked' : ''} ${className}`}
       style={{
         position: 'fixed',
         left: position.left,

@@ -49,7 +49,11 @@ class ThreadManager {
    */
   _getViewsDir() {
     if (!this.projectRoot) return null;
-    // Map panelId to workspace: 'code-viewer' → 'code-viewer', 'agent:foo' → 'agents-viewer'
+    // Use panelPath directly if available (it's already the chat folder path)
+    if (this.panelPath) {
+      return path.join(this.panelPath, 'threads', getUsername());
+    }
+    // Fallback: derive from panelId
     const workspace = this.panelId.startsWith('agent:') ? 'agents-viewer' : this.panelId;
     return path.join(this.projectRoot, 'ai', 'views', workspace, 'chat', 'threads', getUsername());
   }
@@ -60,8 +64,10 @@ class ThreadManager {
    */
   async _ensureThreadsIndex() {
     if (!this.projectRoot) return;
-    const workspace = this.panelId.startsWith('agent:') ? 'agents-viewer' : this.panelId;
-    const threadsDir = path.join(this.projectRoot, 'ai', 'views', workspace, 'chat', 'threads');
+    // Use panelPath directly if available, otherwise derive from panelId
+    const threadsDir = this.panelPath
+      ? path.join(this.panelPath, 'threads')
+      : path.join(this.projectRoot, 'ai', 'views', this.panelId.startsWith('agent:') ? 'agents-viewer' : this.panelId, 'chat', 'threads');
     const indexPath = path.join(threadsDir, 'index.json');
     const fs = require('fs').promises;
     try {
@@ -110,14 +116,17 @@ class ThreadManager {
    * Create a new thread
    * @param {string} threadId - Thread ID (should be Kimi session ID)
    * @param {string} [name='New Chat']
+   * @param {object} [options]
+   * @param {string} [options.harnessId='kimi']
+   * @param {object} [options.harnessConfig]
    * @returns {Promise<{threadId: string, entry: import('./types').ThreadEntry}>}
    */
-  async createThread(threadId, name = 'New Chat') {
+  async createThread(threadId, name = 'New Chat', options = {}) {
     // Check for FIFO eviction
     await this._enforceSessionLimit();
 
     // Create index entry (SQLite)
-    const entry = await this.index.create(threadId, name);
+    const entry = await this.index.create(threadId, name, options);
 
     // Create chat markdown file
     await this._ensureThreadsIndex();
@@ -233,6 +242,32 @@ class ThreadManager {
     const chatFile = this._createChatFile(threadId, entry.name);
     if (chatFile.filePath) {
       await chatFile.appendMessage(entry.name, message);
+    }
+
+    // Update message count
+    await this.index.incrementMessageCount(threadId);
+
+    // Move to front of MRU
+    await this.index.touch(threadId);
+
+    return { threadId, messageCount: entry.messageCount + 1 };
+  }
+
+  /**
+   * Add a message to a thread with metadata
+   * @param {string} threadId
+   * @param {import('./types').ChatMessage} message
+   * @param {object} [metadata] - Optional metadata (contextUsage, tokenUsage, etc.)
+   */
+  async addMessageWithMetadata(threadId, message, metadata = null) {
+    const entry = await this.index.get(threadId);
+    if (!entry) throw new Error(`Thread not found: ${threadId}`);
+
+    // Append to chat markdown (with metadata)
+    const chatFile = this._createChatFile(threadId, entry.name);
+    if (chatFile.filePath) {
+      const messageWithMetadata = metadata ? { ...message, metadata } : message;
+      await chatFile.appendMessage(entry.name, messageWithMetadata);
     }
 
     // Update message count
@@ -543,7 +578,7 @@ ${conversation}`;
    */
   async autoRename(threadId) {
     const entry = await this.index.get(threadId);
-    if (!entry || entry.name !== 'New Chat') return;
+    if (!entry || !entry.name.startsWith('New Chat')) return;
     
     const summary = await this.generateSummary(threadId);
     if (summary) {

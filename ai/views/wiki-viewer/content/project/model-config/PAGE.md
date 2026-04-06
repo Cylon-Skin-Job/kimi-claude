@@ -27,7 +27,7 @@ Each workspace declares its preferred model, provider, and settings in `api.json
 
 | Field | Purpose |
 |-------|---------|
-| `model.provider` | Which provider to use (maps to `[providers]` in kimi config.toml) |
+| `model.provider` | Which provider to use (CLI-specific, e.g., maps to `[providers]` in Kimi's config.toml) |
 | `model.model` | Model identifier |
 | `model.thinking` | Enable/disable thinking/reasoning mode |
 | `model.max_context_size` | Context window limit for this workspace |
@@ -40,9 +40,9 @@ The base CLI config (`~/.kimi/config.toml`) is never modified.
 
 ```
 1. Server reads workspace api.json
-2. Server reads base ~/.kimi/config.toml
+2. Server reads base CLI config (e.g., ~/.kimi/config.toml for Kimi)
 3. Server creates temp config with overrides applied
-4. Server spawns kimi --wire with --model-config pointing to temp config
+4. Server spawns active CLI with --wire flag and config pointing to temp overlay
 5. Session ends → temp config cleaned up
 ```
 

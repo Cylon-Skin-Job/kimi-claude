@@ -20,6 +20,73 @@ type RecorderState = 'checking_permission' | 'permission_needed' | 'permission_d
 
 const MAX_DURATION = 30;
 
+/**
+ * Find the best microphone device - prefers built-in Mac microphone over Continuity (iPhone)
+ */
+async function getBuiltInMicrophoneDeviceId(): Promise<string | undefined> {
+  try {
+    // We need to request permission first to get device labels
+    const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    
+    // Get all audio input devices
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const audioInputs = devices.filter(d => d.kind === 'audioinput');
+    
+    // Stop the temp stream immediately
+    tempStream.getTracks().forEach(track => track.stop());
+    
+    // Look for built-in Mac microphone patterns (exclude Continuity/iPhone devices)
+    const builtInPatterns = [
+      /macbook.*microphone/i,
+      /macbook.*air.*microphone/i,
+      /macbook.*pro.*microphone/i,
+      /imac.*microphone/i,
+      /mac.*studio.*microphone/i,
+      /mac.*mini.*microphone/i,
+      /built.in.*microphone/i,
+      /internal.*microphone/i,
+    ];
+    
+    const continuityPatterns = [
+      /iphone/i,
+      /ipad/i,
+      /continuity/i,
+      /belkin/i,  // Some Continuity docks
+    ];
+    
+    // First, try to find a built-in Mac microphone
+    for (const device of audioInputs) {
+      const label = device.label.toLowerCase();
+      const isBuiltIn = builtInPatterns.some(p => p.test(label));
+      const isContinuity = continuityPatterns.some(p => p.test(label));
+      
+      if (isBuiltIn && !isContinuity) {
+        console.log('[VoiceRecorder] Using built-in microphone:', device.label);
+        return device.deviceId;
+      }
+    }
+    
+    // If no built-in found, exclude Continuity devices and pick the first non-Continuity
+    for (const device of audioInputs) {
+      const label = device.label.toLowerCase();
+      const isContinuity = continuityPatterns.some(p => p.test(label));
+      
+      if (!isContinuity) {
+        console.log('[VoiceRecorder] Using external microphone:', device.label);
+        return device.deviceId;
+      }
+    }
+    
+    // Fall back to default (will likely be iPhone if that's what macOS selected)
+    console.log('[VoiceRecorder] No built-in mic found, using system default');
+    return undefined;
+    
+  } catch (error) {
+    console.warn('[VoiceRecorder] Could not enumerate devices:', error);
+    return undefined;
+  }
+}
+
 export function VoiceRecorder({ onTranscribe, onClose, maxDuration = MAX_DURATION }: VoiceRecorderProps) {
   const [recorderState, setRecorderState] = useState<RecorderState>('checking_permission');
   const [timeLeft, setTimeLeft] = useState(maxDuration);
@@ -111,9 +178,13 @@ export function VoiceRecorder({ onTranscribe, onClose, maxDuration = MAX_DURATIO
       setAudioLevel(0);
       chunksRef.current = [];
 
-      // Get microphone access
+      // Get the built-in microphone device ID (avoids Continuity/iPhone)
+      const deviceId = await getBuiltInMicrophoneDeviceId();
+
+      // Get microphone access - prefer built-in Mac mic
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
+          deviceId: deviceId ? { exact: deviceId } : undefined,
           echoCancellation: true,
           noiseSuppression: true,
           sampleRate: 16000
@@ -123,18 +194,32 @@ export function VoiceRecorder({ onTranscribe, onClose, maxDuration = MAX_DURATIO
 
       // Set up audio visualization
       audioContextRef.current = new AudioContext();
+      
+      // CRITICAL: Resume AudioContext after user interaction (browser requirement)
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+      }
+      
       const source = audioContextRef.current.createMediaStreamSource(stream);
       analyserRef.current = audioContextRef.current.createAnalyser();
       analyserRef.current.fftSize = 256;
+      analyserRef.current.smoothingTimeConstant = 0.8; // Smoother animation
       source.connect(analyserRef.current);
 
-      // Start visualization loop
+      // Start visualization loop - focus on voice frequencies (bins 0-20 of 128)
       const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
       const updateLevel = () => {
         if (!analyserRef.current || !streamRef.current) return;
         analyserRef.current.getByteFrequencyData(dataArray);
-        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-        setAudioLevel(average / 255);
+        
+        // Voice lives in lower frequencies (bins 0-20 of 128 total)
+        const voiceBins = dataArray.slice(0, 20);
+        const average = voiceBins.reduce((a, b) => a + b) / voiceBins.length;
+        // Scale: whisper ~20, normal speech ~80, loud ~150, yelling ~200+
+        // We want normal speech to hit around 0.6-0.8 range
+        const normalizedLevel = Math.min(average / 235, 1);
+        
+        setAudioLevel(normalizedLevel);
         animationRef.current = requestAnimationFrame(updateLevel);
       };
       updateLevel();
@@ -344,7 +429,8 @@ export function VoiceRecorder({ onTranscribe, onClose, maxDuration = MAX_DURATIO
   // Recording state
   if (recorderState === 'recording') {
     // K.I.T.T. style: three vertical bars that rise/fall with voice
-    const barHeight = (level: number) => Math.max(4, 4 + level * 40);
+    // Range: 4px (silence) to 110px (max) - fills most of the 140px ring
+    const barHeight = (level: number) => Math.max(4, 4 + level * 106);
     const progress = ((maxDuration - timeLeft) / maxDuration) * 100;
     const strokeDashoffset = circumference - (progress / 100) * circumference;
     

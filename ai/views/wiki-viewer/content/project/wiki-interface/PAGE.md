@@ -124,7 +124,7 @@ Clicking a wiki link `[Secrets](Secrets)` navigates within the interface instead
 
 ### Phase 3: Chat Panel (Read-Only + Ticket Creation)
 
-Wire the right-column chat to the wiki workspace's kimi session. The agent reads wiki content and creates tickets — it never writes to wiki files.
+Wire the right-column chat to the wiki workspace's CLI session. The agent reads wiki content and creates tickets — it never writes to wiki files.
 
 **Files to create/modify:**
 
@@ -137,7 +137,7 @@ Wire the right-column chat to the wiki workspace's kimi session. The agent reads
 **How it works:**
 1. WikiChat component renders in the right column below EdgePanel
 2. User types a message → sends via existing WebSocket `prompt` protocol
-3. Server routes to wiki workspace's kimi `--wire` session
+3. Server routes to wiki workspace's CLI `--wire` session
 4. Session loaded with wiki PROMPT.md + STATE.md as system context
 5. Agent responds: answers questions, explains history, or creates tickets
 
@@ -153,7 +153,7 @@ The chat agent is a reader and ticket creator. Nothing else.
 **Session scoping (server-side):**
 1. Server reads `ai/workspaces/wiki/api.json` → creates config overlay (thinking off, fast model)
 2. Server reads `ai/workspaces/wiki/PROMPT.md` → system prompt
-3. Server spawns kimi `--wire` with wiki-specific config
+3. Server spawns CLI with `--wire` flag and wiki-specific config
 4. TOOLS.md enforcement: server blocks all write/edit tool calls to wiki files
 
 **Ticket creation flow:**

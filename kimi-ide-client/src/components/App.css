@@ -206,23 +206,122 @@
   margin-bottom: -15px;
 }
 
-/* Chat footer layout */
+/* Chat footer layout - icons and button on one row */
 .chat-composer-meta-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 0;
+  padding: 8px 4px;
 }
 
-.chat-composer-meta-row .context-usage {
-  flex: 0 0 150px;
+/* Icons container */
+.chat-composer-meta-row > div:first-child {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Send/Stop button */
+.chat-composer-meta-row .chat-footer-btn {
+  flex-shrink: 0;
+}
+
+/* Send button group - unified container with divider */
+.send-button-group {
+  display: flex;
+  align-items: center;
+  background: var(--neutral-chrome-bg);
+  border: 1px solid var(--neutral-chrome-border);
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.send-btn-main {
+  padding: 0 12px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.send-btn-main:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.send-btn-divider {
+  width: 1px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.send-btn-secondary {
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.send-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Send dropdown modal content */
+.send-dropdown-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+}
+
+.send-dropdown-item {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
 }
 
-.chat-composer-meta-row .context-usage-bar {
+.send-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.send-dropdown-item .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* Context usage container - below buttons, aligned left, pushed to bottom */
+.context-usage-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0 0 0;
+  margin-bottom: -4px;
+  width: 100%;
+  max-width: 300px;
+}
+
+/* Standalone context usage bar */
+.context-usage-bar-standalone {
   flex: 1;
   height: 4px;
   background: rgba(255, 255, 255, 0.1);
@@ -232,17 +331,20 @@
   min-width: 100px;
 }
 
-.chat-composer-meta-row .context-usage-fill {
+.context-usage-bar-standalone .context-usage-fill {
   height: 100%;
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--theme-primary, #00d4ff);
   border-radius: 1px;
   transition: width 0.3s ease;
+  box-shadow: 0 0 6px rgba(var(--theme-primary-rgb, 0, 212, 255), 0.5);
 }
 
-.chat-composer-meta-row .context-usage span {
+/* Context usage percentage text */
+.context-usage-text {
   color: rgba(255, 255, 255, 0.6);
   font-size: 12px;
   min-width: 30px;
+  flex-shrink: 0;
 }
 
 .chat-composer-meta-row .chat-footer-btn {
@@ -269,4 +371,56 @@
   cursor: not-allowed;
 }
 
+/* Chat footer disabled state — when no thread is active */
+.chat-footer--disabled {
+  pointer-events: none;
+  opacity: 0.3;
+  user-select: none;
+}
+
 /* Floating chat: ai/views/settings/styles/views.css */
+
+/* Send dropdown - narrower than standard hover modals */
+.send-dropdown-modal {
+  width: 200px !important;
+  min-height: auto !important;
+  max-height: none !important;
+}
+
+.send-dropdown-modal .hover-icon-modal-list {
+  max-height: none;
+}
+
+.send-dropdown-content {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+}
+
+.send-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.send-dropdown-item:hover {
+  background: var(--neutral-chrome-bg);
+  color: var(--text-primary);
+}
+
+.send-dropdown-item .material-symbols-outlined {
+  font-size: 18px;
+  color: var(--text-dim);
+}
+
+.send-dropdown-item:hover .material-symbols-outlined {
+  color: var(--text-primary);
+}

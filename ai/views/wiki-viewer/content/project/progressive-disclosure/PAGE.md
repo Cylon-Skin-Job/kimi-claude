@@ -51,14 +51,14 @@ An agent never skips a layer. It follows pointers down. If Layer 2 (a skill) has
 
 | Content | Layer | Why |
 |---------|-------|-----|
-| "This is a web-based IDE using Kimi CLI" | CLAUDE.md | Never changes |
+| "This is a web-based IDE using CLI wire protocols" | CLAUDE.md | Never changes |
 | "All code is TypeScript + React 19" | CLAUDE.md | Permanent constraint |
 | "Check exports before modifying" | Skill | Durable guardrail |
 | "Async functions must be awaited" | Skill | Stable pattern |
 | "GitLab token stored in Keychain as GITLAB_TOKEN" | Wiki | Changes when auth changes |
 | "Wiki agent uses ticket-driven runs" | Wiki | Architecture evolves |
-| "How to create a Kimi CLI skill" | Wiki | Procedure evolves |
-| "Kimi CLI docs" | Upstream | External truth |
+| "How to create a CLI skill" | Wiki | Procedure evolves |
+| "CLI docs (Kimi, Claude, etc.)" | Upstream | External truth |
 
 ## Rules
 

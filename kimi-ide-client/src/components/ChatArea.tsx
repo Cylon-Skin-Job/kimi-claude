@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { usePanelStore } from '../state/panelStore';
 import { MessageList } from './MessageList';
 import { ChatInput, type ChatInputRef } from './ChatInput';
@@ -7,6 +7,14 @@ import { ScreenshotsTrigger } from '../screenshots';
 import { RecentFilesTrigger } from '../recent-files';
 import { EmojiTrigger } from '../emojis';
 import { MicTrigger } from '../mic';
+import {
+  useHoverIconModal,
+  HoverIconModalContainer,
+  HoverIconModalList,
+} from './hover-icon-modal';
+import { ChatHarnessPicker } from './ChatHarnessPicker';
+import { ConnectingOverlay } from './ConnectingOverlay';
+import { getHarnessOption } from '../config/harness';
 
 interface ChatAreaProps {
   panel: string;
@@ -18,6 +26,7 @@ export function ChatArea({ panel }: ChatAreaProps) {
   const chatInputRef = useRef<ChatInputRef>(null);
   const justSentRef = useRef(false);
   const [isSending, setIsSending] = useState(false);
+  const [connectingHarnessId, setConnectingHarnessId] = useState<string | null>(null);
 
   const handleInsertText = (text: string) => {
     chatInputRef.current?.insertText(text);
@@ -28,9 +37,32 @@ export function ChatArea({ panel }: ChatAreaProps) {
   const currentTurn = usePanelStore((state) => state.panels[panel]?.currentTurn || null);
   const segments = usePanelStore((state) => state.panels[panel]?.segments || []);
   const contextUsage = usePanelStore((state) => state.contextUsage);
+  const currentThreadId = usePanelStore((state) => state.currentThreadId);
+  const ws = usePanelStore((state) => state.ws);
+  const wireReady = usePanelStore((state) => state.wireReady);
+  const setWireReady = usePanelStore((state) => state.setWireReady);
 
   const addMessage = usePanelStore((state) => state.addMessage);
   const sendMessage = usePanelStore((state) => state.sendMessage);
+
+  // No thread active → show inline harness picker
+  const noThread = !currentThreadId;
+
+  const handleHarnessSelect = useCallback((harnessId: string) => {
+    setWireReady(false);
+    setConnectingHarnessId(harnessId);
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'thread:create', harnessId }));
+    }
+  }, [ws, setWireReady]);
+
+  // Clear overlay once wire is ready
+  useEffect(() => {
+    if (wireReady && connectingHarnessId) {
+      setConnectingHarnessId(null);
+      setWireReady(false);
+    }
+  }, [wireReady, connectingHarnessId, setWireReady]);
 
   // On send: scroll user bubble to top of viewport
   useEffect(() => {
@@ -93,10 +125,14 @@ export function ChatArea({ panel }: ChatAreaProps) {
 
   return (
     <section className="chat-area">
-      <div className="chat-messages" ref={chatContainerRef}>
-        {messages.length === 0 && !currentTurn && !showOrb ? (
+      <div className="chat-messages" ref={chatContainerRef} style={{ position: 'relative' }}>
+        {connectingHarnessId ? (
+          <ConnectingOverlay harnessName={getHarnessOption(connectingHarnessId)?.name} />
+        ) : noThread ? (
+          <ChatHarnessPicker onSelect={handleHarnessSelect} />
+        ) : messages.length === 0 && !currentTurn && !showOrb ? (
           <div className="message message-system">
-            {panel} panel active - Start a conversation
+            Start a conversation
           </div>
         ) : (
           <MessageList
@@ -111,15 +147,15 @@ export function ChatArea({ panel }: ChatAreaProps) {
 
         {/* Fixed spacer — always present, never changes size.
             Provides scroll room so user bubble can scroll to top of viewport. */}
-        <div style={{ minHeight: '80vh' }} />
+        {!noThread && <div style={{ minHeight: '80vh' }} />}
       </div>
 
-      <div className="chat-footer">
+      <div className={`chat-footer${noThread ? ' chat-footer--disabled' : ''}`}>
         <ChatInput
           ref={chatInputRef}
           onSend={handleSend}
           onStop={handleStop}
-          disabled={false}
+          disabled={noThread}
           panel={panel}
           isTurnActive={isTurnActive}
         />
@@ -130,15 +166,6 @@ export function ChatArea({ panel }: ChatAreaProps) {
             <RecentFilesTrigger onInsert={handleInsertText} />
             <EmojiTrigger onInsert={handleInsertText} />
             <MicTrigger onInsert={handleInsertText} />
-          </div>
-          <div className="context-usage context-usage-below-input">
-            <div className="context-usage-bar">
-              <div
-                className="context-usage-fill"
-                style={{ width: `${Math.min(contextUsage, 100)}%` }}
-              />
-            </div>
-            <span>{Math.round(contextUsage)}%</span>
           </div>
           {isTurnActive ? (
             <button
@@ -151,24 +178,117 @@ export function ChatArea({ panel }: ChatAreaProps) {
               </span>
             </button>
           ) : (
-            <button
-              className="chat-footer-btn send-btn"
-              onClick={() => {
-                const text = chatInputRef.current?.getText();
-                if (text?.trim()) {
-                  handleSend(text.trim());
-                  chatInputRef.current?.clearText();
-                }
-              }}
-              title="Send message"
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-                arrow_upward
-              </span>
-            </button>
+            <SendButtonGroup 
+              chatInputRef={chatInputRef}
+              onSend={handleSend}
+            />
           )}
+        </div>
+        <div className="context-usage-container">
+          <div className="context-usage-bar-standalone">
+            <div
+              className="context-usage-fill"
+              style={{ width: `${Math.min(contextUsage * 100, 100)}%` }}
+            />
+          </div>
+          <span className="context-usage-text">{Math.round(contextUsage * 100)}%</span>
         </div>
       </div>
     </section>
+  );
+}
+
+// Send button group with dropdown modal - following MicTrigger pattern
+interface SendButtonGroupProps {
+  chatInputRef: React.RefObject<ChatInputRef | null>;
+  onSend: (text: string) => void;
+}
+
+function SendButtonGroup({ chatInputRef, onSend }: SendButtonGroupProps) {
+  const [popoverPos, setPopoverPos] = useState<{ left: number; bottom: number } | null>(null);
+
+  const {
+    isOpen,
+    state,
+    triggerRef,
+    popoverRef,
+    triggerProps,
+    popoverProps,
+    close,
+  } = useHoverIconModal({
+    id: 'send-dropdown',
+    triggerMode: 'click', // Click only, no hover preview (like MicTrigger)
+    stayOpenOnLeave: true, // Stays open until Escape/click outside
+  });
+
+  // Position the modal above the dropdown button (right-aligned)
+  useEffect(() => {
+    if (isOpen && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const modalWidth = 200; // Fixed width for dropdown menu
+      setPopoverPos({
+        left: rect.right - modalWidth,
+        bottom: window.innerHeight - rect.top + 8,
+      });
+    }
+  }, [isOpen, triggerRef]);
+
+  const handleSendClick = () => {
+    const text = chatInputRef.current?.getText();
+    if (text?.trim()) {
+      onSend(text.trim());
+      chatInputRef.current?.clearText();
+    }
+  };
+
+  return (
+    <>
+      <div className="send-button-group">
+        <button
+          className="send-btn-main"
+          onClick={handleSendClick}
+          title="Send message"
+        >
+          Send
+        </button>
+        <div className="send-btn-divider" />
+        <button
+          ref={triggerRef}
+          className="send-btn-secondary"
+          title="More options"
+          {...triggerProps}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+            arrow_drop_down
+          </span>
+        </button>
+      </div>
+
+      <HoverIconModalContainer
+        isOpen={isOpen}
+        state={state}
+        position={popoverPos ?? { left: 0, bottom: 0 }}
+        popoverRef={popoverRef}
+        popoverProps={popoverProps}
+        className="send-dropdown-modal"
+      >
+        <HoverIconModalList>
+          <div className="send-dropdown-content">
+            <button className="send-dropdown-item" onClick={() => { close(); }}>
+              <span className="material-symbols-outlined">chat</span>
+              <span>Send as chat</span>
+            </button>
+            <button className="send-dropdown-item" onClick={() => { close(); }}>
+              <span className="material-symbols-outlined">code</span>
+              <span>Send as code block</span>
+            </button>
+            <button className="send-dropdown-item" onClick={() => { close(); }}>
+              <span className="material-symbols-outlined">terminal</span>
+              <span>Send as command</span>
+            </button>
+          </div>
+        </HoverIconModalList>
+      </HoverIconModalContainer>
+    </>
   );
 }
